@@ -1,0 +1,91 @@
+/* @local-tools/theme — 공용 디자인 토큰
+ * 브랜드: 스카이 블루. 라이트/다크 대응(시스템 + data-theme 토글). */
+
+:root {
+  color-scheme: light dark;
+
+  /* ── 브랜드 스케일 (스카이 블루) ───────────────────────── */
+  --brand-50: #f0f9ff;
+  --brand-100: #e0f2fe;
+  --brand-200: #bae6fd;
+  --brand-300: #7dd3fc;
+  --brand-400: #38bdf8;
+  --brand-500: #0ea5e9; /* primary */
+  --brand-600: #0284c7;
+  --brand-700: #0369a1;
+  --brand-800: #075985;
+  --brand-900: #0c4a6e;
+
+  /* ── 형태/여백/타이포 ──────────────────────────────────── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans KR", sans-serif;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  /* ── 시맨틱 (라이트 기본) ──────────────────────────────── */
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --text: #14181f;
+  --text-muted: #5b6472;
+  --border: #e2e6eb;
+  --accent: var(--brand-500);
+  --accent-hover: var(--brand-600);
+  --accent-contrast: #ffffff;
+  --accent-weak: var(--brand-50);
+  --danger: #e5484d;
+  --focus: var(--brand-500);
+}
+
+/* 시스템 다크 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1013;
+    --surface: #161a1f;
+    --surface-2: #1e242b;
+    --text: #eef1f4;
+    --text-muted: #9aa4b1;
+    --border: #2a313a;
+    --accent: var(--brand-400);
+    --accent-hover: var(--brand-300);
+    --accent-contrast: #051220;
+    --accent-weak: rgba(56, 189, 248, 0.14);
+    --danger: #ff6369;
+    --focus: var(--brand-400);
+  }
+}
+
+/* 명시적 토글이 시스템 설정을 이긴다 */
+:root[data-theme="light"] {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --text: #14181f;
+  --text-muted: #5b6472;
+  --border: #e2e6eb;
+  --accent: var(--brand-500);
+  --accent-hover: var(--brand-600);
+  --accent-contrast: #ffffff;
+  --accent-weak: var(--brand-50);
+  --danger: #e5484d;
+  --focus: var(--brand-500);
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1013;
+  --surface: #161a1f;
+  --surface-2: #1e242b;
+  --text: #eef1f4;
+  --text-muted: #9aa4b1;
+  --border: #2a313a;
+  --accent: var(--brand-400);
+  --accent-hover: var(--brand-300);
+  --accent-contrast: #051220;
+  --accent-weak: rgba(56, 189, 248, 0.14);
+  --danger: #ff6369;
+  --focus: var(--brand-400);
+}

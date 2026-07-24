@@ -1,0 +1,15 @@
+{
+  "name": "local-tools",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.3.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:pdf": "pnpm --filter @local-tools/pdf dev",
+    "preview:pdf": "pnpm --filter @local-tools/pdf preview",
+    "build": "pnpm -r build",
+    "check": "pnpm -r check"
+  }
+}
