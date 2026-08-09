@@ -32,7 +32,7 @@ jobs:
       - name: Assemble site
         run: |
           mkdir -p _site/pdf _site/gif
-          cp site/index.html _site/index.html
+          cp -R site/. _site/
           cp apps/pdf/dist/index.html _site/pdf/index.html
           cp apps/gif/dist/index.html _site/gif/index.html
       - uses: actions/upload-pages-artifact@v3

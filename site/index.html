@@ -7,11 +7,52 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
     />
-    <title>local-tools</title>
+    <title>local-tools — 브라우저에서만 동작하는 PDF·GIF 도구</title>
     <meta
       name="description"
-      content="브라우저 안에서만 동작하는 개인 도구 모음. 파일은 전송되지 않습니다."
+      content="설치 없이 브라우저에서 쓰는 도구 모음 — PDF 병합·정리·이미지 변환·암호, GIF 프레임 편집·동영상 변환. 파일은 서버로 전송되지 않습니다."
     />
+    <link rel="canonical" href="https://cranemont.github.io/local-tools/" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(0.978 0.003 240)" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="oklch(0.172 0.008 250)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="local-tools" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="local-tools — 브라우저에서만 동작하는 PDF·GIF 도구" />
+    <meta
+      property="og:description"
+      content="설치 없이 브라우저에서 쓰는 PDF·GIF 도구. 파일은 서버로 전송되지 않습니다."
+    />
+    <meta property="og:url" content="https://cranemont.github.io/local-tools/" />
+    <meta property="og:image" content="https://cranemont.github.io/local-tools/og/home.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="local-tools — 브라우저에서만 동작하는 PDF·GIF 도구" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "local-tools",
+        "url": "https://cranemont.github.io/local-tools/",
+        "description": "설치 없이 브라우저에서 쓰는 도구 모음. 모든 처리는 브라우저 안에서 이뤄지고 파일은 서버로 전송되지 않습니다.",
+        "inLanguage": "ko",
+        "hasPart": [
+          {
+            "@type": "WebApplication",
+            "name": "local-tools PDF",
+            "url": "https://cranemont.github.io/local-tools/pdf/",
+            "description": "PDF 병합·페이지 정리·회전, 이미지→PDF, PDF→PNG 변환, 암호 설정·해제"
+          },
+          {
+            "@type": "WebApplication",
+            "name": "local-tools GIF",
+            "url": "https://cranemont.github.io/local-tools/gif/",
+            "description": "GIF 프레임 편집, 이미지·동영상을 GIF·WebP·MP4로 변환"
+          }
+        ]
+      }
+    </script>
     <style>
       :root {
         color-scheme: light dark;
@@ -20,6 +61,7 @@
           oklch(0.62 0.158 240 / 0.09),
           oklch(0.716 0.125 240 / 0.14)
         );
+        --muted: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
       }
       body {
         margin: 0;
@@ -37,17 +79,23 @@
         text-align: center;
         padding: 40px;
       }
-      .brand {
+      h1 {
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 8px;
+        margin: 0;
         font-weight: 600;
-        font-size: 16px;
+        font-size: 17px;
         letter-spacing: -0.01em;
       }
-      .brand .dot {
+      h1 .dot {
         fill: var(--accent);
+      }
+      .tagline {
+        margin: 10px 0 0;
+        font-size: 13.5px;
+        color: var(--muted);
       }
       .tools {
         display: flex;
@@ -57,37 +105,58 @@
       }
       a.tool {
         display: block;
-        padding: 13px 30px;
+        width: 168px;
+        padding: 16px 18px 15px;
         border-radius: 12px;
         text-decoration: none;
-        font-weight: 600;
-        font-size: 15px;
-        color: var(--accent);
         background: var(--accent-weak);
+        text-align: center;
       }
       a.tool:hover {
         outline: 1.5px solid var(--accent);
         outline-offset: -1.5px;
       }
+      a.tool strong {
+        display: block;
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--accent);
+      }
+      a.tool span {
+        display: block;
+        margin-top: 5px;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--muted);
+        text-wrap: balance;
+        word-break: keep-all;
+      }
       .note {
         margin-top: 30px;
         font-size: 12.5px;
-        color: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
+        color: var(--muted);
       }
     </style>
   </head>
   <body>
     <main>
-      <div class="brand">
+      <h1>
         <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden="true">
           <rect x="1.6" y="1.6" width="14.8" height="14.8" rx="4.8" fill="none" stroke="currentColor" stroke-width="1.6" />
           <circle class="dot" cx="9" cy="9" r="3.2" />
         </svg>
-        <span>local-tools</span>
-      </div>
+        local-tools
+      </h1>
+      <p class="tagline">브라우저에서만 동작하는 도구 모음</p>
       <nav class="tools">
-        <a class="tool" href="./pdf/">PDF</a>
-        <a class="tool" href="./gif/">GIF</a>
+        <a class="tool" href="./pdf/">
+          <strong>PDF</strong>
+          <span>병합 · 정리 · 이미지 변환 · 암호</span>
+        </a>
+        <a class="tool" href="./gif/">
+          <strong>GIF</strong>
+          <span>프레임&nbsp;편집 · 동영상&nbsp;변환&nbsp;· WebP·MP4</span>
+        </a>
       </nav>
       <p class="note">파일은 브라우저 밖으로 나가지 않아요</p>
     </main>

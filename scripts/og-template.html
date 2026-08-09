@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- OG 이미지(1200×630) 생성용 템플릿. 배포되지 않는다.
+     사용: 정적 서버로 열고 ?title=PDF&sub=병합 · 정리 식 쿼리로 렌더 →
+     1200×630 뷰포트 스크린샷을 site/og/*.png로 저장. -->
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+          "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+        background: oklch(0.978 0.003 240);
+        color: oklch(0.235 0.015 250);
+        -webkit-font-smoothing: antialiased;
+      }
+      main {
+        text-align: center;
+      }
+      svg {
+        display: block;
+        margin: 0 auto 40px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 76px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 20px 0 0;
+        font-size: 34px;
+        color: oklch(0.51 0.022 248);
+      }
+      .brand {
+        margin-top: 48px;
+        font-size: 26px;
+        font-weight: 600;
+        color: oklch(0.51 0.022 248);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <svg width="110" height="110" viewBox="0 0 18 18" aria-hidden="true">
+        <rect x="1.6" y="1.6" width="14.8" height="14.8" rx="4.8" fill="none" stroke="oklch(0.235 0.015 250)" stroke-width="1.6" />
+        <circle cx="9" cy="9" r="3.2" fill="oklch(0.62 0.158 240)" />
+      </svg>
+      <h1 id="title"></h1>
+      <p id="sub"></p>
+      <div class="brand" id="brand">local-tools</div>
+    </main>
+    <script>
+      const q = new URLSearchParams(location.search);
+      document.getElementById("title").textContent = q.get("title") || "local-tools";
+      const sub = q.get("sub");
+      const p = document.getElementById("sub");
+      if (sub) p.textContent = sub;
+      else p.remove();
+      if (q.has("home")) document.getElementById("brand").remove();
+    </script>
+  </body>
+</html>

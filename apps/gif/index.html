@@ -7,14 +7,57 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
     />
-    <title>GIF — local-tools</title>
+    <title>GIF 편집기 — 프레임 편집·동영상 변환 — local-tools</title>
     <meta
       name="description"
-      content="브라우저 안에서만 동작하는 GIF 에디터 — 프레임 편집, 이미지·동영상→GIF·WebP·MP4. 파일은 전송되지 않습니다."
+      content="브라우저 안에서만 동작하는 GIF 에디터 — 프레임 편집·속도·크롭, 이미지·동영상을 GIF·WebP·MP4로 변환. 파일은 서버로 전송되지 않습니다."
     />
+    <link rel="canonical" href="https://cranemont.github.io/local-tools/gif/" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(1 0 0)" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="oklch(0.212 0.01 250)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="local-tools" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="GIF 편집기 — 프레임 편집·동영상 변환" />
+    <meta
+      property="og:description"
+      content="브라우저 안에서만 동작하는 GIF 에디터. 파일은 서버로 전송되지 않습니다."
+    />
+    <meta property="og:url" content="https://cranemont.github.io/local-tools/gif/" />
+    <meta property="og:image" content="https://cranemont.github.io/local-tools/og/gif.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="local-tools GIF — 프레임 편집·동영상 변환" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "local-tools GIF",
+        "url": "https://cranemont.github.io/local-tools/gif/",
+        "description": "브라우저 안에서만 동작하는 GIF 에디터. 프레임 편집·속도·크롭·반복, 이미지와 동영상을 GIF·WebP·MP4로 변환. 파일은 서버로 전송되지 않습니다.",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
+        "inLanguage": "ko",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
+        "featureList": [
+          "GIF 프레임 편집(순서·삭제·복제·속도)",
+          "이미지 여러 장→GIF",
+          "동영상(MP4·WebM)→GIF",
+          "GIF→WebP·MP4 변환",
+          "프레임 PNG 추출(ZIP)"
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
+    <noscript>
+      GIF 에디터는 JavaScript가 필요합니다 —
+      <a href="https://cranemont.github.io/local-tools/">local-tools</a>
+    </noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
