@@ -1,5 +1,5 @@
 # main 푸시마다 전체 앱을 빌드해 GitHub Pages로 배포한다.
-# 산출 구조: / (site/index.html 랜딩) · /pdf/ · /gif/ · /video/ — 각각 자기완결 단일 HTML.
+# 산출 구조: / (site/index.html 랜딩) · /pdf/ · /gif/ · /video/ · /dev/ — 각각 자기완결 단일 HTML.
 name: deploy
 
 on:
@@ -31,13 +31,14 @@ jobs:
       - run: pnpm build
       - name: Assemble site
         run: |
-          mkdir -p _site/pdf _site/gif _site/video
+          mkdir -p _site/pdf _site/gif _site/video _site/dev
           cp -R site/. _site/
           cp apps/pdf/dist/index.html _site/pdf/index.html
           cp apps/gif/dist/index.html _site/gif/index.html
           cp apps/video/dist/index.html _site/video/index.html
+          cp apps/dev/dist/index.html _site/dev/index.html
           # 랜딩 카드의 용량 표기를 실제 빌드 산출물 크기로 갱신
-          for app in pdf gif video; do
+          for app in pdf gif video dev; do
             kb=$(( $(stat -c%s "apps/$app/dist/index.html") / 1024 ))
             sed -i "s|data-size=\"$app\">[^<]*<|data-size=\"$app\">${kb} KB<|" _site/index.html
           done

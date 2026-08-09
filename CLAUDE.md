@@ -16,7 +16,7 @@ pnpm build    # 전체 앱 빌드 — 자가해제형 단일 HTML 산출 → app
 pnpm check    # 전체 svelte-check 타입 체크 (0 errors/warnings 유지할 것)
 ```
 
-배포: main에 푸시하면 GitHub Actions가 빌드해 **https://cranemont.github.io/local-tools/** 로 올린다(`/pdf/`·`/gif/`·`/video/`). 별도 배포 명령 없음.
+배포: main에 푸시하면 GitHub Actions가 빌드해 **https://cranemont.github.io/local-tools/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`). 별도 배포 명령 없음.
 
 ## 구조 (경량 pnpm 모노레포)
 
@@ -40,6 +40,10 @@ apps/video/          # 동영상 도구 (Svelte 5 + TS) — 트림·압축·변�
   src/lib/editor/    # state.svelte.ts·Player(<video>+구간재생)·Timeline(스트립+핸들+kf눈금)·Panel
   src/lib/video/     # 엔진: probe(메타·키프레임)·thumbs(스트립)·transcode(mediabunny
                      #        Conversion — 정확=재인코딩/무손실=패킷복사·소리추출)·save
+apps/dev/            # 개발자 유틸 (Svelte 5 + TS) — 사이드바+검색 셸, 도구 12종
+  src/lib/tools/     # registry(도구 목록·그룹)·Format(JSON/YAML/XML 변환)·Diff·Encode·
+                     #   Jwt(HS 검증)·Hash(+md5.ts 직접 구현)·Uuid(v4/v7/ULID)·Timestamp·
+                     #   Regex·CronTool·Color(culori)·Qr(uqr+BarcodeDetector)·Chars
 packages/theme/tokens.css  # 공용 디자인 토큰(OKLCH, 라이트/다크)
 packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플러그인 (모든 앱 공용)
 site/                # Pages 정적 파일 — 랜딩·404·sitemap.xml·og/(OG 이미지)
@@ -54,7 +58,8 @@ scripts/og-template.html      # OG 이미지(1200×630) 재생성용 템플릿(�
 
 - **크로미엄 전용**(Chrome/Edge 최신). File System Access·DecompressionStream 등 사용, FF/Safari 미검증.
 - Vite 8 + `vite-plugin-singlefile` + **Svelte 5(runes)** + TypeScript.
-- 라이브러리: `pdf-lib`(병합/회전/이미지임베드), `pdfjs-dist` v6(썸네일·래스터), `fflate`(ZIP), `@neslinesli93/qpdf-wasm`(암호, CDN 지연로드), `gifenc`(GIF 인코딩), `mediabunny`(순수 TS — 동영상 디먹싱·MP4 muxing).
+- 라이브러리: `pdf-lib`(병합/회전/이미지임베드), `pdfjs-dist` v6(썸네일·래스터), `fflate`(ZIP), `@neslinesli93/qpdf-wasm`(암호, CDN 지연로드), `gifenc`(GIF 인코딩), `mediabunny`(순수 TS — 동영상 디먹싱·MP4 muxing), 개발자 유틸은 `js-yaml`·`fast-xml-parser`·`diff`·`cronstrue`(ko)·`croner`·`culori`·`uqr` — 전부 순수 JS, wasm 없음.
+- apps/dev 주의: `@tsconfig/svelte`가 target을 es2017로 낮춰 최신 API(matchAll 등) 타입 에러가 남 — 앱 tsconfig에 `"target"/"lib": ES2022` 명시로 해결(다른 앱도 동일 증상 시 같은 처리).
 
 ## ⚠️ 주의사항 (놓치기 쉬움 — 꼭 읽기)
 

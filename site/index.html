@@ -7,10 +7,10 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
     />
-    <title>local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상 도구</title>
+    <title>local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상·개발자 도구</title>
     <meta
       name="description"
-      content="설치 없이 브라우저에서 쓰는 도구 모음 — PDF 병합·정리·암호, GIF 프레임 편집, 동영상 자르기·압축·변환. 파일은 서버로 전송되지 않습니다."
+      content="설치 없이 브라우저에서 쓰는 도구 모음 — PDF 병합·정리·암호, GIF 프레임 편집, 동영상 자르기·압축·변환, JSON·diff·QR 개발자 유틸. 파일은 서버로 전송되지 않습니다."
     />
     <link rel="canonical" href="https://cranemont.github.io/local-tools/" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(0.978 0.003 240)" />
@@ -18,16 +18,16 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="local-tools" />
     <meta property="og:locale" content="ko_KR" />
-    <meta property="og:title" content="local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상 도구" />
+    <meta property="og:title" content="local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상·개발자 도구" />
     <meta
       property="og:description"
-      content="설치 없이 브라우저에서 쓰는 PDF·GIF·동영상 도구. 파일은 서버로 전송되지 않습니다."
+      content="설치 없이 브라우저에서 쓰는 PDF·GIF·동영상·개발자 도구. 파일은 서버로 전송되지 않습니다."
     />
     <meta property="og:url" content="https://cranemont.github.io/local-tools/" />
     <meta property="og:image" content="https://cranemont.github.io/local-tools/og/home.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상 도구" />
+    <meta property="og:image:alt" content="local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상·개발자 도구" />
     <meta name="twitter:card" content="summary_large_image" />
     <script type="application/ld+json">
       {
@@ -55,6 +55,12 @@
             "name": "local-tools 동영상",
             "url": "https://cranemont.github.io/local-tools/video/",
             "description": "동영상 구간 자르기(트림)·용량 압축·MP4·WebM 변환·소리 추출"
+          },
+          {
+            "@type": "WebApplication",
+            "name": "local-tools 개발자 도구",
+            "url": "https://cranemont.github.io/local-tools/dev/",
+            "description": "JSON·YAML·XML 변환, 텍스트 비교(diff), QR 생성·스캔, 해시·JWT·타임스탬프"
           }
         ]
       }
@@ -162,7 +168,7 @@
 
       .tools {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(216px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
         gap: 14px;
       }
       .tool {
@@ -335,6 +341,25 @@
           <p class="desc">자르기 · 압축 · 변환 · 소리 추출</p>
           <span class="meta">
             단일 HTML · <span data-size="video">189 KB</span>
+          </span>
+        </div>
+        <div class="tool">
+          <a class="dl" href="./dev/index.html" download="local-tools-dev.html" title="HTML 파일 다운로드" aria-label="개발자 도구 HTML 파일 다운로드">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v12" />
+              <path d="M7 10l5 5 5-5" />
+              <path d="M5 21h14" />
+            </svg>
+          </a>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1" />
+            <path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1" />
+            <circle class="art-accent" cx="12" cy="12" r="2.4" />
+          </svg>
+          <h2><a class="tool-link" href="./dev/">개발자 도구</a></h2>
+          <p class="desc">JSON 변환 · diff · QR · 해시</p>
+          <span class="meta">
+            단일 HTML · <span data-size="dev">154 KB</span>
           </span>
         </div>
       </nav>

@@ -14,6 +14,8 @@
     | "code"
     | "type"
     | "rotate"
+    | "download"
+    | "qr"
     | "key"
     | "hash"
     | "fingerprint"
@@ -81,6 +83,16 @@
   {:else if name === "rotate"}
     <path d="M21 12a9 9 0 1 1-2.64-6.36" />
     <path d="M21 3v5h-5" />
+  {:else if name === "download"}
+    <path d="M12 3v12" />
+    <path d="M7 10l5 5 5-5" />
+    <path d="M5 21h14" />
+  {:else if name === "qr"}
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <path d="M14 14h3v3h-3z" />
+    <path d="M21 14v.01M14 21v.01M18 18v.01M21 21v.01" />
   {:else if name === "key"}
     <circle cx="7.5" cy="15.5" r="4.5" />
     <path d="m10.7 12.3 9.8-9.8" />

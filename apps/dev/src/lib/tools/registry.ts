@@ -7,6 +7,7 @@ import Encode from "./Encode.svelte";
 import Jwt from "./Jwt.svelte";
 import Hash from "./Hash.svelte";
 import Uuid from "./Uuid.svelte";
+import Qr from "./Qr.svelte";
 import Timestamp from "./Timestamp.svelte";
 import CronTool from "./CronTool.svelte";
 import Diff from "./Diff.svelte";
@@ -79,6 +80,15 @@ export const TOOLS: ToolDef[] = [
     group: t.groups.sec,
     keywords: "uuid ulid guid 아이디 식별자 생성 generate",
     component: Uuid,
+  },
+  {
+    id: "qr",
+    icon: "qr",
+    title: t.qr.title,
+    desc: t.qr.desc,
+    group: t.groups.sec,
+    keywords: "qr 큐알 코드 생성 스캔 wifi 와이파이 barcode",
+    component: Qr,
   },
   {
     id: "time",
