@@ -1,11 +1,23 @@
 // 에디터 상태 싱글턴 (Svelte 5 runes).
 import { t } from "../i18n";
-import { isVideoFile, probeVideo, type VideoMeta } from "../video/probe";
+import {
+  getKeyframeTimes,
+  isVideoFile,
+  probeVideo,
+  type VideoMeta,
+} from "../video/probe";
+import type { CutMode, PresetId } from "../video/transcode";
 
 /** 트림 구간의 최소 길이(초). */
 export const MIN_RANGE_S = 0.1;
 /** "사실상 전체" 판정 여유(초) — 부동소수점·핸들 스냅 오차 흡수. */
 const FULL_EPS_S = 0.01;
+
+/** 해상도 칩(세로 픽셀) — 원본보다 작은 것만 노출한다. */
+export const RESOLUTION_CHIPS = [1080, 720, 480];
+/** 타깃 용량 입력 한계(MB). */
+export const MIN_TARGET_MB = 1;
+export const MAX_TARGET_MB = 4000;
 
 export class EditorState {
   file = $state<File | null>(null);
@@ -18,6 +30,15 @@ export class EditorState {
   currentTime = $state(0);
   /** 구간 재생 중 여부 — trimEnd 도달 시 Player가 멈춘다. */
   rangePlaying = $state(false);
+
+  cutMode = $state<CutMode>("exact");
+  preset = $state<PresetId>("balanced");
+  /** 출력 세로 픽셀 (null = 원본). */
+  resHeight = $state<number | null>(null);
+  targetEnabled = $state(false);
+  targetMB = $state(25);
+  /** 키프레임 시각(초) — 무손실 스냅·타임라인 눈금. 스캔 완료 전엔 빈 배열. */
+  keyframes = $state<number[]>([]);
 
   busy = $state(false);
   busyMsg = $state("");
@@ -58,6 +79,10 @@ export class EditorState {
       this.videoUrl = URL.createObjectURL(file);
       this.trimEnd = meta.durationS;
       this.touch();
+      // 키프레임 스캔은 편집을 막지 않도록 백그라운드로.
+      void getKeyframeTimes(file).then((times) => {
+        if (this.file === file) this.keyframes = times;
+      });
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -80,11 +105,25 @@ export class EditorState {
     this.trimEnd = 0;
     this.currentTime = 0;
     this.rangePlaying = false;
+    this.keyframes = [];
+    this.resHeight = null; // 파일마다 원본 크기가 다르니 초기화 (모드·프리셋은 유지)
     this.error = "";
   }
 
+  /** 무손실 모드에선 시작점을 직전 키프레임으로 내린다(그 지점부터 온전히 재생되도록). */
+  #snapToKeyframe(v: number): number {
+    if (this.cutMode !== "lossless" || this.keyframes.length === 0) return v;
+    let snapped = this.keyframes[0];
+    for (const k of this.keyframes) {
+      if (k <= v + 1e-6) snapped = k;
+      else break;
+    }
+    return snapped;
+  }
+
   setTrimStart(v: number): void {
-    const next = Math.min(Math.max(0, v), this.trimEnd - MIN_RANGE_S);
+    const snapped = this.#snapToKeyframe(v);
+    const next = Math.min(Math.max(0, snapped), this.trimEnd - MIN_RANGE_S);
     if (next === this.trimStart) return;
     this.trimStart = next;
     this.touch();
@@ -101,6 +140,38 @@ export class EditorState {
     if (!this.isTrimmed) return;
     this.trimStart = 0;
     this.trimEnd = this.duration;
+    this.touch();
+  }
+
+  setCutMode(mode: CutMode): void {
+    if (mode === this.cutMode) return;
+    this.cutMode = mode;
+    if (mode === "lossless") this.setTrimStart(this.trimStart); // 기존 시작점도 스냅
+    this.touch();
+  }
+
+  setPreset(id: PresetId): void {
+    if (id === this.preset) return;
+    this.preset = id;
+    this.touch();
+  }
+
+  setResHeight(h: number | null): void {
+    if (h === this.resHeight) return;
+    this.resHeight = h;
+    this.touch();
+  }
+
+  setTargetEnabled(on: boolean): void {
+    if (on === this.targetEnabled) return;
+    this.targetEnabled = on;
+    this.touch();
+  }
+
+  setTargetMB(mb: number): void {
+    const next = Math.min(MAX_TARGET_MB, Math.max(MIN_TARGET_MB, Math.round(mb)));
+    if (next === this.targetMB) return;
+    this.targetMB = next;
     this.touch();
   }
 

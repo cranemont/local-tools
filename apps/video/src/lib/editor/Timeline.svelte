@@ -45,6 +45,12 @@
   const playPct = $derived(
     editor.duration ? Math.min(100, (editor.currentTime / editor.duration) * 100) : 0,
   );
+  /** 무손실 모드에서만 키프레임 눈금 표시 (너무 많으면 생략). */
+  const keyframeTicks = $derived(
+    editor.cutMode === "lossless" && editor.duration && editor.keyframes.length <= 500
+      ? editor.keyframes.map((k) => (k / editor.duration) * 100)
+      : [],
+  );
 
   // ── 드래그 (핸들 2개 + 빈 곳 클릭·드래그 = 탐색) ──
   type DragMode = "start" | "end" | "seek";
@@ -103,6 +109,9 @@
   onpointercancel={up}
 >
   <canvas bind:this={canvas} class="strip" style="height: {STRIP_H}px"></canvas>
+  {#each keyframeTicks as pct (pct)}
+    <div class="kf" style="left: {pct}%"></div>
+  {/each}
   <div class="shade" style="left: 0; width: {startPct}%"></div>
   <div class="shade" style="left: {endPct}%; width: {100 - endPct}%"></div>
   <div class="range" style="left: {startPct}%; width: {endPct - startPct}%"></div>
@@ -156,6 +165,16 @@
     top: 0;
     bottom: 0;
     background: color-mix(in srgb, var(--bg) 65%, transparent);
+    pointer-events: none;
+  }
+  .kf {
+    position: absolute;
+    top: 0;
+    height: 10px;
+    width: 2px;
+    margin-left: -1px;
+    background: var(--accent);
+    opacity: 0.9;
     pointer-events: none;
   }
   .range {

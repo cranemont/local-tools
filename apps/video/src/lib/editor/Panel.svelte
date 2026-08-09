@@ -2,14 +2,41 @@
   import Icon from "../Icon.svelte";
   import { fmtTime, t } from "../i18n";
   import { downloadBlob, formatBytes } from "../video/save";
-  import { transcodeMp4 } from "../video/transcode";
-  import { editor } from "./state.svelte";
+  import { transcodeMp4, type PresetId } from "../video/transcode";
+  import {
+    editor,
+    MAX_TARGET_MB,
+    MIN_TARGET_MB,
+    RESOLUTION_CHIPS,
+  } from "./state.svelte";
+
+  const PRESET_LABELS: Record<PresetId, string> = {
+    small: t.panel.presetSmall,
+    balanced: t.panel.presetBalanced,
+    high: t.panel.presetHigh,
+  };
 
   let filename = $state("video");
   let result = $state<{ blob: Blob; revision: number; audioDropped: boolean } | null>(null);
   let status = $state("");
 
   const stale = $derived(result !== null && result.revision !== editor.revision);
+
+  /** 정확 컷에서 실제로 내보낼 크기 (프리뷰용). */
+  const outDims = $derived.by(() => {
+    const m = editor.meta;
+    if (!m) return null;
+    const h = editor.resHeight;
+    if (editor.cutMode !== "exact" || !h || h >= m.height)
+      return { w: m.width, h: m.height };
+    const w = Math.max(2, Math.round(((m.width / m.height) * h) / 2) * 2);
+    return { w, h };
+  });
+
+  /** 원본보다 작은 해상도 칩만 노출. */
+  const resChips = $derived(
+    RESOLUTION_CHIPS.filter((h) => (editor.meta ? h < editor.meta.height : false)),
+  );
 
   // 파일이 바뀌면 파일명 기본값·이전 결과를 갱신
   $effect(() => {
@@ -27,7 +54,7 @@
 
   // ── 인코딩 → 용량 확인 → 저장 ─────────────────────
   async function make() {
-    if (!editor.file || editor.busy) return;
+    if (!editor.file || !editor.meta || editor.busy) return;
     editor.videoEl?.pause();
     editor.error = "";
     status = "";
@@ -36,10 +63,20 @@
     editor.busyMsg = t.panel.encoding(0);
     const revision = editor.revision;
     try {
+      const exact = editor.cutMode === "exact";
       const res = await transcodeMp4(editor.file, {
         trim: editor.isTrimmed
           ? { start: editor.trimStart, end: editor.trimEnd }
           : null,
+        mode: editor.cutMode,
+        preset: editor.preset,
+        height: exact ? editor.resHeight : null,
+        targetBytes:
+          exact && editor.targetEnabled ? editor.targetMB * 1024 * 1024 : null,
+        clipDurationS: editor.isTrimmed ? editor.rangeLength : editor.duration,
+        sourceWidth: editor.meta.width,
+        sourceHeight: editor.meta.height,
+        hasAudio: editor.meta.hasAudio,
         onProgress: (p) => {
           editor.progress = p;
           editor.busyMsg = t.panel.encoding(Math.round(p * 100));
@@ -71,6 +108,9 @@
   }
   function onEndChange(e: Event) {
     editor.setTrimEnd(Number((e.target as HTMLInputElement).value));
+  }
+  function onTargetMBChange(e: Event) {
+    editor.setTargetMB(Number((e.target as HTMLInputElement).value));
   }
 </script>
 
@@ -124,6 +164,104 @@
       {/if}
     </div>
   </section>
+
+  <!-- 컷 방식 -->
+  <section class="sec">
+    <h3>{t.panel.cutMode}</h3>
+    <div class="chips">
+      <button
+        type="button"
+        class="chip"
+        class:active={editor.cutMode === "exact"}
+        onclick={() => editor.setCutMode("exact")}
+      >
+        {t.panel.cutExact}
+      </button>
+      <button
+        type="button"
+        class="chip"
+        class:active={editor.cutMode === "lossless"}
+        onclick={() => editor.setCutMode("lossless")}
+      >
+        {t.panel.cutLossless}
+      </button>
+    </div>
+    {#if editor.cutMode === "lossless"}
+      <p class="info">{t.panel.losslessNote}</p>
+    {/if}
+  </section>
+
+  {#if editor.cutMode === "exact"}
+    <!-- 화질 -->
+    <section class="sec">
+      <h3>{t.panel.quality}</h3>
+      <div class="chips">
+        {#each Object.entries(PRESET_LABELS) as [id, label] (id)}
+          <button
+            type="button"
+            class="chip"
+            class:active={editor.preset === id && !editor.targetEnabled}
+            onclick={() => {
+              editor.setTargetEnabled(false);
+              editor.setPreset(id as PresetId);
+            }}
+          >
+            {label}
+          </button>
+        {/each}
+      </div>
+      <label class="row checkrow">
+        <input
+          type="checkbox"
+          checked={editor.targetEnabled}
+          onchange={(e) => editor.setTargetEnabled((e.target as HTMLInputElement).checked)}
+        />
+        <span class="lbl">{t.panel.targetSize}</span>
+        <input
+          class="num"
+          type="number"
+          min={MIN_TARGET_MB}
+          max={MAX_TARGET_MB}
+          step="1"
+          value={editor.targetMB}
+          disabled={!editor.targetEnabled}
+          onchange={onTargetMBChange}
+          aria-label={t.panel.targetSize}
+        />
+      </label>
+      {#if editor.targetEnabled}
+        <p class="info">{t.panel.targetNote}</p>
+      {/if}
+    </section>
+
+    <!-- 크기 -->
+    <section class="sec">
+      <h3>{t.panel.size}</h3>
+      <div class="chips">
+        <button
+          type="button"
+          class="chip"
+          class:active={editor.resHeight === null}
+          onclick={() => editor.setResHeight(null)}
+        >
+          {t.panel.resOriginal}
+        </button>
+        {#each resChips as h (h)}
+          <button
+            type="button"
+            class="chip"
+            class:active={editor.resHeight === h}
+            onclick={() => editor.setResHeight(h)}
+          >
+            {t.panel.resChip(h)}
+          </button>
+        {/each}
+      </div>
+      {#if outDims}
+        <p class="info">{t.panel.outputSize(outDims.w, outDims.h)}</p>
+      {/if}
+    </section>
+  {/if}
 
   <!-- 내보내기 -->
   <section class="sec">
@@ -212,6 +350,37 @@
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     flex: 1;
+  }
+
+  .chips {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .chip:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    color: var(--text);
+  }
+  .chip.active {
+    background: var(--accent-weak);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    color: var(--accent);
+  }
+
+  .checkrow {
+    cursor: pointer;
+  }
+  .checkrow input[type="checkbox"] {
+    accent-color: var(--accent);
   }
 
   .lbl {
