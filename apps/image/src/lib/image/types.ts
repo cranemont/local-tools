@@ -29,7 +29,7 @@ export interface ImageItem {
   transform: ItemTransform;
 }
 
-export type OutputFormat = "jpeg" | "png" | "webp";
+export type OutputFormat = "jpeg" | "png" | "webp" | "avif";
 
 export type ResizeMode = "none" | "scale" | "width" | "height";
 
@@ -58,10 +58,17 @@ export const OUTPUT_MIME: Record<OutputFormat, string> = {
   jpeg: "image/jpeg",
   png: "image/png",
   webp: "image/webp",
+  avif: "image/avif",
 };
 
 export const OUTPUT_EXT: Record<OutputFormat, string> = {
   jpeg: "jpg",
   png: "png",
   webp: "webp",
+  avif: "avif",
 };
+
+/** EXIF 유지를 지원하는 출력 — PNG(무손실 관례상 제외)·AVIF(HEIF 컨테이너)는 미지원. */
+export function supportsExifKeep(format: OutputFormat): boolean {
+  return format === "jpeg" || format === "webp";
+}

@@ -6,12 +6,18 @@
   import { effectiveSize, processItem, targetSize } from "../image/pipeline";
   import { readExifDisplay, type ExifDisplay } from "../image/exif";
   import { downloadBlob, formatBytes } from "../image/save";
-  import { OUTPUT_EXT, type OutputFormat, type ResizeMode } from "../image/types";
+  import {
+    OUTPUT_EXT,
+    supportsExifKeep,
+    type OutputFormat,
+    type ResizeMode,
+  } from "../image/types";
 
   const FORMAT_LABELS: Record<OutputFormat, string> = {
     jpeg: "JPG",
     png: "PNG",
     webp: "WebP",
+    avif: "AVIF",
   };
 
   const RESIZE_MODES: { id: ResizeMode; label: string }[] = [
@@ -347,13 +353,13 @@
       <input
         type="checkbox"
         checked={editor.keepExif}
-        disabled={editor.format === "png"}
+        disabled={!supportsExifKeep(editor.format)}
         onchange={onKeepExifChange}
       />
       <span class="lbl">{t.exif.keep}</span>
     </label>
-    {#if editor.format === "png"}
-      <p class="info">{t.exif.keepPngNote}</p>
+    {#if !supportsExifKeep(editor.format)}
+      <p class="info">{t.exif.keepUnsupportedNote}</p>
     {/if}
   </section>
 

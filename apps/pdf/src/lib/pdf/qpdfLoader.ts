@@ -1,8 +1,8 @@
 // qpdf-wasm 를 CDN에서 "지연 로드"하되, 검증된 고정 버전만 무결성 확인 후 실행한다.
-//  - 글루 JS: <script integrity=...>(SRI)로 브라우저가 해시를 강제 → 불일치 시 로드 차단(fail-closed).
-//  - .wasm: fetch 후 SHA-384를 직접 검증 → 불일치 시 실행 거부. 검증된 바이트로 만든
-//           blob URL만 locateFile이 가리키게 하여, 엔진이 다른 것을 받지 못하게 한다.
+// 검증 로직은 @local-tools/wasm-loader 공용 패키지(SRI + SHA-384, fail-closed)를 쓴다.
 //  - 이 탭은 그래서 인터넷 연결이 필요하다(핵심 병합/변환 기능은 오프라인 동작).
+//  - ⚠️ 버전을 올리면 두 해시(GLUE_SRI, WASM_SRI)를 반드시 재계산할 것.
+import { fetchVerified, loadScriptWithSri } from "@local-tools/wasm-loader";
 
 const VERSION = "0.3.0";
 const CDN = `https://cdn.jsdelivr.net/npm/@neslinesli93/qpdf-wasm@${VERSION}/dist`;
@@ -39,74 +39,21 @@ export function ensureQpdfReady(): Promise<unknown> {
   return ready;
 }
 
+const ENGINE_LABEL = "qpdf 엔진";
+
 async function load(): Promise<{ factory: QpdfFactory; wasmUrl: string }> {
-  await loadScriptWithSRI(GLUE_URL, GLUE_SRI);
+  await loadScriptWithSri(GLUE_URL, GLUE_SRI, { key: "qpdf", label: ENGINE_LABEL });
 
   const factory = (globalThis as unknown as { Module?: QpdfFactory }).Module;
   if (typeof factory !== "function") {
     throw new Error("qpdf 로더 초기화에 실패했어요.");
   }
 
-  let resp: Response;
-  try {
-    resp = await fetch(WASM_URL, { mode: "cors" });
-  } catch {
-    throw new Error(
-      "qpdf 엔진을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.",
-    );
-  }
-  if (!resp.ok) {
-    throw new Error(
-      `qpdf 엔진을 내려받지 못했어요 (HTTP ${resp.status}).`,
-    );
-  }
-
-  const bytes = new Uint8Array(await resp.arrayBuffer());
-  await verifySha384(bytes, WASM_SRI);
-
+  const bytes = await fetchVerified(WASM_URL, WASM_SRI, ENGINE_LABEL);
   const wasmUrl = URL.createObjectURL(
     new Blob([bytes], { type: "application/wasm" }),
   );
   return { factory, wasmUrl };
-}
-
-function loadScriptWithSRI(src: string, integrity: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[data-qpdf="1"]',
-    );
-    if (existing) {
-      resolve();
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    script.integrity = integrity;
-    script.crossOrigin = "anonymous";
-    script.dataset.qpdf = "1";
-    script.onload = () => resolve();
-    script.onerror = () =>
-      reject(
-        new Error(
-          "qpdf 엔진을 불러오지 못했어요. 인터넷 연결 또는 보안 검증에 실패했을 수 있어요.",
-        ),
-      );
-    document.head.appendChild(script);
-  });
-}
-
-async function verifySha384(
-  bytes: Uint8Array<ArrayBuffer>,
-  expected: string,
-): Promise<void> {
-  const digest = await crypto.subtle.digest("SHA-384", bytes);
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
-  const actual = `sha384-${b64}`;
-  if (actual !== expected) {
-    throw new Error(
-      "보안 검증 실패: qpdf 엔진 파일이 예상과 달라 실행을 중단했어요.",
-    );
-  }
 }
 
 export type QpdfArgs = (inPath: string, outPath: string) => string[];

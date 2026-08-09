@@ -17,7 +17,7 @@ export const t = {
 
   editor: {
     dropHint: "파일을 끌어다 놓거나 클릭해서 선택",
-    dropSub: "JPG · PNG · WebP · AVIF · GIF · BMP · SVG",
+    dropSub: "JPG · PNG · WebP · AVIF · HEIC · GIF · BMP · SVG",
     addFiles: "파일 추가",
     clearAll: "모두 비우기",
     loading: (name: string, i: number, total: number) =>
@@ -61,7 +61,12 @@ export const t = {
     exposure: "노출",
     gps: "GPS",
     keep: "내보낼 때 유지",
-    keepPngNote: "PNG 출력은 유지를 지원하지 않아요",
+    keepUnsupportedNote: "PNG·AVIF 출력은 유지를 지원하지 않아요",
+  },
+
+  engines: {
+    heic: "HEIC 엔진",
+    avif: "AVIF 인코더",
   },
 
   panel: {
@@ -94,5 +99,6 @@ export const t = {
     decodeFail: (name: string) => `파일을 읽지 못했어요: ${name}`,
     encodeFail: "이미지를 인코딩하지 못했어요",
     canvasFail: "canvas 2d 컨텍스트를 만들 수 없어요",
+    engineInit: (label: string) => `${label} 초기화에 실패했어요.`,
   },
 } as const;

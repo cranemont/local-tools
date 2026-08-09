@@ -1,11 +1,13 @@
 import { t } from "../i18n";
+import { decodeHeic, isHeicMime } from "./heic";
 import type { ImageItem } from "./types";
 
 const uid = (): string => crypto.randomUUID();
 
 const THUMB_MAX = 96;
 
-/** 크로미엄이 네이티브로 디코딩하는 정지 이미지 포맷 (GIF는 첫 프레임만 — 움짤은 GIF 앱 소관). */
+/** 크로미엄이 네이티브로 디코딩하는 정지 이미지 포맷 (GIF는 첫 프레임만 — 움짤은 GIF 앱 소관)
+ *  + HEIC/HEIF(libheif CDN wasm — 이 경로만 인터넷 필요). */
 const SUPPORTED_MIME = new Set([
   "image/jpeg",
   "image/png",
@@ -14,6 +16,8 @@ const SUPPORTED_MIME = new Set([
   "image/gif",
   "image/bmp",
   "image/svg+xml",
+  "image/heic",
+  "image/heif",
 ]);
 
 function mimeFromName(name: string): string {
@@ -34,6 +38,10 @@ function mimeFromName(name: string): string {
       return "image/bmp";
     case "svg":
       return "image/svg+xml";
+    case "heic":
+      return "image/heic";
+    case "heif":
+      return "image/heif";
     default:
       return "";
   }
@@ -48,7 +56,9 @@ export async function loadImage(file: File): Promise<ImageItem> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await decodeBytes(bytes, mime);
-  } catch {
+  } catch (err) {
+    // HEIC 엔진 오류(네트워크·검증 실패)는 원인 그대로 보여준다.
+    if (isHeicMime(mime) && err instanceof Error) throw err;
     throw new Error(t.errors.decodeFail(file.name));
   }
 
@@ -70,6 +80,7 @@ async function decodeBytes(
   bytes: Uint8Array<ArrayBuffer>,
   mime: string,
 ): Promise<ImageBitmap> {
+  if (isHeicMime(mime)) return decodeHeic(bytes);
   const blob = new Blob([bytes], { type: mime });
   // SVG는 createImageBitmap이 못 읽는다 — <img> 경유로 래스터화.
   if (mime === "image/svg+xml") {
@@ -125,7 +136,8 @@ export async function getBitmap(item: ImageItem): Promise<ImageBitmap> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await decodeBytes(item.bytes, item.mime);
-  } catch {
+  } catch (err) {
+    if (isHeicMime(item.mime) && err instanceof Error) throw err;
     throw new Error(t.errors.decodeFail(item.name));
   }
   cachePut(item.id, bitmap);

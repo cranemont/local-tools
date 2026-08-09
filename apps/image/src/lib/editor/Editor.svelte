@@ -47,7 +47,7 @@
   <input
     bind:this={fileInput}
     type="file"
-    accept="image/jpeg,image/png,image/webp,image/avif,image/gif,image/bmp,image/svg+xml,.jpg,.jpeg,.png,.webp,.avif,.gif,.bmp,.svg"
+    accept="image/jpeg,image/png,image/webp,image/avif,image/gif,image/bmp,image/svg+xml,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.avif,.gif,.bmp,.svg,.heic,.heif"
     multiple
     hidden
     onchange={onInputChange}

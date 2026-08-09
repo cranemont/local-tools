@@ -7,10 +7,10 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
     />
-    <title>이미지 변환·압축 — JPG·PNG·WebP 리사이즈 — local-tools</title>
+    <title>이미지 변환·압축 — JPG·WebP·AVIF·HEIC 리사이즈 — local-tools</title>
     <meta
       name="description"
-      content="브라우저 안에서만 동작하는 이미지 도구 — JPEG·PNG·WebP 변환과 품질 압축, 리사이즈. 파일은 서버로 전송되지 않습니다."
+      content="브라우저 안에서만 동작하는 이미지 도구 — JPEG·PNG·WebP·AVIF 변환과 품질 압축, 리사이즈·크롭, EXIF 보기·제거, HEIC 입력. 파일은 서버로 전송되지 않습니다."
     />
     <link rel="canonical" href="https://cranemont.github.io/local-tools/image/" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(1 0 0)" />
@@ -18,7 +18,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="local-tools" />
     <meta property="og:locale" content="ko_KR" />
-    <meta property="og:title" content="이미지 변환·압축 — JPG·PNG·WebP 리사이즈" />
+    <meta property="og:title" content="이미지 변환·압축 — JPG·WebP·AVIF·HEIC 리사이즈" />
     <meta
       property="og:description"
       content="브라우저 안에서만 동작하는 이미지 도구. 파일은 서버로 전송되지 않습니다."
@@ -35,7 +35,7 @@
         "@type": "WebApplication",
         "name": "local-tools 이미지",
         "url": "https://cranemont.github.io/local-tools/image/",
-        "description": "브라우저 안에서만 동작하는 이미지 도구. JPEG·PNG·WebP 변환과 품질 압축, 리사이즈, 여러 장 ZIP 저장. 파일은 서버로 전송되지 않습니다.",
+        "description": "브라우저 안에서만 동작하는 이미지 도구. JPEG·PNG·WebP·AVIF 변환과 품질 압축, 리사이즈·크롭, EXIF 보기·제거, HEIC 입력, 여러 장 ZIP 저장. 파일은 서버로 전송되지 않습니다.",
         "applicationCategory": "MultimediaApplication",
         "operatingSystem": "Any",
         "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
@@ -43,9 +43,11 @@
         "isAccessibleForFree": true,
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
         "featureList": [
-          "JPEG·PNG·WebP 상호 변환",
+          "JPEG·PNG·WebP·AVIF 상호 변환",
           "품질 슬라이더 압축(용량 미리보기)",
-          "리사이즈(배율·가로·세로)",
+          "리사이즈(배율·가로·세로)·크롭·회전",
+          "EXIF 보기·제거·유지",
+          "HEIC(아이폰 사진) 입력",
           "여러 장 일괄 처리(ZIP 저장)"
         ]
       }

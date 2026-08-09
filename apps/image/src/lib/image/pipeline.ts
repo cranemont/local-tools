@@ -1,8 +1,15 @@
 import Pica from "pica";
 import { t } from "../i18n";
+import { encodeAvif } from "./avif";
 import { getBitmap } from "./decode";
 import { embedJpegExif, embedWebpExif, extractExif, neutralizeOrientation } from "./exif";
-import { OUTPUT_MIME, type ImageItem, type OutputSettings, type ResizeSpec } from "./types";
+import {
+  OUTPUT_MIME,
+  supportsExifKeep,
+  type ImageItem,
+  type OutputSettings,
+  type ResizeSpec,
+} from "./types";
 
 const pica = new Pica();
 
@@ -75,10 +82,16 @@ export async function processItem(
     stage = flat;
   }
 
-  const quality = settings.format === "png" ? undefined : settings.quality / 100;
-  let blob = await canvasToBlob(stage, OUTPUT_MIME[settings.format], quality);
+  let blob: Blob;
+  if (settings.format === "avif") {
+    const ctx = context2d(stage);
+    blob = await encodeAvif(ctx.getImageData(0, 0, w, h), settings.quality);
+  } else {
+    const quality = settings.format === "png" ? undefined : settings.quality / 100;
+    blob = await canvasToBlob(stage, OUTPUT_MIME[settings.format], quality);
+  }
 
-  if (settings.keepExif && settings.format !== "png") {
+  if (settings.keepExif && supportsExifKeep(settings.format)) {
     const tiff = extractExif(item.bytes, item.mime);
     if (tiff) {
       const neutral = neutralizeOrientation(tiff);
