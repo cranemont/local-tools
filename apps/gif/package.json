@@ -12,7 +12,8 @@
   "dependencies": {
     "@local-tools/theme": "workspace:*",
     "fflate": "^0.8.3",
-    "gifenc": "^1.0.3"
+    "gifenc": "^1.0.3",
+    "mediabunny": "^1.52.3"
   },
   "devDependencies": {
     "@local-tools/vite-plugin-self-extracting": "workspace:*",

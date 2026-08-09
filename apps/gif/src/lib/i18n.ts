@@ -14,8 +14,9 @@ export const t = {
   },
 
   editor: {
-    dropHint: "GIF·이미지를 여기에 끌어다 놓거나 클릭해서 선택하세요",
-    dropSub: "GIF를 편집하거나, 이미지 여러 장으로 GIF를 만들 수 있어요 · GIF, PNG, JPG, WebP",
+    dropHint: "GIF·이미지·동영상을 여기에 끌어다 놓거나 클릭해서 선택하세요",
+    dropSub:
+      "GIF를 편집하거나, 이미지·동영상으로 GIF를 만들 수 있어요 · GIF, PNG, JPG, WebP, MP4, WebM",
     addFiles: "파일 추가",
     clearAll: "모두 비우기",
     loading: (name: string, i: number, total: number) =>
@@ -105,6 +106,23 @@ export const t = {
     savedZip: (n: number) => `${n}장을 ZIP으로 저장했어요.`,
   },
 
+  video: {
+    dialogTitle: "동영상 프레임 가져오기",
+    meta: (w: number, h: number, s: string) => `${w}×${h}px · ${s}초`,
+    fps: "초당 프레임(fps)",
+    scale: "해상도",
+    scaleOption: (pct: number, w: number) => `${pct}% · 가로 ${w}px`,
+    range: "구간(초)",
+    rangeStart: "시작",
+    rangeEnd: "끝",
+    estFrames: (n: number) => `약 ${n}프레임이 추가돼요`,
+    import: "가져오기",
+    cancel: "취소",
+    probing: (name: string) => `동영상 정보 읽는 중… ${name}`,
+    extracting: (name: string, i: number, total: number) =>
+      total ? `프레임 추출 중… (${i}/${total}) ${name}` : `프레임 추출 준비 중… ${name}`,
+  },
+
   banner: {
     large: (w: number, h: number) =>
       `원본이 ${w}×${h}px로 커요. 출력 크기를 줄이면 파일이 훨씬 가벼워져요.`,
@@ -115,6 +133,7 @@ export const t = {
   errors: {
     unsupported: (name: string) => `지원하지 않는 형식이에요: ${name}`,
     decodeFail: (name: string) => `파일을 읽지 못했어요: ${name}`,
+    noVideoTrack: (name: string) => `영상 트랙을 찾을 수 없어요: ${name}`,
     noImageDecoder:
       "이 브라우저는 GIF 디코딩(ImageDecoder)을 지원하지 않아요. 최신 Chrome/Edge에서 열어 주세요.",
     canvasFail: "canvas 2d 컨텍스트를 만들 수 없어요.",

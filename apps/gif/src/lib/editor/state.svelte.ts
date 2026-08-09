@@ -1,6 +1,12 @@
 import { t } from "../i18n";
 import { loadFile, releaseAll } from "../gif/decode";
 import { outputSize } from "../gif/transform";
+import {
+  extractVideoFrames,
+  isVideoFile,
+  probeVideo,
+  type ExtractOptions,
+} from "../gif/video";
 import type { CropRect, Frame, Rotation, Transform } from "../gif/types";
 import type { FrameSource } from "../gif/types";
 
@@ -15,7 +21,7 @@ export const SCALE_CHIPS = [25, 50, 75, 100] as const;
 export const MIN_DELAY_MS = 20;
 export const MAX_DELAY_MS = 10_000;
 
-export type ExportFormat = "gif" | "webp";
+export type ExportFormat = "gif" | "webp" | "mp4";
 export const GIF_COLOR_CHOICES = [256, 128, 64, 32] as const;
 
 /** 화질 프리셋 — 형식별 설정을 한 번에 적용. */
@@ -52,6 +58,16 @@ export class EditorState {
   gifColors = $state(256);
   gifDither = $state(false);
   webpQuality = $state(80);
+  mp4Quality = $state<PresetId>("balanced");
+
+  /** 동영상 임포트 다이얼로그 (한 번에 한 파일). */
+  videoDialog = $state<{
+    file: File;
+    width: number;
+    height: number;
+    durationS: number;
+  } | null>(null);
+  #videoQueue: File[] = [];
 
   busy = $state(false);
   busyMsg = $state("");
@@ -96,6 +112,7 @@ export class EditorState {
   );
   /** 현재 화질 설정과 일치하는 프리셋 (없으면 null). */
   readonly activePreset = $derived.by(() => {
+    if (this.exportFormat === "mp4") return this.mp4Quality;
     for (const p of QUALITY_PRESETS) {
       const match =
         this.exportFormat === "gif"
@@ -114,28 +131,88 @@ export class EditorState {
   async addFiles(files: FileList | File[]): Promise<void> {
     const arr = Array.from(files);
     if (!arr.length) return;
+    const videos = arr.filter(isVideoFile);
+    const stills = arr.filter((f) => !isVideoFile(f));
     this.error = "";
-    this.busy = true;
-    try {
-      for (let i = 0; i < arr.length; i++) {
-        const file = arr[i];
-        this.busyMsg = t.editor.loading(file.name, i + 1, arr.length);
-        try {
-          const { source, frames } = await loadFile(file, (done, total) => {
-            this.busyMsg = t.editor.decodingFrames(file.name, done, total);
-          });
-          this.sources.set(source.id, source);
-          this.frames = [...this.frames, ...frames];
-        } catch (err) {
-          this.error = err instanceof Error ? err.message : String(err);
+
+    if (stills.length) {
+      this.busy = true;
+      try {
+        for (let i = 0; i < stills.length; i++) {
+          const file = stills[i];
+          this.busyMsg = t.editor.loading(file.name, i + 1, stills.length);
+          try {
+            const { source, frames } = await loadFile(file, (done, total) => {
+              this.busyMsg = t.editor.decodingFrames(file.name, done, total);
+            });
+            this.sources.set(source.id, source);
+            this.frames = [...this.frames, ...frames];
+          } catch (err) {
+            this.error = err instanceof Error ? err.message : String(err);
+          }
         }
+      } finally {
+        this.busy = false;
+        this.busyMsg = "";
       }
+      this.#maybeSuggestResize();
+      this.touch();
+    }
+
+    if (videos.length) {
+      this.#videoQueue.push(...videos);
+      if (!this.videoDialog) await this.#openNextVideoDialog();
+    }
+  }
+
+  // ── 동영상 임포트 (다이얼로그 플로우) ────────────
+  async #openNextVideoDialog(): Promise<void> {
+    const file = this.#videoQueue.shift();
+    if (!file) return;
+    this.busy = true;
+    this.busyMsg = t.video.probing(file.name);
+    try {
+      const info = await probeVideo(file);
+      this.videoDialog = { file, ...info };
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+      this.busy = false;
+      this.busyMsg = "";
+      // 실패한 파일은 건너뛰고 다음 파일 진행
+      return this.#openNextVideoDialog();
+    }
+    this.busy = false;
+    this.busyMsg = "";
+  }
+
+  async confirmVideoImport(opts: Omit<ExtractOptions, "onProgress">): Promise<void> {
+    const dialog = this.videoDialog;
+    if (!dialog) return;
+    this.videoDialog = null;
+    this.busy = true;
+    this.busyMsg = t.video.extracting(dialog.file.name, 0, 0);
+    try {
+      const { sources, frames } = await extractVideoFrames(dialog.file, {
+        ...opts,
+        onProgress: (done, total) =>
+          (this.busyMsg = t.video.extracting(dialog.file.name, done, total)),
+      });
+      for (const s of sources) this.sources.set(s.id, s);
+      this.frames = [...this.frames, ...frames];
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
     } finally {
       this.busy = false;
       this.busyMsg = "";
     }
     this.#maybeSuggestResize();
     this.touch();
+    await this.#openNextVideoDialog();
+  }
+
+  cancelVideoImport(): void {
+    this.videoDialog = null;
+    void this.#openNextVideoDialog();
   }
 
   #maybeSuggestResize(): void {
@@ -302,8 +379,10 @@ export class EditorState {
     if (this.exportFormat === "gif") {
       this.gifColors = preset.gif.colors;
       this.gifDither = preset.gif.dither;
-    } else {
+    } else if (this.exportFormat === "webp") {
       this.webpQuality = preset.webpQuality;
+    } else {
+      this.mp4Quality = id;
     }
     this.touch();
   }

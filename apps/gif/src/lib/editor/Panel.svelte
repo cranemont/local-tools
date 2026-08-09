@@ -14,6 +14,7 @@
   } from "./state.svelte";
   import { encodeGif, type RenderPlan } from "../gif/encode";
   import { encodeWebp } from "../gif/webp";
+  import { encodeMp4 } from "../gif/mp4";
   import { extractPngFrames } from "../gif/extract";
   import { downloadBlob, formatBytes } from "../gif/save";
 
@@ -29,8 +30,9 @@
   let status = $state("");
 
   const stale = $derived(result !== null && result.revision !== editor.revision);
-  const fmtLabel = $derived(editor.exportFormat === "gif" ? "GIF" : "WebP");
-  const ext = $derived(editor.exportFormat === "gif" ? "gif" : "webp");
+  const FORMAT_LABELS = { gif: "GIF", webp: "WebP", mp4: "MP4" } as const;
+  const fmtLabel = $derived(FORMAT_LABELS[editor.exportFormat]);
+  const ext = $derived(editor.exportFormat);
 
   function cleanName(fallback: string): string {
     const clean = filename.replace(/[\\/:*?"<>|]/g, "").trim();
@@ -59,23 +61,32 @@
     const onProgress = (done: number, total: number) =>
       (editor.busyMsg = t.panel.encoding(done, total));
     try {
-      const blob =
-        editor.exportFormat === "gif"
-          ? await encodeGif({
-              ...plan(),
-              speed: editor.speed,
-              repeat: editor.repeat,
-              maxColors: editor.gifColors,
-              dither: editor.gifDither,
-              onProgress,
-            })
-          : await encodeWebp({
-              ...plan(),
-              speed: editor.speed,
-              loop: editor.webpLoop,
-              quality: editor.webpQuality,
-              onProgress,
-            });
+      let blob: Blob;
+      if (editor.exportFormat === "gif") {
+        blob = await encodeGif({
+          ...plan(),
+          speed: editor.speed,
+          repeat: editor.repeat,
+          maxColors: editor.gifColors,
+          dither: editor.gifDither,
+          onProgress,
+        });
+      } else if (editor.exportFormat === "webp") {
+        blob = await encodeWebp({
+          ...plan(),
+          speed: editor.speed,
+          loop: editor.webpLoop,
+          quality: editor.webpQuality,
+          onProgress,
+        });
+      } else {
+        blob = await encodeMp4({
+          ...plan(),
+          speed: editor.speed,
+          quality: editor.mp4Quality,
+          onProgress,
+        });
+      }
       result = { blob, revision };
     } catch (err) {
       editor.error = err instanceof Error ? err.message : String(err);
@@ -342,6 +353,7 @@
         </button>
       {/each}
     </div>
+    {#if editor.exportFormat !== "mp4"}
     <details class="adv">
       <summary>{t.panel.advanced}</summary>
       {#if editor.exportFormat === "gif"}
@@ -378,6 +390,7 @@
         </div>
       {/if}
     </details>
+    {/if}
   </section>
 
   <!-- 내보내기 -->
@@ -399,6 +412,14 @@
         onclick={() => editor.setExportFormat("webp")}
       >
         WebP
+      </button>
+      <button
+        type="button"
+        class="chip"
+        class:active={editor.exportFormat === "mp4"}
+        onclick={() => editor.setExportFormat("mp4")}
+      >
+        MP4
       </button>
     </div>
     <span class="namefield">

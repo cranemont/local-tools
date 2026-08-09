@@ -30,9 +30,10 @@ apps/pdf/            # PDF 도구 (Svelte 5 + TS)
                      #        save(다운로드)·qpdfLoader(암호)·pdfjs(워커)
   vite.config.ts     # 자가해제 플러그인 사용 (공용 패키지)
 apps/gif/            # GIF 에디터 (Svelte 5 + TS) — 단일 에디터 뷰(탭 없음)
-  src/lib/editor/    # state.svelte.ts(상태 싱글턴)·Preview·Filmstrip·Panel
+  src/lib/editor/    # state.svelte.ts(상태 싱글턴)·Preview·Filmstrip·Panel·ImportDialog
   src/lib/gif/       # 엔진: decode(ImageDecoder 온디맨드+LRU)·encode(gifenc)·
-                     #        webp(ANMF muxer)·transform·extract(PNG ZIP)·save
+                     #        webp(ANMF muxer)·mp4(WebCodecs 내보내기)·
+                     #        video(동영상 임포트)·transform·extract(PNG ZIP)·save
 packages/theme/tokens.css  # 공용 디자인 토큰(라이트/다크)
 packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플러그인 (모든 앱 공용)
 ```
@@ -44,7 +45,7 @@ packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플�
 
 - **크로미엄 전용**(Chrome/Edge 최신). File System Access·DecompressionStream 등 사용, FF/Safari 미검증.
 - Vite 8 + `vite-plugin-singlefile` + **Svelte 5(runes)** + TypeScript.
-- 라이브러리: `pdf-lib`(병합/회전/이미지임베드), `pdfjs-dist` v6(썸네일·래스터), `fflate`(ZIP), `@neslinesli93/qpdf-wasm`(암호, CDN 지연로드).
+- 라이브러리: `pdf-lib`(병합/회전/이미지임베드), `pdfjs-dist` v6(썸네일·래스터), `fflate`(ZIP), `@neslinesli93/qpdf-wasm`(암호, CDN 지연로드), `gifenc`(GIF 인코딩), `mediabunny`(순수 TS — 동영상 디먹싱·MP4 muxing).
 
 ## ⚠️ 주의사항 (놓치기 쉬움 — 꼭 읽기)
 
@@ -67,7 +68,8 @@ packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플�
 
 6. **문구는 전부 `i18n.ts`에** 모은다(한국어 전용). 컴포넌트에 하드코딩 금지 — 나중 영어 확장 대비.
 
-7. **apps/gif의 WebP 내보내기는 wasm이 아니다.** 프레임을 크로미엄 네이티브 `canvas.convertToBlob("image/webp")`로 인코딩하고 순수 TS muxer(`src/lib/gif/webp.ts`)가 RIFF 컨테이너(VP8X+ANIM+ANMF)를 조립한다. libwebp wasm(~1.5MB)을 인라인하지 말 것 — 단일 HTML을 58kB로 유지하는 핵심. GIF 디코딩도 네이티브 `ImageDecoder`(크로미엄 전용 전제).
+7. **apps/gif 엔진은 전부 wasm 없이 돌아간다.** WebP 내보내기는 크로미엄 네이티브 `canvas.convertToBlob("image/webp")` + 순수 TS muxer(`webp.ts`, VP8X+ANIM+ANMF), 동영상 임포트·MP4 내보내기는 WebCodecs + `mediabunny`(순수 TS), GIF 디코딩은 네이티브 `ImageDecoder`. libwebp/ffmpeg류 wasm을 인라인하지 말 것 — 단일 HTML을 ~170kB로 유지하는 핵심(크로미엄 전용 전제).
+   - 동영상 임포트는 선택 구간을 fps 간격으로 샘플링해 **프레임별 WebP 정지 이미지 소스**로 변환한다(기존 still 파이프라인 재사용). 원본 영상 바이트는 임포트 후 버려짐.
 
 ## 핵심 설계 결정 (그릴링 합의 요약)
 

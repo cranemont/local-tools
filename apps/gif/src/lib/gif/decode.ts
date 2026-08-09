@@ -154,7 +154,8 @@ function normalizeDelay(durationUs: number | null): number {
   return ms < 20 ? 100 : ms;
 }
 
-function renderThumb(
+/** 필름스트립용 소형 썸네일 dataURL 생성 (video.ts에서도 재사용). */
+export function renderThumb(
   canvas: HTMLCanvasElement,
   image: CanvasImageSource,
   width: number,

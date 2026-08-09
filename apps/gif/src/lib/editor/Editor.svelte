@@ -5,6 +5,7 @@
   import Preview from "./Preview.svelte";
   import Filmstrip from "./Filmstrip.svelte";
   import Panel from "./Panel.svelte";
+  import ImportDialog from "./ImportDialog.svelte";
 
   let dragOver = $state(false);
   let fileInput: HTMLInputElement;
@@ -47,7 +48,7 @@
   <input
     bind:this={fileInput}
     type="file"
-    accept="image/gif,image/png,image/jpeg,image/webp"
+    accept="image/gif,image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime,video/x-matroska,.mp4,.m4v,.mov,.webm,.mkv"
     multiple
     hidden
     onchange={onInputChange}
@@ -149,6 +150,8 @@
       <p>{editor.busyMsg}</p>
     </div>
   {/if}
+
+  <ImportDialog />
 </div>
 
 <style>
