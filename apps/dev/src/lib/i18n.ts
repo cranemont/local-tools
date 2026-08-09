@@ -22,7 +22,8 @@ export const t = {
 
   groups: {
     format: "포맷·변환",
-    codec: "인코딩",
+    sec: "인코딩·보안",
+    time: "시간",
     text: "텍스트",
   },
 
@@ -82,4 +83,112 @@ export const t = {
     twoByte: "2바이트 기준",
     twoByteNote: "2바이트 기준: 한글·전각 문자 2byte, 영문·숫자 1byte — 취업 사이트가 쓰는 계산식. UTF-8은 한글 한 글자가 3byte.",
   },
+
+  jwt: {
+    title: "JWT 디코더",
+    desc: "토큰 디코드, 만료 확인, HS 서명 검증",
+    placeholder: "JWT 붙여넣기",
+    header: "헤더",
+    payload: "페이로드",
+    invalid: "JWT 형식이 아니에요",
+    claims: "시간 클레임",
+    expValid: "유효",
+    expExpired: "만료됨",
+    nbfPending: "활성화 전",
+    secret: "비밀키",
+    verify: "서명 확인",
+    verifyOk: "서명 일치",
+    verifyFail: "서명 불일치",
+    verifyUnsupported: (alg: string) => `${alg} 서명은 여기서 확인할 수 없어요 (HS256·384·512만)`,
+    secretNote: "비밀키도 브라우저 밖으로 나가지 않아요",
+  },
+
+  hash: {
+    title: "해시",
+    desc: "MD5 · SHA 체크섬 (텍스트·파일)",
+    modeText: "텍스트",
+    modeFile: "파일",
+    textPlaceholder: "해시할 텍스트 입력",
+    dropHint: "파일을 끌어다 놓거나 클릭해서 선택",
+    changeFile: "다른 파일",
+    computing: "계산 중…",
+  },
+
+  uuid: {
+    title: "UUID · ULID",
+    desc: "식별자 생성 (v4 · v7 · ULID)",
+    count: "개수",
+    generate: "새로 생성",
+  },
+
+  time: {
+    title: "타임스탬프",
+    desc: "Unix 시간 ↔ 날짜 변환",
+    now: "지금",
+    inputLabel: "타임스탬프·날짜",
+    placeholder: "1791600000 · 2026-08-09 21:00 · 어제 날짜도 ISO로",
+    local: "로컬 시간",
+    iso: "ISO 8601 (UTC)",
+    unixS: "Unix 초",
+    unixMs: "Unix 밀리초",
+    relative: "상대 시간",
+    invalid: "시간으로 해석할 수 없어요",
+  },
+
+  regex: {
+    title: "정규식 테스트",
+    desc: "패턴 매칭 실시간 확인",
+    pattern: "패턴",
+    patternPlaceholder: "([a-z]+)@(\\w+\\.\\w+)",
+    text: "테스트 문자열",
+    matches: (n: number) => `${n}개 일치`,
+    noMatch: "일치 없음",
+    group: (i: number) => `그룹 ${i}`,
+    capped: "1,000개까지만 표시돼요",
+  },
+
+  cron: {
+    title: "cron 해석",
+    desc: "표현식 설명과 다음 실행 시각",
+    placeholder: "*/5 * * * *",
+    next: "다음 실행",
+    invalid: "cron 표현식이 아니에요",
+  },
+
+  color: {
+    title: "컬러 변환",
+    desc: "HEX · RGB · HSL · OKLCH 상호 변환",
+    placeholder: "#0ea5e9 · rgb(14 165 233) · oklch(0.62 0.158 240)",
+    invalid: "색으로 해석할 수 없어요",
+    gamutNote: "sRGB 밖 색이라 HEX·RGB·HSL은 가장 가까운 색으로 표시돼요",
+  },
 } as const;
+
+/** 밀리초 타임스탬프 → "2026. 08. 09. 21:45:12" (로컬). */
+export function fmtDateTime(ms: number): string {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(ms);
+}
+
+/** 밀리초 타임스탬프 → "3시간 전" 식 상대 표기. */
+export function fmtRelative(ms: number): string {
+  const diff = ms - Date.now();
+  const abs = Math.abs(diff);
+  const rtf = new Intl.RelativeTimeFormat("ko", { numeric: "auto" });
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["year", 31536e6],
+    ["month", 2592e6],
+    ["day", 864e5],
+    ["hour", 36e5],
+    ["minute", 6e4],
+  ];
+  for (const [unit, size] of units) if (abs >= size) return rtf.format(Math.round(diff / size), unit);
+  return rtf.format(Math.round(diff / 1e3), "second");
+}
