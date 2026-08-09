@@ -15,6 +15,21 @@ export const SCALE_CHIPS = [25, 50, 75, 100] as const;
 export const MIN_DELAY_MS = 20;
 export const MAX_DELAY_MS = 10_000;
 
+export type ExportFormat = "gif" | "webp";
+export const GIF_COLOR_CHOICES = [256, 128, 64, 32] as const;
+
+/** 화질 프리셋 — 형식별 설정을 한 번에 적용. */
+export type PresetId = "small" | "balanced" | "high";
+export const QUALITY_PRESETS: {
+  id: PresetId;
+  gif: { colors: number; dither: boolean };
+  webpQuality: number;
+}[] = [
+  { id: "small", gif: { colors: 64, dither: false }, webpQuality: 60 },
+  { id: "balanced", gif: { colors: 256, dither: false }, webpQuality: 80 },
+  { id: "high", gif: { colors: 256, dither: true }, webpQuality: 95 },
+];
+
 function defaultTransform(): Transform {
   return { crop: null, rotation: 0, flipH: false, flipV: false, scale: 1 };
 }
@@ -32,6 +47,11 @@ export class EditorState {
   loopCount = $state(3);
   transform = $state<Transform>(defaultTransform());
   cropMode = $state(false);
+
+  exportFormat = $state<ExportFormat>("gif");
+  gifColors = $state(256);
+  gifDither = $state(false);
+  webpQuality = $state(80);
 
   busy = $state(false);
   busyMsg = $state("");
@@ -69,6 +89,21 @@ export class EditorState {
     if (this.loopForever) return 0;
     const extra = Math.max(1, this.loopCount) - 1;
     return extra === 0 ? -1 : extra;
+  });
+  /** WebP ANIM loop 값: 0=무한, n>0=재생 횟수. */
+  readonly webpLoop = $derived.by(() =>
+    this.loopForever ? 0 : Math.max(1, this.loopCount),
+  );
+  /** 현재 화질 설정과 일치하는 프리셋 (없으면 null). */
+  readonly activePreset = $derived.by(() => {
+    for (const p of QUALITY_PRESETS) {
+      const match =
+        this.exportFormat === "gif"
+          ? this.gifColors === p.gif.colors && this.gifDither === p.gif.dither
+          : this.webpQuality === p.webpQuality;
+      if (match) return p.id;
+    }
+    return null;
   });
 
   touch(): void {
@@ -237,6 +272,39 @@ export class EditorState {
 
   setLoopCount(n: number): void {
     this.loopCount = Math.min(100, Math.max(1, Math.round(n)));
+    this.touch();
+  }
+
+  // ── 내보내기 형식·화질 ──────────────────────────
+  setExportFormat(f: ExportFormat): void {
+    this.exportFormat = f;
+    this.touch();
+  }
+
+  setGifColors(n: number): void {
+    this.gifColors = Math.min(256, Math.max(8, Math.round(n)));
+    this.touch();
+  }
+
+  setGifDither(v: boolean): void {
+    this.gifDither = v;
+    this.touch();
+  }
+
+  setWebpQuality(q: number): void {
+    this.webpQuality = Math.min(100, Math.max(1, Math.round(q)));
+    this.touch();
+  }
+
+  applyPreset(id: PresetId): void {
+    const preset = QUALITY_PRESETS.find((p) => p.id === id);
+    if (!preset) return;
+    if (this.exportFormat === "gif") {
+      this.gifColors = preset.gif.colors;
+      this.gifDither = preset.gif.dither;
+    } else {
+      this.webpQuality = preset.webpQuality;
+    }
     this.touch();
   }
 

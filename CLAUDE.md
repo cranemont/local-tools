@@ -29,6 +29,10 @@ apps/pdf/            # PDF 도구 (Svelte 5 + TS)
   src/lib/pdf/       # 엔진: engine(썸네일)·exporter(병합)·rasterize(PNG)·
                      #        save(다운로드)·qpdfLoader(암호)·pdfjs(워커)
   vite.config.ts     # 자가해제 플러그인 사용 (공용 패키지)
+apps/gif/            # GIF 에디터 (Svelte 5 + TS) — 단일 에디터 뷰(탭 없음)
+  src/lib/editor/    # state.svelte.ts(상태 싱글턴)·Preview·Filmstrip·Panel
+  src/lib/gif/       # 엔진: decode(ImageDecoder 온디맨드+LRU)·encode(gifenc)·
+                     #        webp(ANMF muxer)·transform·extract(PNG ZIP)·save
 packages/theme/tokens.css  # 공용 디자인 토큰(라이트/다크)
 packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플러그인 (모든 앱 공용)
 ```
@@ -62,6 +66,8 @@ packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플�
    - 단, pdf.js 보조 디코더(JBIG2/JPEG2000/QCMS)는 번들에 없다. 그런 희귀 인코딩 이미지가 든 PDF는 썸네일/래스터에서 문제될 수 있음(일반 PDF는 무관).
 
 6. **문구는 전부 `i18n.ts`에** 모은다(한국어 전용). 컴포넌트에 하드코딩 금지 — 나중 영어 확장 대비.
+
+7. **apps/gif의 WebP 내보내기는 wasm이 아니다.** 프레임을 크로미엄 네이티브 `canvas.convertToBlob("image/webp")`로 인코딩하고 순수 TS muxer(`src/lib/gif/webp.ts`)가 RIFF 컨테이너(VP8X+ANIM+ANMF)를 조립한다. libwebp wasm(~1.5MB)을 인라인하지 말 것 — 단일 HTML을 58kB로 유지하는 핵심. GIF 디코딩도 네이티브 `ImageDecoder`(크로미엄 전용 전제).
 
 ## 핵심 설계 결정 (그릴링 합의 요약)
 

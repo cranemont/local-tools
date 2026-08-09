@@ -8,10 +8,20 @@
     SCALE_CHIPS,
     MIN_DELAY_MS,
     MAX_DELAY_MS,
+    GIF_COLOR_CHOICES,
+    QUALITY_PRESETS,
+    type PresetId,
   } from "./state.svelte";
   import { encodeGif, type RenderPlan } from "../gif/encode";
+  import { encodeWebp } from "../gif/webp";
   import { extractPngFrames } from "../gif/extract";
   import { downloadBlob, formatBytes } from "../gif/save";
+
+  const PRESET_LABELS: Record<PresetId, string> = {
+    small: t.panel.presetSmall,
+    balanced: t.panel.presetBalanced,
+    high: t.panel.presetHigh,
+  };
 
   let filename = $state("animation");
   let delayInput = $state(100);
@@ -19,6 +29,8 @@
   let status = $state("");
 
   const stale = $derived(result !== null && result.revision !== editor.revision);
+  const fmtLabel = $derived(editor.exportFormat === "gif" ? "GIF" : "WebP");
+  const ext = $derived(editor.exportFormat === "gif" ? "gif" : "webp");
 
   function cleanName(fallback: string): string {
     const clean = filename.replace(/[\\/:*?"<>|]/g, "").trim();
@@ -35,8 +47,8 @@
     };
   }
 
-  // ── GIF 인코딩 → 용량 확인 → 저장 ─────────────────
-  async function makeGif() {
+  // ── 인코딩 → 용량 확인 → 저장 ─────────────────────
+  async function make() {
     if (!editor.frames.length || editor.busy) return;
     editor.playing = false;
     editor.error = "";
@@ -44,14 +56,26 @@
     editor.busy = true;
     editor.busyMsg = t.panel.encoding(0, editor.frames.length);
     const revision = editor.revision;
+    const onProgress = (done: number, total: number) =>
+      (editor.busyMsg = t.panel.encoding(done, total));
     try {
-      const blob = await encodeGif({
-        ...plan(),
-        speed: editor.speed,
-        repeat: editor.repeat,
-        onProgress: (done, total) =>
-          (editor.busyMsg = t.panel.encoding(done, total)),
-      });
+      const blob =
+        editor.exportFormat === "gif"
+          ? await encodeGif({
+              ...plan(),
+              speed: editor.speed,
+              repeat: editor.repeat,
+              maxColors: editor.gifColors,
+              dither: editor.gifDither,
+              onProgress,
+            })
+          : await encodeWebp({
+              ...plan(),
+              speed: editor.speed,
+              loop: editor.webpLoop,
+              quality: editor.webpQuality,
+              onProgress,
+            });
       result = { blob, revision };
     } catch (err) {
       editor.error = err instanceof Error ? err.message : String(err);
@@ -63,7 +87,7 @@
 
   function saveResult() {
     if (!result) return;
-    downloadBlob(result.blob, `${cleanName("animation")}.gif`);
+    downloadBlob(result.blob, `${cleanName("animation")}.${ext}`);
   }
 
   // ── 프레임 PNG 추출 (여러 장이면 ZIP 한 개) ────────
@@ -116,6 +140,15 @@
   }
   function onLoopCountChange(e: Event) {
     editor.setLoopCount(Number((e.target as HTMLInputElement).value));
+  }
+  function onColorsChange(e: Event) {
+    editor.setGifColors(Number((e.target as HTMLSelectElement).value));
+  }
+  function onDitherChange(e: Event) {
+    editor.setGifDither((e.target as HTMLInputElement).checked);
+  }
+  function onWebpQualityChange(e: Event) {
+    editor.setWebpQuality(Number((e.target as HTMLInputElement).value));
   }
   function toggleCropMode() {
     editor.playing = false;
@@ -294,9 +327,80 @@
     </div>
   </section>
 
+  <!-- 화질 -->
+  <section class="sec">
+    <h3>{t.panel.quality}</h3>
+    <div class="chips">
+      {#each QUALITY_PRESETS as p (p.id)}
+        <button
+          type="button"
+          class="chip"
+          class:active={editor.activePreset === p.id}
+          onclick={() => editor.applyPreset(p.id)}
+        >
+          {PRESET_LABELS[p.id]}
+        </button>
+      {/each}
+    </div>
+    <details class="adv">
+      <summary>{t.panel.advanced}</summary>
+      {#if editor.exportFormat === "gif"}
+        <div class="row">
+          <label class="lbl" for="colors-select">{t.panel.colors}</label>
+          <select
+            id="colors-select"
+            class="num"
+            value={String(editor.gifColors)}
+            onchange={onColorsChange}
+          >
+            {#each GIF_COLOR_CHOICES as c (c)}
+              <option value={String(c)}>{c}</option>
+            {/each}
+          </select>
+        </div>
+        <label class="row checkrow">
+          <input type="checkbox" checked={editor.gifDither} onchange={onDitherChange} />
+          <span class="lbl">{t.panel.dither}</span>
+        </label>
+      {:else}
+        <div class="row">
+          <label class="lbl" for="webp-quality">{t.panel.webpQuality}</label>
+          <input
+            id="webp-quality"
+            class="num"
+            type="number"
+            min="1"
+            max="100"
+            step="1"
+            value={editor.webpQuality}
+            onchange={onWebpQualityChange}
+          />
+        </div>
+      {/if}
+    </details>
+  </section>
+
   <!-- 내보내기 -->
   <section class="sec">
     <h3>{t.panel.export}</h3>
+    <div class="chips" role="group" aria-label={t.panel.format}>
+      <button
+        type="button"
+        class="chip"
+        class:active={editor.exportFormat === "gif"}
+        onclick={() => editor.setExportFormat("gif")}
+      >
+        GIF
+      </button>
+      <button
+        type="button"
+        class="chip"
+        class:active={editor.exportFormat === "webp"}
+        onclick={() => editor.setExportFormat("webp")}
+      >
+        WebP
+      </button>
+    </div>
     <span class="namefield">
       <input
         class="fname"
@@ -305,17 +409,17 @@
         spellcheck="false"
         autocomplete="off"
       />
-      <span class="ext">.gif</span>
+      <span class="ext">.{ext}</span>
     </span>
 
     <button
       type="button"
       class="btn primary"
-      onclick={makeGif}
+      onclick={make}
       disabled={editor.busy || editor.frames.length === 0}
     >
       <Icon name="film" size={15} />
-      {result ? t.panel.reEncode : t.panel.encodeGif}
+      {result ? t.panel.reEncode : t.panel.encodeAction(fmtLabel)}
     </button>
 
     {#if result}
@@ -542,5 +646,26 @@
     margin: 0;
     font-size: 12.5px;
     color: var(--text-muted);
+  }
+
+  .adv summary {
+    cursor: pointer;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    user-select: none;
+  }
+  .adv[open] summary {
+    margin-bottom: 8px;
+  }
+  .adv {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .checkrow {
+    cursor: pointer;
+  }
+  .checkrow input {
+    accent-color: var(--accent);
   }
 </style>

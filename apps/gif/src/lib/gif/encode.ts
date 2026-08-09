@@ -18,6 +18,10 @@ export interface EncodeOptions extends RenderPlan {
   speed: number;
   /** gifenc repeat: -1=1회 재생, 0=무한, n>0=추가 반복 횟수. */
   repeat: number;
+  /** 팔레트 최대 색상 수 (2~256). */
+  maxColors: number;
+  /** ordered 디더링(Bayer 4×4) — 그라데이션 밴딩 완화, 용량은 커짐. */
+  dither: boolean;
   onProgress?: (done: number, total: number) => void;
 }
 
@@ -27,9 +31,29 @@ const MIN_DELAY_MS = 20;
 
 const nextTick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
-/** 프레임 목록을 GIF로 인코딩한다. 팔레트는 프레임별 256색(투명 시 255+1). */
+const BAYER4 = [
+  [0, 8, 2, 10],
+  [12, 4, 14, 6],
+  [3, 11, 1, 9],
+  [15, 7, 13, 5],
+];
+
+/** 팔레트 매핑 전에 Bayer 4×4 임곗값 노이즈를 더하는 ordered 디더링. */
+function orderedDither(data: Uint8ClampedArray, width: number, amount: number): void {
+  for (let i = 0, px = 0; i < data.length; i += 4, px++) {
+    const x = px % width;
+    const y = (px / width) | 0;
+    const noise = ((BAYER4[y & 3][x & 3] + 0.5) / 16 - 0.5) * amount;
+    data[i] += noise;
+    data[i + 1] += noise;
+    data[i + 2] += noise;
+  }
+}
+
+/** 프레임 목록을 GIF로 인코딩한다. 팔레트는 프레임별 최대 maxColors색(투명 시 한 칸 예약). */
 export async function encodeGif(opts: EncodeOptions): Promise<Blob> {
-  const { frames, sources, transform, baseW, baseH, speed, repeat, onProgress } = opts;
+  const { frames, sources, transform, baseW, baseH, speed, repeat, maxColors, dither, onProgress } =
+    opts;
   const { w, h } = outputSize(baseW, baseH, transform);
 
   const canvas = new OffscreenCanvas(w, h);
@@ -53,8 +77,14 @@ export async function encodeGif(opts: EncodeOptions): Promise<Blob> {
       }
     }
 
-    const palette = quantize(data, hasAlpha ? 255 : 256);
-    const index = applyPalette(data, palette);
+    // 팔레트는 원본에서 뽑고, 매핑은 디더링된 사본으로 한다.
+    const palette = quantize(data, Math.min(hasAlpha ? 255 : 256, maxColors));
+    let mapSource: Uint8ClampedArray = data;
+    if (dither) {
+      mapSource = new Uint8ClampedArray(data);
+      orderedDither(mapSource, w, maxColors <= 64 ? 32 : 20);
+    }
+    const index = applyPalette(mapSource, palette);
     const frameOpts: WriteFrameOptions = {
       palette,
       delay: Math.max(MIN_DELAY_MS, Math.round(frame.delayMs / speed)),
