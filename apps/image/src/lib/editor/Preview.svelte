@@ -1,13 +1,17 @@
 <script lang="ts">
   import { t } from "../i18n";
   import { editor } from "./state.svelte";
-  import { processItem } from "../image/pipeline";
+  import { processItem, renderRotated } from "../image/pipeline";
   import { formatBytes } from "../image/save";
+  import type { CropRect } from "../image/types";
 
   const DEBOUNCE_MS = 200;
 
   let view = $state<"result" | "original">("result");
   let computing = $state(false);
+
+  let boxEl: HTMLDivElement;
+  let imgEl = $state<HTMLImageElement | null>(null);
 
   // ── 원본 미리보기 URL ─────────────────────────────
   let origUrl = $state("");
@@ -62,46 +66,193 @@
     };
   });
 
+  // ── 크롭 모드 바탕 (회전만 적용한 원본) ───────────
+  let cropUrl = $state("");
+  $effect(() => {
+    if (!editor.cropMode) {
+      cropUrl = "";
+      return;
+    }
+    const item = editor.currentItem;
+    if (!item) return;
+    void item.transform.rotation;
+    let url = "";
+    let cancelled = false;
+    void (async () => {
+      try {
+        const blob = await renderRotated(item);
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
+        cropUrl = url;
+      } catch (err) {
+        if (!cancelled) editor.error = err instanceof Error ? err.message : String(err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  });
+
   const item = $derived(editor.currentItem);
   const deltaPct = $derived.by(() => {
     if (!item || !result) return 0;
     return Math.round(((result.bytes - item.bytes.byteLength) / item.bytes.byteLength) * 100);
   });
-  const shownUrl = $derived(view === "original" ? origUrl : (result?.url ?? origUrl));
+  const shownUrl = $derived.by(() => {
+    if (editor.cropMode) return cropUrl;
+    return view === "original" ? origUrl : (result?.url ?? origUrl);
+  });
+
+  // ── 크롭 드래그 (비율 프리셋 제약) ─────────────────
+  interface ViewRect {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }
+  let cropStart: { x: number; y: number } | null = null;
+  let cropView = $state<ViewRect | null>(null);
+
+  /** 회전 적용 후(크롭 전) 이미지 크기 — 화면→이미지 좌표 변환의 기준. */
+  function rotatedDims(): { w: number; h: number } {
+    if (!item) return { w: 1, h: 1 };
+    const swap = item.transform.rotation % 180 !== 0;
+    return swap ? { w: item.height, h: item.width } : { w: item.width, h: item.height };
+  }
+
+  function clampToImg(clientX: number, clientY: number) {
+    const r = imgEl!.getBoundingClientRect();
+    return {
+      x: Math.min(Math.max(clientX, r.left), r.right),
+      y: Math.min(Math.max(clientY, r.top), r.bottom),
+    };
+  }
+
+  function cropDown(e: PointerEvent) {
+    if (!imgEl) return;
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // 활성 포인터가 없으면(합성 이벤트 등) 캡처 없이 진행
+    }
+    cropStart = clampToImg(e.clientX, e.clientY);
+    cropView = null;
+  }
+
+  function cropMove(e: PointerEvent) {
+    if (!cropStart || !imgEl) return;
+    const p = clampToImg(e.clientX, e.clientY);
+    let w = Math.abs(p.x - cropStart.x);
+    let h = Math.abs(p.y - cropStart.y);
+    // 이미지가 균등 스케일로 표시되므로 화면 비율 = 이미지 비율.
+    const ratio = editor.cropRatio;
+    if (ratio) {
+      let ch = w / ratio;
+      if (ch > h) {
+        w = h * ratio;
+      } else {
+        h = ch;
+      }
+    }
+    const x = p.x >= cropStart.x ? cropStart.x : cropStart.x - w;
+    const y = p.y >= cropStart.y ? cropStart.y : cropStart.y - h;
+    const box = boxEl.getBoundingClientRect();
+    cropView = { x: x - box.left, y: y - box.top, w, h };
+  }
+
+  function cropUp() {
+    const view_ = cropView;
+    cropStart = null;
+    cropView = null;
+    // 그냥 클릭이면 모드 유지
+    if (!view_ || view_.w < 5 || view_.h < 5 || !imgEl) return;
+
+    const box = boxEl.getBoundingClientRect();
+    const r = imgEl.getBoundingClientRect();
+    const rot = rotatedDims();
+    const scaleX = rot.w / r.width;
+    const scaleY = rot.h / r.height;
+    const rect = clampCrop(
+      Math.round((view_.x + box.left - r.left) * scaleX),
+      Math.round((view_.y + box.top - r.top) * scaleY),
+      Math.round(view_.w * scaleX),
+      Math.round(view_.h * scaleY),
+      rot.w,
+      rot.h,
+    );
+    editor.cropMode = false;
+    if (rect) editor.setCurrentCrop(rect);
+  }
+
+  function clampCrop(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    bw: number,
+    bh: number,
+  ): CropRect | null {
+    const nx = Math.max(0, Math.min(x, bw - 1));
+    const ny = Math.max(0, Math.min(y, bh - 1));
+    const nw = Math.max(1, Math.min(w, bw - nx));
+    const nh = Math.max(1, Math.min(h, bh - ny));
+    if (nw < 4 || nh < 4) return null;
+    return { x: nx, y: ny, w: nw, h: nh };
+  }
 </script>
 
 <div class="preview">
-  <div class="stagebox">
-    {#if item}
-      <img class="shot" src={shownUrl} alt={item.name} />
+  <div class="stagebox" bind:this={boxEl}>
+    {#if item && shownUrl}
+      <img class="shot" bind:this={imgEl} src={shownUrl} alt={item.name} draggable="false" />
     {/if}
 
-    <div class="viewtoggle" role="group" aria-label={t.preview.result}>
-      <button
-        type="button"
-        class="vbtn"
-        class:active={view === "original"}
-        onclick={() => (view = "original")}
+    {#if editor.cropMode}
+      <div
+        class="croplayer"
+        role="application"
+        aria-label={t.preview.cropHint}
+        onpointerdown={cropDown}
+        onpointermove={cropMove}
+        onpointerup={cropUp}
       >
-        {t.preview.original}
-      </button>
-      <button
-        type="button"
-        class="vbtn"
-        class:active={view === "result"}
-        onclick={() => (view = "result")}
-      >
-        {t.preview.result}
-      </button>
-    </div>
+        {#if cropView}
+          <div
+            class="croprect"
+            style={`left:${cropView.x}px; top:${cropView.y}px; width:${cropView.w}px; height:${cropView.h}px`}
+          ></div>
+        {/if}
+        <div class="crophint">{t.preview.cropHint}</div>
+      </div>
+    {:else}
+      <div class="viewtoggle" role="group" aria-label={t.preview.result}>
+        <button
+          type="button"
+          class="vbtn"
+          class:active={view === "original"}
+          onclick={() => (view = "original")}
+        >
+          {t.preview.original}
+        </button>
+        <button
+          type="button"
+          class="vbtn"
+          class:active={view === "result"}
+          onclick={() => (view = "result")}
+        >
+          {t.preview.result}
+        </button>
+      </div>
+    {/if}
 
-    {#if computing}
+    {#if computing && !editor.cropMode}
       <span class="computing">{t.preview.computing}</span>
     {/if}
   </div>
 
   <div class="meta">
-    {#if item && result}
+    {#if item && result && !editor.cropMode}
       <span class="badge" class:smaller={deltaPct < 0} class:larger={deltaPct > 0}>
         {t.preview.sizeBadge(
           formatBytes(item.bytes.byteLength),
@@ -155,6 +306,33 @@
       )
       0 0 / 16px 16px;
     box-shadow: var(--shadow-1);
+  }
+
+  .croplayer {
+    position: absolute;
+    inset: 0;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .croprect {
+    position: absolute;
+    border: 1.5px dashed var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    pointer-events: none;
+  }
+  .crophint {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    pointer-events: none;
+    white-space: nowrap;
   }
 
   .viewtoggle {

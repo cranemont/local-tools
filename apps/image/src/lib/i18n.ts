@@ -37,6 +37,31 @@ export const t = {
     sizeBadge: (from: string, to: string, deltaPct: number) =>
       `${from} → ${to} · ${deltaPct > 0 ? "+" : ""}${deltaPct}%`,
     dims: (w: number, h: number) => `${w}×${h}px`,
+    cropHint: "드래그로 남길 영역 선택",
+  },
+
+  edit: {
+    title: "선택한 장",
+    cropStart: "영역 선택",
+    cropCancel: "선택 취소",
+    cropClear: "크롭 해제",
+    cropRect: (w: number, h: number) => `크롭 ${w}×${h}px`,
+    ratioFree: "자유",
+    rotate: "90° 회전",
+    reset: "편집 초기화",
+    edited: "편집됨",
+  },
+
+  exif: {
+    title: "EXIF",
+    loading: "읽는 중…",
+    none: "메타데이터 없음",
+    date: "촬영일",
+    camera: "카메라",
+    exposure: "노출",
+    gps: "GPS",
+    keep: "내보낼 때 유지",
+    keepPngNote: "PNG 출력은 유지를 지원하지 않아요",
   },
 
   panel: {

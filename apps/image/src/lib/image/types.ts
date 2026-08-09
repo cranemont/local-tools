@@ -1,3 +1,19 @@
+export type Rotation = 0 | 90 | 180 | 270;
+
+/** 회전 적용 후 좌표계의 크롭 영역. */
+export interface CropRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** 장별 편집 — 적용 순서: 회전 → 크롭. 회전이 바뀌면 크롭은 초기화된다. */
+export interface ItemTransform {
+  rotation: Rotation;
+  crop: CropRect | null;
+}
+
 /** 필름스트립에 올라온 이미지 한 장. 풀사이즈 비트맵은 온디맨드 디코딩(decode.ts). */
 export interface ImageItem {
   id: string;
@@ -10,6 +26,7 @@ export interface ImageItem {
   height: number;
   /** 필름스트립 썸네일 dataURL (작은 크기만 상주). */
   thumb: string;
+  transform: ItemTransform;
 }
 
 export type OutputFormat = "jpeg" | "png" | "webp";
@@ -33,6 +50,8 @@ export interface OutputSettings {
   /** 1–100. PNG(무손실)에서는 무시된다. */
   quality: number;
   resize: ResizeSpec;
+  /** 원본 EXIF를 출력에 유지 (JPEG·WebP 출력만 지원). */
+  keepExif: boolean;
 }
 
 export const OUTPUT_MIME: Record<OutputFormat, string> = {

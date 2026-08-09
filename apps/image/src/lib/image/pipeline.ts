@@ -1,6 +1,7 @@
 import Pica from "pica";
 import { t } from "../i18n";
 import { getBitmap } from "./decode";
+import { embedJpegExif, embedWebpExif, extractExif, neutralizeOrientation } from "./exif";
 import { OUTPUT_MIME, type ImageItem, type OutputSettings, type ResizeSpec } from "./types";
 
 const pica = new Pica();
@@ -9,6 +10,14 @@ export interface ProcessResult {
   blob: Blob;
   width: number;
   height: number;
+}
+
+/** 장별 편집(회전·크롭) 적용 후 크기 — 리사이즈 입력의 기준. */
+export function effectiveSize(item: ImageItem): { w: number; h: number } {
+  const tf = item.transform;
+  if (tf.crop) return { w: tf.crop.w, h: tf.crop.h };
+  const swap = tf.rotation % 180 !== 0;
+  return swap ? { w: item.height, h: item.width } : { w: item.width, h: item.height };
 }
 
 /** 리사이즈 설정을 적용한 목표 크기 — 비율은 항상 유지. */
@@ -30,27 +39,28 @@ export function targetSize(
   }
 }
 
-/** 아이템 한 장을 공통 설정으로 처리: 디코드 → 리사이즈(pica) → 인코딩. */
+/** 회전만 적용한 원본 PNG — 크롭 오버레이의 바탕 화면용. */
+export async function renderRotated(item: ImageItem): Promise<Blob> {
+  const bitmap = await getBitmap(item);
+  const canvas = rotateToCanvas(bitmap, item);
+  return canvasToBlob(canvas, "image/png");
+}
+
+/** 아이템 한 장을 처리: 디코드 → 회전·크롭 → 리사이즈(pica) → 인코딩 → (EXIF 유지). */
 export async function processItem(
   item: ImageItem,
   settings: OutputSettings,
 ): Promise<ProcessResult> {
   const bitmap = await getBitmap(item);
-  const { w, h } = targetSize(item.width, item.height, settings.resize);
+  const base = renderBase(bitmap, item);
+  const { w, h } = targetSize(base.width, base.height, settings.resize);
 
-  let stage = document.createElement("canvas");
-  if (w === item.width && h === item.height) {
+  let stage = base;
+  if (w !== base.width || h !== base.height) {
+    stage = document.createElement("canvas");
     stage.width = w;
     stage.height = h;
-    context2d(stage).drawImage(bitmap, 0, 0);
-  } else {
-    const src = document.createElement("canvas");
-    src.width = item.width;
-    src.height = item.height;
-    context2d(src).drawImage(bitmap, 0, 0);
-    stage.width = w;
-    stage.height = h;
-    await pica.resize(src, stage, { alpha: true });
+    await pica.resize(base, stage, { alpha: true });
   }
 
   // JPEG는 알파가 없다 — 투명 픽셀이 검게 뭉개지지 않게 흰 배경에 합성.
@@ -66,8 +76,49 @@ export async function processItem(
   }
 
   const quality = settings.format === "png" ? undefined : settings.quality / 100;
-  const blob = await canvasToBlob(stage, OUTPUT_MIME[settings.format], quality);
+  let blob = await canvasToBlob(stage, OUTPUT_MIME[settings.format], quality);
+
+  if (settings.keepExif && settings.format !== "png") {
+    const tiff = extractExif(item.bytes, item.mime);
+    if (tiff) {
+      const neutral = neutralizeOrientation(tiff);
+      const out = new Uint8Array(await blob.arrayBuffer());
+      const embedded =
+        settings.format === "jpeg"
+          ? embedJpegExif(out, neutral)
+          : embedWebpExif(out, neutral, w, h);
+      if (embedded) blob = new Blob([embedded], { type: OUTPUT_MIME[settings.format] });
+    }
+  }
+
   return { blob, width: w, height: h };
+}
+
+/** 회전 → 크롭을 적용한 베이스 캔버스. */
+function renderBase(bitmap: ImageBitmap, item: ImageItem): HTMLCanvasElement {
+  const rotated = rotateToCanvas(bitmap, item);
+  const crop = item.transform.crop;
+  if (!crop) return rotated;
+  const out = document.createElement("canvas");
+  out.width = crop.w;
+  out.height = crop.h;
+  context2d(out).drawImage(rotated, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
+  return out;
+}
+
+function rotateToCanvas(bitmap: ImageBitmap, item: ImageItem): HTMLCanvasElement {
+  const rotation = item.transform.rotation;
+  const swap = rotation % 180 !== 0;
+  const rw = swap ? item.height : item.width;
+  const rh = swap ? item.width : item.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = rw;
+  canvas.height = rh;
+  const ctx = context2d(canvas);
+  ctx.translate(rw / 2, rh / 2);
+  ctx.rotate((rotation * Math.PI) / 180);
+  ctx.drawImage(bitmap, -item.width / 2, -item.height / 2);
+  return canvas;
 }
 
 function context2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {

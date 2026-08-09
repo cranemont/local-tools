@@ -60,6 +60,7 @@ export async function loadImage(file: File): Promise<ImageItem> {
     width: bitmap.width,
     height: bitmap.height,
     thumb: renderThumb(bitmap),
+    transform: { rotation: 0, crop: null },
   };
   cachePut(item.id, bitmap);
   return item;

@@ -3,7 +3,8 @@
   import { t } from "../i18n";
   import { zipSync } from "fflate";
   import { editor } from "./state.svelte";
-  import { processItem, targetSize } from "../image/pipeline";
+  import { effectiveSize, processItem, targetSize } from "../image/pipeline";
+  import { readExifDisplay, type ExifDisplay } from "../image/exif";
   import { downloadBlob, formatBytes } from "../image/save";
   import { OUTPUT_EXT, type OutputFormat, type ResizeMode } from "../image/types";
 
@@ -20,6 +21,13 @@
     { id: "height", label: t.panel.sizeHeight },
   ];
 
+  const CROP_RATIOS: { label: string; value: number | null }[] = [
+    { label: t.edit.ratioFree, value: null },
+    { label: "1:1", value: 1 },
+    { label: "4:3", value: 4 / 3 },
+    { label: "16:9", value: 16 / 9 },
+  ];
+
   let filename = $state("");
   let status = $state("");
 
@@ -31,7 +39,43 @@
   const outDims = $derived.by(() => {
     const item = editor.currentItem;
     if (!item) return null;
-    return { item, ...targetSize(item.width, item.height, editor.resizeSpec) };
+    const eff = effectiveSize(item);
+    return { eff, ...targetSize(eff.w, eff.h, editor.resizeSpec) };
+  });
+  const currentCrop = $derived(editor.currentItem?.transform.crop ?? null);
+  const currentEdited = $derived.by(() => {
+    const tf = editor.currentItem?.transform;
+    return !!tf && (tf.rotation !== 0 || tf.crop !== null);
+  });
+
+  // ── EXIF 표시 (장별 캐시) ─────────────────────────
+  const exifCache = new Map<string, ExifDisplay | null>();
+  let exifInfo = $state<ExifDisplay | null>(null);
+  let exifLoading = $state(false);
+  $effect(() => {
+    const item = editor.currentItem;
+    if (!item) {
+      exifInfo = null;
+      return;
+    }
+    const cached = exifCache.get(item.id);
+    if (cached !== undefined) {
+      exifInfo = cached;
+      return;
+    }
+    let cancelled = false;
+    exifLoading = true;
+    exifInfo = null;
+    void readExifDisplay(item).then((info) => {
+      if (cancelled) return;
+      exifCache.set(item.id, info);
+      exifInfo = info;
+      exifLoading = false;
+    });
+    return () => {
+      cancelled = true;
+      exifLoading = false;
+    };
   });
 
   function baseName(name: string): string {
@@ -44,11 +88,19 @@
   }
 
   function activateMode(mode: ResizeMode) {
+    const item = editor.currentItem;
+    const eff = item ? effectiveSize(item) : null;
     if (mode === "none") editor.setResizeNone();
     else if (mode === "scale") editor.setResizeScale(editor.resizeScale);
-    else if (mode === "width")
-      editor.setResizeWidth(editor.currentItem?.width ?? editor.resizeWidth);
-    else editor.setResizeHeight(editor.currentItem?.height ?? editor.resizeHeight);
+    else if (mode === "width") editor.setResizeWidth(eff?.w ?? editor.resizeWidth);
+    else editor.setResizeHeight(eff?.h ?? editor.resizeHeight);
+  }
+
+  function toggleCropMode() {
+    editor.cropMode = !editor.cropMode;
+  }
+  function onKeepExifChange(e: Event) {
+    editor.setKeepExif((e.target as HTMLInputElement).checked);
   }
 
   function onQualityInput(e: Event) {
@@ -225,8 +277,83 @@
     {/if}
     {#if outDims}
       <p class="info">
-        {t.panel.sizeInfo(outDims.item.width, outDims.item.height, outDims.w, outDims.h)}
+        {t.panel.sizeInfo(outDims.eff.w, outDims.eff.h, outDims.w, outDims.h)}
       </p>
+    {/if}
+  </section>
+
+  <!-- 선택한 장 (크롭·회전) -->
+  <section class="sec">
+    <h3>{t.edit.title}</h3>
+    <div class="row wrap">
+      <button
+        type="button"
+        class="btn small"
+        class:active={editor.cropMode}
+        onclick={toggleCropMode}
+      >
+        <Icon name="crop" size={14} />
+        {editor.cropMode ? t.edit.cropCancel : t.edit.cropStart}
+      </button>
+      <button type="button" class="btn small" onclick={() => editor.rotateCurrent()}>
+        <Icon name="rotate" size={14} /> {t.edit.rotate}
+      </button>
+    </div>
+    {#if editor.cropMode}
+      <div class="chips">
+        {#each CROP_RATIOS as r (r.label)}
+          <button
+            type="button"
+            class="chip"
+            class:active={editor.cropRatio === r.value}
+            onclick={() => (editor.cropRatio = r.value)}
+          >
+            {r.label}
+          </button>
+        {/each}
+      </div>
+    {/if}
+    {#if currentCrop}
+      <div class="row">
+        <p class="info grow">{t.edit.cropRect(currentCrop.w, currentCrop.h)}</p>
+        <button type="button" class="btn small" onclick={() => editor.setCurrentCrop(null)}>
+          {t.edit.cropClear}
+        </button>
+      </div>
+    {/if}
+    {#if currentEdited}
+      <button type="button" class="btn small ghost" onclick={() => editor.resetCurrentEdit()}>
+        {t.edit.reset}
+      </button>
+    {/if}
+  </section>
+
+  <!-- EXIF -->
+  <section class="sec">
+    <h3>{t.exif.title}</h3>
+    {#if exifLoading}
+      <p class="info">{t.exif.loading}</p>
+    {:else if exifInfo}
+      <dl class="kv">
+        {#if exifInfo.date}<dt>{t.exif.date}</dt><dd>{exifInfo.date}</dd>{/if}
+        {#if exifInfo.camera}<dt>{t.exif.camera}</dt><dd>{exifInfo.camera}</dd>{/if}
+        {#if exifInfo.exposure}<dt>{t.exif.exposure}</dt><dd>{exifInfo.exposure}</dd>{/if}
+        {#if exifInfo.gps}<dt>{t.exif.gps}</dt><dd>{exifInfo.gps}</dd>{/if}
+      </dl>
+    {:else}
+      <p class="info">{t.exif.none}</p>
+    {/if}
+    <label class="row checkrow">
+      <input
+        type="checkbox"
+        checked={editor.keepExif}
+        disabled={editor.format === "png"}
+        onchange={onKeepExifChange}
+      />
+      <span class="lbl">{t.exif.keep}</span>
+    </label>
+    {#if editor.format === "png"}
+      <p class="info">{t.exif.keepPngNote}</p>
     {/if}
   </section>
 
@@ -292,6 +419,9 @@
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+  .row.wrap {
+    flex-wrap: wrap;
   }
 
   .info {
@@ -371,6 +501,26 @@
     opacity: 0.45;
     cursor: not-allowed;
   }
+  .btn.small {
+    padding: 6px 10px;
+    font-size: 12.5px;
+  }
+  .btn.ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .btn.ghost:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: transparent;
+  }
+  .btn.active {
+    background: var(--accent-weak);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    color: var(--accent);
+  }
   .btn.primary {
     background: var(--accent);
     border-color: var(--accent);
@@ -414,5 +564,33 @@
     margin: 0;
     font-size: 12.5px;
     color: var(--text-muted);
+  }
+
+  .info.grow {
+    flex: 1;
+  }
+
+  .kv {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 10px;
+    font-size: 12px;
+  }
+  .kv dt {
+    color: var(--text-muted);
+  }
+  .kv dd {
+    margin: 0;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  .checkrow {
+    cursor: pointer;
+  }
+  .checkrow input {
+    accent-color: var(--accent);
   }
 </style>

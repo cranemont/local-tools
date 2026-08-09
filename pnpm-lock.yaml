@@ -111,6 +111,9 @@ importers:
       '@local-tools/theme':
         specifier: workspace:*
         version: link:../../packages/theme
+      exifr:
+        specifier: ^7.1.3
+        version: 7.1.3
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -551,6 +554,9 @@ packages:
     peerDependenciesMeta:
       '@typescript-eslint/types':
         optional: true
+
+  exifr@7.1.3:
+    resolution: {integrity: sha512-g/aje2noHivrRSLbAUtBPWFbxKdKhgj/xr1vATDdUXPOFYJlQ62Ft0oy+72V6XLIpDJfHs6gXLbBLAolqOXYRw==}
 
   fast-xml-builder@1.3.0:
     resolution: {integrity: sha512-F74cZEdCvuw9P41GAC3rod4X04jjWGM1JPEv/GWSqFTWLsdyMSBMBMlm9Hk3GLBgLBbdBNY8yee0pQh2RBVESQ==}
@@ -1094,6 +1100,8 @@ snapshots:
   esrap@2.3.0:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  exifr@7.1.3: {}
 
   fast-xml-builder@1.3.0:
     dependencies:

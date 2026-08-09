@@ -18,6 +18,9 @@
     title={t.cards.activate}
   >
     <img src={item.thumb} alt={item.name} draggable="false" />
+    {#if item.transform.rotation !== 0 || item.transform.crop}
+      <span class="edited" title={t.edit.edited}><Icon name="crop" size={10} /></span>
+    {/if}
   </button>
 
   <div class="controls">
@@ -74,6 +77,20 @@
   }
   .card.current .thumb {
     border-color: var(--accent);
+  }
+
+  .edited {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: var(--accent-contrast);
   }
 
   .controls {

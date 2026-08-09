@@ -1,11 +1,13 @@
 import { t } from "../i18n";
 import { loadImage, releaseAll, releaseOne } from "../image/decode";
 import type {
+  CropRect,
   ImageItem,
   OutputFormat,
   OutputSettings,
   ResizeMode,
   ResizeSpec,
+  Rotation,
 } from "../image/types";
 
 export const SCALE_DEFAULT = 50;
@@ -23,6 +25,11 @@ export class EditorState {
   resizeScale = $state(SCALE_DEFAULT);
   resizeWidth = $state(WIDTH_DEFAULT);
   resizeHeight = $state(HEIGHT_DEFAULT);
+  keepExif = $state(false);
+
+  cropMode = $state(false);
+  /** 크롭 비율 프리셋 — null=자유, 그 외 w/h 비율값. */
+  cropRatio = $state<number | null>(null);
 
   busy = $state(false);
   busyMsg = $state("");
@@ -50,6 +57,7 @@ export class EditorState {
       format: this.format,
       quality: this.quality,
       resize: this.resizeSpec,
+      keepExif: this.keepExif,
     }),
   );
 
@@ -101,6 +109,32 @@ export class EditorState {
 
   select(index: number): void {
     this.current = index;
+    this.cropMode = false;
+  }
+
+  // ── 장별 편집 (선택한 장에만 적용) ───────────────
+  rotateCurrent(): void {
+    const item = this.currentItem;
+    if (!item) return;
+    item.transform.rotation = ((item.transform.rotation + 90) % 360) as Rotation;
+    // 회전하면 크롭 좌표계가 달라진다 — 크롭 초기화.
+    item.transform.crop = null;
+    this.touch();
+  }
+
+  setCurrentCrop(rect: CropRect | null): void {
+    const item = this.currentItem;
+    if (!item) return;
+    item.transform.crop = rect;
+    this.touch();
+  }
+
+  resetCurrentEdit(): void {
+    const item = this.currentItem;
+    if (!item) return;
+    item.transform = { rotation: 0, crop: null };
+    this.cropMode = false;
+    this.touch();
   }
 
   // ── 출력 설정 ───────────────────────────────────
@@ -140,6 +174,11 @@ export class EditorState {
     if (Number.isFinite(px)) {
       this.resizeHeight = Math.min(20000, Math.max(1, Math.round(px)));
     }
+    this.touch();
+  }
+
+  setKeepExif(v: boolean): void {
+    this.keepExif = v;
     this.touch();
   }
 }
