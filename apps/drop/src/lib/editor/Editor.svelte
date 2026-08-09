@@ -8,6 +8,7 @@
 
   let offerInput = $state("");
   let answerInput = $state("");
+  let codeInput = $state("");
   let textInput = $state("");
   let scanFor = $state<"offer" | "answer" | null>(null);
   let fileInput: HTMLInputElement | null = $state(null);
@@ -44,6 +45,7 @@
   function restart() {
     offerInput = "";
     answerInput = "";
+    codeInput = "";
     textInput = "";
     drop.reset();
   }
@@ -92,67 +94,121 @@
   {:else if drop.stage === "host"}
     <div class="panel">
       <div class="step">
-        <div class="step-head">
-          <span class="step-label">{hosted ? t.host.step1Qr : t.host.step1}</span>
-          <CopyButton text={shareValue} />
-        </div>
-        {#if shareValue}
-          <div class="qr-row">
-            <QrCode text={shareValue} />
-            <textarea class="code" readonly value={shareValue} spellcheck="false"></textarea>
-          </div>
+        <span class="step-label">{t.rz.hostLabel}</span>
+        {#if drop.rzStatus === "failed"}
+          <p class="error">{t.rz.hostFailed}</p>
+        {:else if drop.shortCode}
+          <div class="bigcode">{drop.shortCode.slice(0, 3)}&nbsp;{drop.shortCode.slice(3)}</div>
+          <p class="waiting center-text">{t.rz.hostWaiting}</p>
+          <p class="limit">{t.rz.relayNote}</p>
         {:else}
-          <textarea class="code" readonly value={t.host.making} spellcheck="false"></textarea>
+          <p class="waiting">{t.host.making}</p>
         {/if}
       </div>
-      <div class="step">
-        <span class="step-label">{t.host.step2}</span>
-        <textarea
-          class="code"
-          bind:value={answerInput}
-          placeholder={t.host.answerPlaceholder}
-          spellcheck="false"
-        ></textarea>
-        <div class="actions">
-          <button
-            class="btn"
-            disabled={!answerInput.trim() || drop.busy}
-            onclick={() => drop.acceptAnswer(answerInput)}
-          >
-            {t.host.connect}
-          </button>
-          <button class="btn ghost" onclick={() => (scanFor = "answer")}>
-            {t.scan.open}
-          </button>
-          <button class="btn ghost" onclick={restart}>{t.common.back}</button>
-        </div>
-      </div>
-      {#if drop.error}<p class="error">{drop.error}</p>{/if}
-    </div>
-  {:else if drop.stage === "guest"}
-    <div class="panel">
-      {#if !drop.myCode}
+      <details class="alt" open={drop.rzStatus === "failed"}>
+        <summary>{t.rz.altHost}</summary>
         <div class="step">
-          <span class="step-label">{t.guest.pasteLabel}</span>
+          <div class="step-head">
+            <span class="step-label">{hosted ? t.host.step1Qr : t.host.step1}</span>
+            <CopyButton text={shareValue} />
+          </div>
+          {#if shareValue}
+            <div class="qr-row">
+              <QrCode text={shareValue} />
+              <textarea class="code" readonly value={shareValue} spellcheck="false"></textarea>
+            </div>
+          {:else}
+            <textarea class="code" readonly value={t.host.making} spellcheck="false"></textarea>
+          {/if}
+        </div>
+        <div class="step">
+          <span class="step-label">{t.host.step2}</span>
           <textarea
             class="code"
-            bind:value={offerInput}
-            placeholder={t.guest.pastePlaceholder}
+            bind:value={answerInput}
+            placeholder={t.host.answerPlaceholder}
             spellcheck="false"
           ></textarea>
           <div class="actions">
             <button
               class="btn"
-              disabled={!offerInput.trim() || drop.busy}
-              onclick={() => drop.makeAnswer(offerInput)}
+              disabled={!answerInput.trim() || drop.busy}
+              onclick={() => drop.acceptAnswer(answerInput)}
             >
-              {t.guest.makeAnswer}
+              {t.host.connect}
             </button>
-            <button class="btn ghost" onclick={() => (scanFor = "offer")}>
+            <button class="btn ghost" onclick={() => (scanFor = "answer")}>
               {t.scan.open}
             </button>
-            <button class="btn ghost" onclick={restart}>{t.common.back}</button>
           </div>
+        </div>
+      </details>
+      <div class="actions">
+        <button class="btn ghost" onclick={restart}>{t.common.back}</button>
+      </div>
+      {#if drop.error}<p class="error">{drop.error}</p>{/if}
+    </div>
+  {:else if drop.stage === "guest"}
+    <div class="panel">
+      {#if drop.joining}
+        <div class="center">
+          <p class="waiting">{t.conn.connecting}</p>
+        </div>
+      {:else if !drop.myCode}
+        <div class="step">
+          <span class="step-label">{t.rz.guestLabel}</span>
+          <form
+            class="coderow"
+            onsubmit={(e) => {
+              e.preventDefault();
+              drop.joinWithCode(codeInput);
+            }}
+          >
+            <input
+              class="codeinput"
+              type="text"
+              inputmode="numeric"
+              maxlength="7"
+              bind:value={codeInput}
+              placeholder={t.rz.codePlaceholder}
+              spellcheck="false"
+              autocomplete="one-time-code"
+            />
+            <button
+              class="btn"
+              type="submit"
+              disabled={codeInput.replace(/\D/g, "").length !== 6 || drop.busy}
+            >
+              {t.rz.join}
+            </button>
+          </form>
+        </div>
+        <details class="alt">
+          <summary>{t.rz.altGuest}</summary>
+          <div class="step">
+            <span class="step-label">{t.guest.pasteLabel}</span>
+            <textarea
+              class="code"
+              bind:value={offerInput}
+              placeholder={t.guest.pastePlaceholder}
+              spellcheck="false"
+            ></textarea>
+            <div class="actions">
+              <button
+                class="btn"
+                disabled={!offerInput.trim() || drop.busy}
+                onclick={() => drop.makeAnswer(offerInput)}
+              >
+                {t.guest.makeAnswer}
+              </button>
+              <button class="btn ghost" onclick={() => (scanFor = "offer")}>
+                {t.scan.open}
+              </button>
+            </div>
+          </div>
+        </details>
+        <div class="actions">
+          <button class="btn ghost" onclick={restart}>{t.common.back}</button>
         </div>
       {:else}
         <div class="step">
@@ -373,6 +429,68 @@
   }
   .code:read-only {
     background: var(--surface-2);
+  }
+  .center-text {
+    text-align: center;
+  }
+  .bigcode {
+    align-self: center;
+    padding: 18px 34px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 44px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    background: var(--accent-weak);
+    border-radius: var(--radius-md);
+  }
+  .alt {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    padding: 0 14px;
+  }
+  .alt summary {
+    padding: 12px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .alt summary:hover {
+    color: var(--text);
+  }
+  .alt[open] {
+    padding-bottom: 14px;
+  }
+  .alt .step {
+    margin-top: 6px;
+  }
+  .alt .step + .step {
+    margin-top: 16px;
+  }
+  .coderow {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .codeinput {
+    flex: 0 1 220px;
+    padding: 12px 16px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-align: center;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .codeinput::placeholder {
+    color: var(--text-muted);
+    opacity: 0.5;
   }
   .qr-row {
     display: flex;

@@ -46,7 +46,9 @@ apps/image/          # 이미지 도구 (Svelte 5 + TS) — 변환·압축·리�
                      #        exif(APP1/RIFF/eXIf 바이트 조작)·heic/avif(CDN wasm)·save
 apps/drop/           # 드롭 (Svelte 5 + TS) — 서버 없는 P2P 파일 전송, 단일 플로 뷰
   src/lib/rtc/       # 엔진: signal(SDP deflate-raw+base64url)·peer(non-trickle RTCPeerConnection)·
-                     #        transfer(64KB 청크+백프레셔 file/eof/text 프로토콜)·save
+                     #        transfer(64KB 청크+백프레셔 file/eof/text 프로토콜)·save·
+                     #        rendezvous(6자리 코드 — 공개 Nostr 릴레이 랑데부, SDP는 AES-GCM 종단간 암호화)·
+                     #        nostr(NIP-01 최소 클라이언트, @noble/curves 서명)
   src/lib/editor/    # state.svelte.ts(스테이지 머신)·Editor·QrCode(uqr)·ScanDialog(카메라 스캔)
 apps/dev/            # 개발자 유틸 (Svelte 5 + TS) — 사이드바+검색 셸, 도구 16종
   src/lib/tools/     # registry(도구 목록·그룹)·Format(JSON/YAML/XML 변환)·Diff·Encode·

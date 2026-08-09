@@ -1,5 +1,6 @@
 import { DropPeer } from "../rtc/peer";
 import { encodeSignal, decodeSignal } from "../rtc/signal";
+import { generateCode, hostRendezvous, fetchOffer, publishAnswer } from "../rtc/rendezvous";
 import { Receiver, sendFile, sendText } from "../rtc/transfer";
 import { downloadBlob } from "../rtc/save";
 import { t } from "../i18n";
@@ -22,11 +23,17 @@ class DropState {
   stage = $state<Stage>("idle");
   /** 상대에게 전달할 코드 — host면 청약, guest면 응답 */
   myCode = $state("");
+  /** 숫자 6자리 짧은 코드 (Nostr 랑데부) */
+  shortCode = $state("");
+  rzStatus = $state<"idle" | "active" | "failed">("idle");
+  /** 게스트가 짧은 코드로 참여해 응답을 올리고 연결을 기다리는 중 */
+  joining = $state(false);
   busy = $state(false);
   error = $state<string | null>(null);
   transfers = $state<TransferItem[]>([]);
 
   private peer: DropPeer | null = null;
+  private rzCancel: (() => void) | null = null;
   /** 한 채널에 파일 프레임이 섞이지 않도록 송신을 직렬화 */
   private sendChain: Promise<void> = Promise.resolve();
 
@@ -78,6 +85,9 @@ class DropState {
     });
     return new DropPeer({
       onOpen: () => {
+        this.rzCancel?.();
+        this.rzCancel = null;
+        this.joining = false;
         this.stage = "connected";
       },
       onDown: (wasConnected) => {
@@ -89,18 +99,64 @@ class DropState {
     });
   }
 
-  /** 호스트: 청약 코드 생성 */
+  /** 호스트: 청약 생성 + 짧은 코드 랑데부 개시 */
   async startHost(): Promise<void> {
     this.error = null;
     this.busy = true;
     this.stage = "host";
+    let sdp: string;
     try {
       this.peer = this.makePeer();
-      this.myCode = await encodeSignal(await this.peer.createOffer());
+      sdp = await this.peer.createOffer();
+      this.myCode = await encodeSignal(sdp);
     } catch {
       this.stage = "failed";
+      this.busy = false;
+      return;
     }
     this.busy = false;
+    // 랑데부는 백그라운드 — 실패해도 QR·복붙 경로는 그대로 살아 있다
+    this.shortCode = generateCode();
+    try {
+      this.rzCancel = await hostRendezvous(this.shortCode, sdp, (answer) => {
+        void this.applyAnswer(answer);
+      });
+      this.rzStatus = "active";
+    } catch {
+      this.rzStatus = "failed";
+    }
+  }
+
+  /** 게스트: 짧은 코드로 참여 — 응답 발행까지 자동 */
+  async joinWithCode(rawCode: string): Promise<void> {
+    const code = rawCode.replace(/\D/g, "");
+    if (code.length !== 6) return;
+    this.error = null;
+    this.busy = true;
+    this.stage = "guest";
+    try {
+      const offer = await fetchOffer(code);
+      this.peer = this.makePeer();
+      const answer = await this.peer.answer(offer);
+      this.joining = true;
+      await publishAnswer(code, answer);
+    } catch (e) {
+      this.joining = false;
+      this.error = (e as Error).message === "no relay" ? t.rz.noRelay : t.rz.notFound;
+      this.peer?.close();
+      this.peer = null;
+    }
+    this.busy = false;
+  }
+
+  private async applyAnswer(sdp: string): Promise<void> {
+    if (!this.peer || this.stage === "connecting" || this.stage === "connected") return;
+    try {
+      await this.peer.accept(sdp);
+      this.stage = "connecting";
+    } catch {
+      this.error = t.conn.badCode;
+    }
   }
 
   /** 게스트 화면 진입 */
@@ -139,14 +195,13 @@ class DropState {
     this.busy = false;
   }
 
-  /** 호스트: 응답 코드 적용 → 연결 시작 */
+  /** 호스트: 응답 코드 수동 적용 → 연결 시작 */
   async acceptAnswer(answerCode: string): Promise<void> {
     if (!this.peer) return;
     this.error = null;
     this.busy = true;
     try {
-      await this.peer.accept(await decodeSignal(this.stripUrl(answerCode)));
-      this.stage = "connecting";
+      await this.applyAnswer(await decodeSignal(this.stripUrl(answerCode)));
     } catch {
       this.error = t.conn.badCode;
     }
@@ -210,11 +265,16 @@ class DropState {
   }
 
   reset(): void {
+    this.rzCancel?.();
+    this.rzCancel = null;
     this.peer?.close();
     this.peer = null;
     this.sendChain = Promise.resolve();
     this.stage = "idle";
     this.myCode = "";
+    this.shortCode = "";
+    this.rzStatus = "idle";
+    this.joining = false;
     this.error = null;
     this.busy = false;
     this.transfers = [];
