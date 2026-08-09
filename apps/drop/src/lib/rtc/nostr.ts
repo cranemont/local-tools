@@ -3,8 +3,15 @@
 
 import { schnorr } from "@noble/curves/secp256k1.js";
 
-/** 공개 릴레이 — 하나만 살아 있어도 동작한다. */
-export const RELAYS = ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net"];
+/** 공개 릴레이 — 운영 주체를 다양하게, 하나만 살아 있어도 동작한다. */
+export const RELAYS = [
+  "wss://relay.damus.io",
+  "wss://nos.lol",
+  "wss://relay.primal.net",
+  "wss://offchain.pub",
+  "wss://nostr.mom",
+  "wss://relay.nostr.band",
+];
 
 export interface NostrEvent {
   id: string;

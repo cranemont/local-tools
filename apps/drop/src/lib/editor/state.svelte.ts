@@ -1,6 +1,6 @@
 import { DropPeer } from "../rtc/peer";
 import { encodeSignal, decodeSignal } from "../rtc/signal";
-import { generateCode, hostRendezvous, fetchOffer, publishAnswer } from "../rtc/rendezvous";
+import { generateCode, hostRendezvous, joinRendezvous } from "../rtc/rendezvous";
 import { Receiver, sendFile, sendText } from "../rtc/transfer";
 import { downloadBlob } from "../rtc/save";
 import { t } from "../i18n";
@@ -127,7 +127,7 @@ class DropState {
     }
   }
 
-  /** 게스트: 짧은 코드로 참여 — 응답 발행까지 자동 */
+  /** 게스트: 짧은 코드로 참여 — SPAKE2 왕복과 응답 발행까지 자동 */
   async joinWithCode(rawCode: string): Promise<void> {
     const code = rawCode.replace(/\D/g, "");
     if (code.length !== 6) return;
@@ -135,11 +135,12 @@ class DropState {
     this.busy = true;
     this.stage = "guest";
     try {
-      const offer = await fetchOffer(code);
-      this.peer = this.makePeer();
-      const answer = await this.peer.answer(offer);
-      this.joining = true;
-      await publishAnswer(code, answer);
+      await joinRendezvous(code, async (offerSdp) => {
+        this.peer = this.makePeer();
+        const answer = await this.peer.answer(offerSdp);
+        this.joining = true;
+        return answer;
+      });
     } catch (e) {
       this.joining = false;
       this.error = (e as Error).message === "no relay" ? t.rz.noRelay : t.rz.notFound;
