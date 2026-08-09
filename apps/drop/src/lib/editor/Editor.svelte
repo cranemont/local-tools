@@ -3,15 +3,48 @@
   import { drop } from "./state.svelte";
   import CopyButton from "../CopyButton.svelte";
   import Icon from "../Icon.svelte";
+  import QrCode from "./QrCode.svelte";
+  import ScanDialog from "./ScanDialog.svelte";
 
   let offerInput = $state("");
   let answerInput = $state("");
+  let textInput = $state("");
+  let scanFor = $state<"offer" | "answer" | null>(null);
   let fileInput: HTMLInputElement | null = $state(null);
   let dragOver = $state(false);
+
+  const hosted = location.protocol !== "file:";
+
+  // 청약은 URL째 공유 — 폰 기본 카메라로 찍으면 앱이 코드와 함께 열린다
+  const shareValue = $derived(
+    drop.stage === "host" && hosted && drop.myCode
+      ? `${location.origin}${location.pathname}${location.search}#${drop.myCode}`
+      : drop.myCode,
+  );
+
+  // #청약 프래그먼트로 진입한 경우 게스트 플로 자동 시작 (컴포넌트 초기화 시 1회)
+  if (location.hash.length > 30) {
+    const code = location.hash.slice(1);
+    history.replaceState(null, "", location.pathname + location.search);
+    void drop.autoJoin(code);
+  }
+
+  function onScanFound(text: string) {
+    const target = scanFor;
+    scanFor = null;
+    if (target === "offer") {
+      offerInput = text;
+      void drop.makeAnswer(text);
+    } else if (target === "answer") {
+      answerInput = text;
+      void drop.acceptAnswer(text);
+    }
+  }
 
   function restart() {
     offerInput = "";
     answerInput = "";
+    textInput = "";
     drop.reset();
   }
 
@@ -60,11 +93,17 @@
     <div class="panel">
       <div class="step">
         <div class="step-head">
-          <span class="step-label">{t.host.step1}</span>
-          <CopyButton text={drop.myCode} />
+          <span class="step-label">{hosted ? t.host.step1Qr : t.host.step1}</span>
+          <CopyButton text={shareValue} />
         </div>
-        <textarea class="code" readonly value={drop.myCode || t.host.making} spellcheck="false"
-        ></textarea>
+        {#if shareValue}
+          <div class="qr-row">
+            <QrCode text={shareValue} />
+            <textarea class="code" readonly value={shareValue} spellcheck="false"></textarea>
+          </div>
+        {:else}
+          <textarea class="code" readonly value={t.host.making} spellcheck="false"></textarea>
+        {/if}
       </div>
       <div class="step">
         <span class="step-label">{t.host.step2}</span>
@@ -81,6 +120,9 @@
             onclick={() => drop.acceptAnswer(answerInput)}
           >
             {t.host.connect}
+          </button>
+          <button class="btn ghost" onclick={() => (scanFor = "answer")}>
+            {t.scan.open}
           </button>
           <button class="btn ghost" onclick={restart}>{t.common.back}</button>
         </div>
@@ -106,16 +148,22 @@
             >
               {t.guest.makeAnswer}
             </button>
+            <button class="btn ghost" onclick={() => (scanFor = "offer")}>
+              {t.scan.open}
+            </button>
             <button class="btn ghost" onclick={restart}>{t.common.back}</button>
           </div>
         </div>
       {:else}
         <div class="step">
           <div class="step-head">
-            <span class="step-label">{t.guest.step1}</span>
+            <span class="step-label">{t.guest.step1Qr}</span>
             <CopyButton text={drop.myCode} />
           </div>
-          <textarea class="code" readonly value={drop.myCode} spellcheck="false"></textarea>
+          <div class="qr-row">
+            <QrCode text={drop.myCode} />
+            <textarea class="code" readonly value={drop.myCode} spellcheck="false"></textarea>
+          </div>
           <p class="waiting">{t.guest.waiting}</p>
         </div>
       {/if}
@@ -158,6 +206,28 @@
         bind:this={fileInput}
         onchange={(e) => pickFiles(e.currentTarget.files)}
       />
+      <p class="limit">{t.transfer.limitNote}</p>
+
+      <form
+        class="textrow"
+        onsubmit={(e) => {
+          e.preventDefault();
+          drop.sendTextMsg(textInput);
+          textInput = "";
+        }}
+      >
+        <input
+          class="textinput"
+          type="text"
+          bind:value={textInput}
+          placeholder={t.transfer.textPlaceholder}
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <button class="btn" type="submit" disabled={!textInput.trim()}>
+          {t.transfer.textSend}
+        </button>
+      </form>
 
       {#if drop.transfers.length}
         <ul class="list">
@@ -166,22 +236,30 @@
               <span class="dir" class:in={item.dir === "in"}>
                 {item.dir === "in" ? t.transfer.dirIn : t.transfer.dirOut}
               </span>
-              <div class="meta">
-                <span class="name">{item.name}</span>
-                <span class="size">
-                  {item.status === "active"
-                    ? `${formatBytes(item.done)} / ${formatBytes(item.size)}`
-                    : formatBytes(item.size)}
-                  · {statusLabel(item)}
-                </span>
-                {#if item.status === "active"}
-                  <progress max={item.size} value={item.done}></progress>
+              {#if item.kind === "text"}
+                <div class="meta">
+                  <span class="body">{item.body}</span>
+                  <span class="size">{t.transfer.textLabel}</span>
+                </div>
+                <CopyButton text={item.body} />
+              {:else}
+                <div class="meta">
+                  <span class="name">{item.name}</span>
+                  <span class="size">
+                    {item.status === "active"
+                      ? `${formatBytes(item.done)} / ${formatBytes(item.size)}`
+                      : formatBytes(item.size)}
+                    · {statusLabel(item)}
+                  </span>
+                  {#if item.status === "active"}
+                    <progress max={item.size} value={item.done}></progress>
+                  {/if}
+                </div>
+                {#if item.dir === "in" && item.blob}
+                  <button class="save" title={t.transfer.save} onclick={() => drop.saveItem(item)}>
+                    <Icon name="download" size={16} />
+                  </button>
                 {/if}
-              </div>
-              {#if item.dir === "in" && item.blob}
-                <button class="save" title={t.transfer.save} onclick={() => drop.saveItem(item)}>
-                  <Icon name="download" size={16} />
-                </button>
               {/if}
             </li>
           {/each}
@@ -190,6 +268,10 @@
     </div>
   {/if}
 </div>
+
+{#if scanFor}
+  <ScanDialog onfound={onScanFound} onclose={() => (scanFor = null)} />
+{/if}
 
 <style>
   .editor {
@@ -292,6 +374,25 @@
   .code:read-only {
     background: var(--surface-2);
   }
+  .qr-row {
+    display: flex;
+    gap: 14px;
+    align-items: stretch;
+  }
+  .qr-row .code {
+    min-height: 0;
+    align-self: stretch;
+  }
+  @media (max-width: 560px) {
+    .qr-row {
+      flex-direction: column;
+      align-items: center;
+    }
+    .qr-row .code {
+      min-height: 90px;
+      width: 100%;
+    }
+  }
   .code::placeholder {
     color: var(--text-muted);
     opacity: 0.7;
@@ -388,6 +489,34 @@
   }
   .hidden-input {
     display: none;
+  }
+  .limit {
+    margin: -6px 0 0;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .textrow {
+    display: flex;
+    gap: 8px;
+  }
+  .textinput {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .textinput::placeholder {
+    color: var(--text-muted);
+    opacity: 0.7;
+  }
+  .body {
+    font-size: 13.5px;
+    word-break: break-all;
+    white-space: pre-wrap;
   }
 
   .list {

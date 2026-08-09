@@ -1,6 +1,6 @@
 import { DropPeer } from "../rtc/peer";
 import { encodeSignal, decodeSignal } from "../rtc/signal";
-import { Receiver, sendFile } from "../rtc/transfer";
+import { Receiver, sendFile, sendText } from "../rtc/transfer";
 import { downloadBlob } from "../rtc/save";
 import { t } from "../i18n";
 
@@ -8,12 +8,14 @@ export type Stage = "idle" | "host" | "guest" | "connecting" | "connected" | "fa
 
 export interface TransferItem {
   id: string;
+  kind: "file" | "text";
   dir: "in" | "out";
   name: string;
   size: number;
   done: number;
   status: "active" | "done" | "error";
   blob: Blob | null;
+  body: string;
 }
 
 class DropState {
@@ -37,12 +39,14 @@ class DropState {
       onStart: (meta) => {
         this.transfers.push({
           id: meta.id,
+          kind: "file",
           dir: "in",
           name: meta.name,
           size: meta.size,
           done: 0,
           status: "active",
           blob: null,
+          body: "",
         });
       },
       onProgress: (id, received) => {
@@ -58,8 +62,18 @@ class DropState {
         // 자동 수락 — 받는 즉시 표준 다운로드로 저장
         downloadBlob(blob, item.name);
       },
-      onText: () => {
-        /* 마일스톤 ② */
+      onText: (body) => {
+        this.transfers.push({
+          id: crypto.randomUUID(),
+          kind: "text",
+          dir: "in",
+          name: "",
+          size: 0,
+          done: 0,
+          status: "done",
+          blob: null,
+          body,
+        });
       },
     });
     return new DropPeer({
@@ -96,12 +110,25 @@ class DropState {
     this.stage = "guest";
   }
 
+  /** URL #프래그먼트로 들어온 청약을 바로 처리 (QR 스캔 → 자동 진입) */
+  async autoJoin(offerCode: string): Promise<void> {
+    this.startGuest();
+    await this.makeAnswer(offerCode);
+  }
+
+  /** 링크째 붙여넣어도 코드만 추려낸다 — base64url에는 #이 없다 */
+  private stripUrl(code: string): string {
+    const s = code.trim();
+    const i = s.lastIndexOf("#");
+    return i >= 0 ? s.slice(i + 1) : s;
+  }
+
   /** 게스트: 청약 코드 → 응답 코드 생성 */
   async makeAnswer(offerCode: string): Promise<void> {
     this.error = null;
     this.busy = true;
     try {
-      const sdp = await decodeSignal(offerCode);
+      const sdp = await decodeSignal(this.stripUrl(offerCode));
       this.peer = this.makePeer();
       this.myCode = await encodeSignal(await this.peer.answer(sdp));
     } catch {
@@ -118,7 +145,7 @@ class DropState {
     this.error = null;
     this.busy = true;
     try {
-      await this.peer.accept(await decodeSignal(answerCode));
+      await this.peer.accept(await decodeSignal(this.stripUrl(answerCode)));
       this.stage = "connecting";
     } catch {
       this.error = t.conn.badCode;
@@ -133,12 +160,14 @@ class DropState {
       const id = crypto.randomUUID();
       this.transfers.push({
         id,
+        kind: "file",
         dir: "out",
         name: file.name,
         size: file.size,
         done: 0,
         status: "active",
         blob: null,
+        body: "",
       });
       this.sendChain = this.sendChain
         .then(() =>
@@ -156,6 +185,24 @@ class DropState {
           if (item && item.status === "active") item.status = "error";
         });
     }
+  }
+
+  sendTextMsg(body: string): void {
+    const ch = this.peer?.channel;
+    const text = body.trim();
+    if (!ch || !text) return;
+    sendText(ch, text);
+    this.transfers.push({
+      id: crypto.randomUUID(),
+      kind: "text",
+      dir: "out",
+      name: "",
+      size: 0,
+      done: 0,
+      status: "done",
+      blob: null,
+      body: text,
+    });
   }
 
   saveItem(item: TransferItem): void {

@@ -71,6 +71,9 @@ importers:
       '@local-tools/theme':
         specifier: workspace:*
         version: link:../../packages/theme
+      uqr:
+        specifier: ^0.1.3
+        version: 0.1.3
     devDependencies:
       '@local-tools/vite-plugin-self-extracting':
         specifier: workspace:*

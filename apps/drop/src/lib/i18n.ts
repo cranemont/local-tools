@@ -33,19 +33,29 @@ export const t = {
   },
 
   host: {
+    step1Qr: "① 상대 폰 카메라로 QR를 찍게 하거나, 링크를 전달하세요",
     step1: "① 이 코드를 상대 기기에 전달하세요",
     making: "코드 만드는 중…",
-    step2: "② 상대의 응답 코드를 붙여넣으세요",
+    step2: "② 상대의 응답을 스캔하거나 붙여넣으세요",
     answerPlaceholder: "응답 코드 붙여넣기",
     connect: "연결",
   },
 
   guest: {
     pasteLabel: "받은 코드를 붙여넣으세요",
-    pastePlaceholder: "연결 코드 붙여넣기",
+    pastePlaceholder: "연결 코드·링크 붙여넣기",
     makeAnswer: "응답 만들기",
-    step1: "이 응답 코드를 상대 기기에 전달하세요",
-    waiting: "상대가 응답을 넣으면 자동으로 연결돼요",
+    step1Qr: "이 응답 QR를 상대 기기로 스캔하게 하거나, 코드를 전달하세요",
+    waiting: "상대가 응답을 받으면 자동으로 연결돼요",
+  },
+
+  scan: {
+    title: "QR 스캔",
+    open: "QR 스캔",
+    hint: "상대 화면의 QR를 비추세요",
+    cameraFail: "카메라를 열 수 없어요 — 코드 붙여넣기로 진행해 주세요",
+    unsupported: "이 브라우저는 QR 스캔을 지원하지 않아요",
+    cancel: "닫기",
   },
 
   conn: {
@@ -58,6 +68,7 @@ export const t = {
 
   transfer: {
     drop: "파일을 끌어다 놓거나 클릭해서 선택",
+    limitNote: "받은 파일은 메모리에 모였다가 저장돼요 — 수백 MB까지가 안정적이에요",
     sending: "보내는 중",
     receiving: "받는 중",
     done: "완료",
@@ -65,6 +76,9 @@ export const t = {
     save: "저장",
     dirIn: "받음",
     dirOut: "보냄",
+    textPlaceholder: "텍스트·링크 보내기",
+    textSend: "보내기",
+    textLabel: "텍스트",
   },
 } as const;
 
