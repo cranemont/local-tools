@@ -7,7 +7,10 @@
 <div class="app">
   <header class="topbar">
     <div class="brand">
-      <span class="logo" aria-hidden="true"></span>
+      <svg class="logo" viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
+        <rect x="1.6" y="1.6" width="14.8" height="14.8" rx="4.8" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <circle cx="9" cy="9" r="3.2" fill="var(--accent)" />
+      </svg>
       <span class="brand-name">{t.brandName}</span>
       <span class="app-name">{t.appName}</span>
     </div>
@@ -48,25 +51,22 @@
   .brand {
     display: flex;
     align-items: center;
-    gap: 9px;
-    font-weight: 700;
-    font-size: 15px;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14.5px;
     letter-spacing: -0.01em;
   }
   .logo {
-    width: 18px;
-    height: 18px;
-    border-radius: 6px;
-    background: linear-gradient(135deg, var(--brand-400), var(--brand-600));
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+    display: block;
+    color: var(--text);
   }
   .app-name {
-    padding: 2px 9px;
+    padding: 2px 8px;
     border-radius: 999px;
     background: var(--accent-weak);
     color: var(--accent);
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 11.5px;
+    font-weight: 600;
   }
 
   .spacer {

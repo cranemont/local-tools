@@ -1,20 +1,21 @@
-/* @local-tools/theme — 공용 디자인 토큰
- * 브랜드: 스카이 블루. 라이트/다크 대응(시스템 + data-theme 토글). */
+/* @local-tools/theme — 공용 디자인 토큰 (OKLCH, 크로미엄 전용)
+ * 브랜드: 차분한 azure(hue 240). 중성색은 같은 색조를 아주 옅게 머금는다.
+ * 라이트/다크 대응(시스템 + data-theme 토글). */
 
 :root {
   color-scheme: light dark;
 
-  /* ── 브랜드 스케일 (스카이 블루) ───────────────────────── */
-  --brand-50: #f0f9ff;
-  --brand-100: #e0f2fe;
-  --brand-200: #bae6fd;
-  --brand-300: #7dd3fc;
-  --brand-400: #38bdf8;
-  --brand-500: #0ea5e9; /* primary */
-  --brand-600: #0284c7;
-  --brand-700: #0369a1;
-  --brand-800: #075985;
-  --brand-900: #0c4a6e;
+  /* ── 브랜드 스케일 (hue 240 고정, 채도 곡선) ─────────────── */
+  --brand-50: oklch(0.977 0.01 240);
+  --brand-100: oklch(0.946 0.024 240);
+  --brand-200: oklch(0.892 0.05 240);
+  --brand-300: oklch(0.815 0.088 240);
+  --brand-400: oklch(0.716 0.125 240);
+  --brand-500: oklch(0.62 0.158 240); /* primary */
+  --brand-600: oklch(0.545 0.155 242);
+  --brand-700: oklch(0.474 0.138 243);
+  --brand-800: oklch(0.408 0.112 243);
+  --brand-900: oklch(0.348 0.088 243);
 
   /* ── 형태/여백/타이포 ──────────────────────────────────── */
   --radius-sm: 6px;
@@ -23,69 +24,69 @@
   --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont,
     "Apple SD Gothic Neo", "Segoe UI", Roboto, "Helvetica Neue", Arial,
     "Noto Sans KR", sans-serif;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.1);
-  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.05), 0 2px 6px oklch(0 0 0 / 0.05);
+  --shadow-2: 0 12px 32px oklch(0 0 0 / 0.14);
 
   /* ── 시맨틱 (라이트 기본) ──────────────────────────────── */
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --text: #14181f;
-  --text-muted: #5b6472;
-  --border: #e2e6eb;
+  --bg: oklch(0.978 0.003 240);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.958 0.005 240);
+  --text: oklch(0.235 0.015 250);
+  --text-muted: oklch(0.51 0.022 248);
+  --border: oklch(0.917 0.008 240);
   --accent: var(--brand-500);
   --accent-hover: var(--brand-600);
-  --accent-contrast: #ffffff;
-  --accent-weak: var(--brand-50);
-  --danger: #e5484d;
+  --accent-contrast: oklch(1 0 0);
+  --accent-weak: oklch(0.62 0.158 240 / 0.09);
+  --danger: oklch(0.585 0.2 27);
   --focus: var(--brand-500);
 }
 
 /* 시스템 다크 */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0d1013;
-    --surface: #161a1f;
-    --surface-2: #1e242b;
-    --text: #eef1f4;
-    --text-muted: #9aa4b1;
-    --border: #2a313a;
+    --bg: oklch(0.172 0.008 250);
+    --surface: oklch(0.212 0.01 250);
+    --surface-2: oklch(0.252 0.012 250);
+    --text: oklch(0.93 0.006 240);
+    --text-muted: oklch(0.685 0.018 245);
+    --border: oklch(0.31 0.014 248);
     --accent: var(--brand-400);
     --accent-hover: var(--brand-300);
-    --accent-contrast: #051220;
-    --accent-weak: rgba(56, 189, 248, 0.14);
-    --danger: #ff6369;
+    --accent-contrast: oklch(0.165 0.02 250);
+    --accent-weak: oklch(0.716 0.125 240 / 0.14);
+    --danger: oklch(0.687 0.165 22);
     --focus: var(--brand-400);
   }
 }
 
 /* 명시적 토글이 시스템 설정을 이긴다 */
 :root[data-theme="light"] {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --text: #14181f;
-  --text-muted: #5b6472;
-  --border: #e2e6eb;
+  --bg: oklch(0.978 0.003 240);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.958 0.005 240);
+  --text: oklch(0.235 0.015 250);
+  --text-muted: oklch(0.51 0.022 248);
+  --border: oklch(0.917 0.008 240);
   --accent: var(--brand-500);
   --accent-hover: var(--brand-600);
-  --accent-contrast: #ffffff;
-  --accent-weak: var(--brand-50);
-  --danger: #e5484d;
+  --accent-contrast: oklch(1 0 0);
+  --accent-weak: oklch(0.62 0.158 240 / 0.09);
+  --danger: oklch(0.585 0.2 27);
   --focus: var(--brand-500);
 }
 
 :root[data-theme="dark"] {
-  --bg: #0d1013;
-  --surface: #161a1f;
-  --surface-2: #1e242b;
-  --text: #eef1f4;
-  --text-muted: #9aa4b1;
-  --border: #2a313a;
+  --bg: oklch(0.172 0.008 250);
+  --surface: oklch(0.212 0.01 250);
+  --surface-2: oklch(0.252 0.012 250);
+  --text: oklch(0.93 0.006 240);
+  --text-muted: oklch(0.685 0.018 245);
+  --border: oklch(0.31 0.014 248);
   --accent: var(--brand-400);
   --accent-hover: var(--brand-300);
-  --accent-contrast: #051220;
-  --accent-weak: rgba(56, 189, 248, 0.14);
-  --danger: #ff6369;
+  --accent-contrast: oklch(0.165 0.02 250);
+  --accent-weak: oklch(0.716 0.125 240 / 0.14);
+  --danger: oklch(0.687 0.165 22);
   --focus: var(--brand-400);
 }

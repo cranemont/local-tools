@@ -1,7 +1,7 @@
 import type { Plugin } from "vite";
 
 export interface SelfExtractingHtmlOptions {
-  /** 부트 스플래시 스피너 색 (기본: 브랜드 스카이 블루) */
+  /** 부트 스플래시 스피너 색 (기본: 브랜드 azure, 라이트/다크 자동) */
   accentColor?: string;
   /** DecompressionStream 미지원 브라우저 안내 문구 (HTML 허용) */
   unsupportedHtml?: string;

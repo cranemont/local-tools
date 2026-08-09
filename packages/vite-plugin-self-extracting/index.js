@@ -13,7 +13,7 @@ import { deflateRawSync } from "node:zlib";
  */
 export function selfExtractingHtml(options = {}) {
   const {
-    accentColor = "#0ea5e9",
+    accentColor = "light-dark(oklch(0.62 0.158 240), oklch(0.716 0.125 240))",
     unsupportedHtml = "최신 브라우저가 필요합니다 (Chrome/Edge 등).<br>문서 자체는 온전합니다 — 최신 브라우저로 열어 주세요.",
     loadErrorPrefix = "불러오기에 실패했어요: ",
   } = options;
@@ -72,8 +72,8 @@ export function selfExtractingHtml(options = {}) {
 </script>`;
 
       const splash =
-        `<div id="boot-splash" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f6f7f9;z-index:99999">` +
-        `<div style="width:34px;height:34px;border:3px solid #e2e6eb;border-top-color:${accentColor};border-radius:50%;animation:bs .8s linear infinite"></div>` +
+        `<div id="boot-splash" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color-scheme:light dark;background:light-dark(oklch(0.978 0.003 240),oklch(0.172 0.008 250));z-index:99999">` +
+        `<div style="width:34px;height:34px;border:3px solid light-dark(oklch(0.917 0.008 240),oklch(0.31 0.014 248));border-top-color:${accentColor};border-radius:50%;animation:bs .8s linear infinite"></div>` +
         `<style>@keyframes bs{to{transform:rotate(360deg)}}</style></div>`;
 
       html = html
