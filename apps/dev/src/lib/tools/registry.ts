@@ -13,6 +13,10 @@ import CronTool from "./CronTool.svelte";
 import Diff from "./Diff.svelte";
 import Chars from "./Chars.svelte";
 import Regex from "./Regex.svelte";
+import Xpath from "./Xpath.svelte";
+import Cookie from "./Cookie.svelte";
+import OAuthTool from "./OAuthTool.svelte";
+import Saml from "./Saml.svelte";
 
 export interface ToolDef {
   id: string;
@@ -35,6 +39,15 @@ export const TOOLS: ToolDef[] = [
     group: t.groups.format,
     keywords: "json yaml xml 변환 정리 압축 포맷 formatter convert minify pretty",
     component: Format,
+  },
+  {
+    id: "xpath",
+    icon: "route",
+    title: t.xpath.title,
+    desc: t.xpath.desc,
+    group: t.groups.format,
+    keywords: "xpath xml 쿼리 노드 선택 query selector 매칭",
+    component: Xpath,
   },
   {
     id: "color",
@@ -62,6 +75,33 @@ export const TOOLS: ToolDef[] = [
     group: t.groups.sec,
     keywords: "jwt 토큰 token 디코드 decode 서명 검증 verify",
     component: Jwt,
+  },
+  {
+    id: "oauth",
+    icon: "shield",
+    title: t.oauth.title,
+    desc: t.oauth.desc,
+    group: t.groups.sec,
+    keywords: "oauth oidc 인가 authorize pkce state nonce 콜백 callback redirect openid",
+    component: OAuthTool,
+  },
+  {
+    id: "saml",
+    icon: "idcard",
+    title: t.saml.title,
+    desc: t.saml.desc,
+    group: t.groups.sec,
+    keywords: "saml sso 싱글사인온 assertion authnrequest response 디코드 idp sp",
+    component: Saml,
+  },
+  {
+    id: "cookie",
+    icon: "cookie",
+    title: t.cookie.title,
+    desc: t.cookie.desc,
+    group: t.groups.sec,
+    keywords: "쿠키 cookie set-cookie samesite secure httponly 헤더 세션 분석",
+    component: Cookie,
   },
   {
     id: "hash",

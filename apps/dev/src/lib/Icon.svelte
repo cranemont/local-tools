@@ -22,7 +22,11 @@
     | "clock"
     | "timer"
     | "regex"
-    | "palette";
+    | "palette"
+    | "cookie"
+    | "shield"
+    | "idcard"
+    | "route";
 </script>
 
 <script lang="ts">
@@ -124,6 +128,21 @@
     <circle cx="7.5" cy="11.5" r="0.5" />
     <circle cx="11" cy="7.5" r="0.5" />
     <circle cx="15.5" cy="9.5" r="0.5" />
+  {:else if name === "cookie"}
+    <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5Z" />
+    <path d="M8.5 8.5v.01M15.5 15.5v.01M12 12v.01M10.5 16.5v.01M7 13.5v.01" />
+  {:else if name === "shield"}
+    <path d="M12 3l7.5 2.8V11c0 4.4-3 7.6-7.5 9-4.5-1.4-7.5-4.6-7.5-9V5.8Z" />
+    <path d="m9 11.5 2 2 4-4" />
+  {:else if name === "idcard"}
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <circle cx="8.5" cy="10.5" r="1.8" />
+    <path d="M5.5 15.8c.6-1.4 5.4-1.4 6 0" />
+    <path d="M14.5 10h4M14.5 14h4" />
+  {:else if name === "route"}
+    <circle cx="6" cy="19" r="2.5" />
+    <circle cx="18" cy="5" r="2.5" />
+    <path d="M8.5 19h7a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7h7" />
   {/if}
 </svg>
 
