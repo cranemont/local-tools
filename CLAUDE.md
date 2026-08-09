@@ -16,6 +16,8 @@ pnpm build    # 전체 앱 빌드 — 자가해제형 단일 HTML 산출 → app
 pnpm check    # 전체 svelte-check 타입 체크 (0 errors/warnings 유지할 것)
 ```
 
+배포: main에 푸시하면 GitHub Actions가 빌드해 **https://cranemont.github.io/local-tools/** 로 올린다(`/pdf/`·`/gif/`). 별도 배포 명령 없음.
+
 ## 구조 (경량 pnpm 모노레포)
 
 ```
@@ -34,8 +36,10 @@ apps/gif/            # GIF 에디터 (Svelte 5 + TS) — 단일 에디터 뷰(�
   src/lib/gif/       # 엔진: decode(ImageDecoder 온디맨드+LRU)·encode(gifenc)·
                      #        webp(ANMF muxer)·mp4(WebCodecs 내보내기)·
                      #        video(동영상 임포트)·transform·extract(PNG ZIP)·save
-packages/theme/tokens.css  # 공용 디자인 토큰(라이트/다크)
+packages/theme/tokens.css  # 공용 디자인 토큰(OKLCH, 라이트/다크)
 packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플러그인 (모든 앱 공용)
+site/index.html      # Pages 랜딩(자기완결 정적 페이지 — /pdf/ · /gif/ 링크)
+.github/workflows/deploy.yml  # main 푸시마다 check+build → GitHub Pages 배포
 ```
 
 새 도구는 `apps/<name>/`로 추가하고 `@local-tools/theme` 재사용. 루트 스크립트 규칙:
