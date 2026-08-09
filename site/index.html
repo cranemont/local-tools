@@ -153,30 +153,11 @@
         font-size: 15px;
         color: var(--muted);
       }
-      .facts {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin: 18px 0 0;
-        font-family: var(--mono);
-        font-size: 12px;
+      .statement {
+        margin: 6px 0 0;
+        font-size: 14px;
+        line-height: 1.6;
         color: var(--muted);
-      }
-      .led {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--accent);
-        animation: breathe 2.4s ease-in-out infinite;
-      }
-      @keyframes breathe {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.45;
-        }
       }
 
       .tools {
@@ -184,7 +165,8 @@
         grid-template-columns: repeat(auto-fit, minmax(216px, 1fr));
         gap: 14px;
       }
-      a.tool {
+      .tool {
+        position: relative;
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -192,17 +174,26 @@
         border: 1px solid var(--border);
         border-radius: 16px;
         background: var(--surface);
-        color: inherit;
-        text-decoration: none;
         transition: border-color 0.12s ease, transform 0.12s ease,
           box-shadow 0.12s ease;
       }
-      a.tool:hover {
+      .tool:hover {
         border-color: var(--accent);
         transform: translateY(-2px);
         box-shadow: 0 8px 24px oklch(0 0 0 / 0.08);
       }
-      a.tool:focus-visible {
+      /* 카드 전체를 도구 링크로 (stretched link) */
+      .tool-link {
+        color: inherit;
+        text-decoration: none;
+      }
+      .tool-link::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 16px;
+      }
+      .tool:has(.tool-link:focus-visible) {
         outline: 2px solid var(--accent);
         outline-offset: 2px;
       }
@@ -235,16 +226,24 @@
         color: var(--muted);
         opacity: 0.85;
       }
+      /* 다운로드 링크는 카드 링크 위에 떠 있어야 클릭이 먹는다 */
+      .tool .dl {
+        position: relative;
+        z-index: 1;
+        color: inherit;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .tool .dl:hover {
+        color: var(--text);
+      }
 
       @media (prefers-reduced-motion: reduce) {
-        a.tool {
+        .tool {
           transition: none;
         }
-        a.tool:hover {
+        .tool:hover {
           transform: none;
-        }
-        .led {
-          animation: none;
         }
       }
     </style>
@@ -263,43 +262,51 @@
           <a class="gh" href="https://github.com/cranemont/local-tools">GitHub</a>
         </div>
         <p class="tagline">설치 없이 브라우저에서 쓰는 PDF·GIF·동영상 도구</p>
-        <p class="facts">
-          <span class="led" aria-hidden="true"></span>
-          업로드 없음 · 광고 없음 · 애널리틱스 없음
+        <p class="statement">
+          모든 기능은 단일 HTML 파일 위에서 동작하며, 파일은 서버로 전송되지 않습니다.
         </p>
       </section>
 
       <nav class="tools" aria-label="도구">
-        <a class="tool" href="./pdf/">
+        <div class="tool">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M8 3h7l4 4v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
             <path d="M15 3v4h4" />
             <path d="M4 8v11a3 3 0 0 0 3 3" />
             <circle class="art-accent" cx="12.5" cy="13.5" r="2.4" />
           </svg>
-          <h2>PDF</h2>
+          <h2><a class="tool-link" href="./pdf/">PDF</a></h2>
           <p class="desc">병합 · 정리 · 이미지 변환 · 암호</p>
-          <span class="meta">단일 HTML · <span data-size="pdf">910 KB</span></span>
-        </a>
-        <a class="tool" href="./gif/">
+          <span class="meta">
+            단일 HTML · <span data-size="pdf">910 KB</span> ·
+            <a class="dl" href="./pdf/index.html" download="local-tools-pdf.html">다운로드</a>
+          </span>
+        </div>
+        <div class="tool">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="4" width="18" height="16" rx="2" />
             <path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" />
             <circle class="art-accent" cx="12" cy="12" r="2.4" />
           </svg>
-          <h2>GIF</h2>
+          <h2><a class="tool-link" href="./gif/">GIF</a></h2>
           <p class="desc">프레임 편집 · 동영상 변환 · WebP·MP4</p>
-          <span class="meta">단일 HTML · <span data-size="gif">174 KB</span></span>
-        </a>
-        <a class="tool" href="./video/">
+          <span class="meta">
+            단일 HTML · <span data-size="gif">174 KB</span> ·
+            <a class="dl" href="./gif/index.html" download="local-tools-gif.html">다운로드</a>
+          </span>
+        </div>
+        <div class="tool">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="4" width="18" height="16" rx="3" />
             <path class="art-accent" d="m10.2 8.8 5.2 3.2-5.2 3.2Z" />
           </svg>
-          <h2>동영상</h2>
+          <h2><a class="tool-link" href="./video/">동영상</a></h2>
           <p class="desc">자르기 · 압축 · 변환 · 소리 추출</p>
-          <span class="meta">단일 HTML · <span data-size="video">189 KB</span></span>
-        </a>
+          <span class="meta">
+            단일 HTML · <span data-size="video">189 KB</span> ·
+            <a class="dl" href="./video/index.html" download="local-tools-video.html">다운로드</a>
+          </span>
+        </div>
       </nav>
     </main>
   </body>
