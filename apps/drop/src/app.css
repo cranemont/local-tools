@@ -16,6 +16,9 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* 한국어 안내문이 단어 중간에서 꺾이지 않게 — 코드·URL 영역은 각자 break-all로 오버라이드 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 #app {
