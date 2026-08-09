@@ -16,7 +16,7 @@ pnpm build    # 전체 앱 빌드 — 자가해제형 단일 HTML 산출 → app
 pnpm check    # 전체 svelte-check 타입 체크 (0 errors/warnings 유지할 것)
 ```
 
-배포: main에 푸시하면 GitHub Actions가 빌드해 **https://cranemont.github.io/local-tools/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`). 별도 배포 명령 없음.
+배포: main에 푸시하면 GitHub Actions가 빌드해 **https://cranemont.github.io/local-tools/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`·`/image/`·`/drop/`). 별도 배포 명령 없음.
 
 ## 구조 (경량 pnpm 모노레포)
 
@@ -40,6 +40,14 @@ apps/video/          # 동영상 도구 (Svelte 5 + TS) — 트림·압축·변�
   src/lib/editor/    # state.svelte.ts·Player(<video>+구간재생)·Timeline(스트립+핸들+kf눈금)·Panel
   src/lib/video/     # 엔진: probe(메타·키프레임)·thumbs(스트립)·transcode(mediabunny
                      #        Conversion — 정확=재인코딩/무손실=패킷복사·소리추출)·save
+apps/image/          # 이미지 도구 (Svelte 5 + TS) — 변환·압축·리사이즈·크롭·EXIF, 필름스트립 일괄
+  src/lib/editor/    # state.svelte.ts·Preview(디바운스 재인코딩+용량 배지+크롭)·Panel
+  src/lib/image/     # 엔진: decode(LRU+HEIC 위임)·pipeline(회전→크롭→pica→인코딩)·
+                     #        exif(APP1/RIFF/eXIf 바이트 조작)·heic/avif(CDN wasm)·save
+apps/drop/           # 드롭 (Svelte 5 + TS) — 서버 없는 P2P 파일 전송, 단일 플로 뷰
+  src/lib/rtc/       # 엔진: signal(SDP deflate-raw+base64url)·peer(non-trickle RTCPeerConnection)·
+                     #        transfer(64KB 청크+백프레셔 file/eof/text 프로토콜)·save
+  src/lib/editor/    # state.svelte.ts(스테이지 머신)·Editor·QrCode(uqr)·ScanDialog(카메라 스캔)
 apps/dev/            # 개발자 유틸 (Svelte 5 + TS) — 사이드바+검색 셸, 도구 16종
   src/lib/tools/     # registry(도구 목록·그룹)·Format(JSON/YAML/XML 변환)·Diff·Encode·
                      #   Jwt(HS 검증)·Hash(+md5.ts 직접 구현)·Uuid(v4/v7/ULID)·Timestamp·
@@ -47,6 +55,7 @@ apps/dev/            # 개발자 유틸 (Svelte 5 + TS) — 사이드바+검색 
                      #   Cookie(Set-Cookie 진단)·OAuthTool(URL 분석+PKCE)·
                      #   Saml(디코드+요약, DecompressionStream)·Xpath(네이티브 evaluate)
 packages/theme/tokens.css  # 공용 디자인 토큰(OKLCH, 라이트/다크)
+packages/wasm-loader/      # 공용 CDN wasm 로더(SRI+SHA-384 fail-closed) — image·pdf 암호 탭 사용
 packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플러그인 (모든 앱 공용)
 site/                # Pages 정적 파일 — 랜딩·404·sitemap.xml·og/(OG 이미지)
 .github/workflows/deploy.yml  # main 푸시마다 check+build → GitHub Pages 배포
