@@ -11,6 +11,8 @@
     "preview:pdf": "pnpm --filter @local-tools/pdf preview",
     "dev:gif": "pnpm --filter @local-tools/gif dev",
     "preview:gif": "pnpm --filter @local-tools/gif preview",
+    "dev:video": "pnpm --filter @local-tools/video dev",
+    "preview:video": "pnpm --filter @local-tools/video preview",
     "build": "pnpm -r build",
     "check": "pnpm -r check"
   }

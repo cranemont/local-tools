@@ -36,6 +36,10 @@ apps/gif/            # GIF 에디터 (Svelte 5 + TS) — 단일 에디터 뷰(�
   src/lib/gif/       # 엔진: decode(ImageDecoder 온디맨드+LRU)·encode(gifenc)·
                      #        webp(ANMF muxer)·mp4(WebCodecs 내보내기)·
                      #        video(동영상 임포트)·transform·extract(PNG ZIP)·save
+apps/video/          # 동영상 도구 (Svelte 5 + TS) — 트림·압축·변환, 파일 한 개씩
+  src/lib/editor/    # state.svelte.ts·Player(<video>+구간재생)·Timeline(스트립+핸들)·Panel
+  src/lib/video/     # 엔진: probe·thumbs(타임라인 스트립)·transcode(mediabunny
+                     #        Conversion — 비디오 재인코딩, 오디오는 가능하면 복사)·save
 packages/theme/tokens.css  # 공용 디자인 토큰(OKLCH, 라이트/다크)
 packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플러그인 (모든 앱 공용)
 site/                # Pages 정적 파일 — 랜딩·404·sitemap.xml·og/(OG 이미지)
