@@ -36,6 +36,11 @@ jobs:
           cp apps/pdf/dist/index.html _site/pdf/index.html
           cp apps/gif/dist/index.html _site/gif/index.html
           cp apps/video/dist/index.html _site/video/index.html
+          # 랜딩 카드의 용량 표기를 실제 빌드 산출물 크기로 갱신
+          for app in pdf gif video; do
+            kb=$(( $(stat -c%s "apps/$app/dist/index.html") / 1024 ))
+            sed -i "s|data-size=\"$app\">[^<]*<|data-size=\"$app\">${kb} KB<|" _site/index.html
+          done
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

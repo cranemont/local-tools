@@ -27,7 +27,7 @@
     <meta property="og:image" content="https://cranemont.github.io/local-tools/og/home.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="local-tools — 브라우저에서만 동작하는 PDF·GIF 도구" />
+    <meta property="og:image:alt" content="local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상 도구" />
     <meta name="twitter:card" content="summary_large_image" />
     <script type="application/ld+json">
       {
@@ -59,6 +59,12 @@
         ]
       }
     </script>
+    <script>
+      // 앱들과 같은 키의 테마 설정을 따른다 (없으면 시스템).
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "light" || savedTheme === "dark")
+        document.documentElement.dataset.theme = savedTheme;
+    </script>
     <style>
       :root {
         color-scheme: light dark;
@@ -67,108 +73,237 @@
           oklch(0.62 0.158 240 / 0.09),
           oklch(0.716 0.125 240 / 0.14)
         );
+        --bg: light-dark(oklch(0.978 0.003 240), oklch(0.172 0.008 250));
+        --surface: light-dark(oklch(1 0 0), oklch(0.212 0.01 250));
+        --text: light-dark(oklch(0.235 0.015 250), oklch(0.93 0.006 240));
         --muted: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
+        --border: light-dark(oklch(0.917 0.008 240), oklch(0.31 0.014 248));
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
       }
       body {
         margin: 0;
         min-height: 100dvh;
         display: flex;
-        align-items: center;
-        justify-content: center;
+        flex-direction: column;
         font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
           "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
-        background: light-dark(oklch(0.978 0.003 240), oklch(0.172 0.008 250));
-        color: light-dark(oklch(0.235 0.015 250), oklch(0.93 0.006 240));
+        background: var(--bg);
+        color: var(--text);
         -webkit-font-smoothing: antialiased;
-      }
-      main {
-        text-align: center;
-        padding: 40px;
-      }
-      h1 {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        margin: 0;
-        font-weight: 600;
-        font-size: 17px;
-        letter-spacing: -0.01em;
-      }
-      h1 .dot {
-        fill: var(--accent);
-      }
-      .tagline {
-        margin: 10px 0 0;
-        font-size: 13.5px;
-        color: var(--muted);
-      }
-      .tools {
-        display: flex;
-        gap: 12px;
-        justify-content: center;
-        margin-top: 28px;
-      }
-      a.tool {
-        display: block;
-        width: 168px;
-        padding: 16px 18px 15px;
-        border-radius: 12px;
-        text-decoration: none;
-        background: var(--accent-weak);
-        text-align: center;
-      }
-      a.tool:hover {
-        outline: 1.5px solid var(--accent);
-        outline-offset: -1.5px;
-      }
-      a.tool strong {
-        display: block;
-        font-weight: 600;
-        font-size: 15px;
-        color: var(--accent);
-      }
-      a.tool span {
-        display: block;
-        margin-top: 5px;
-        font-size: 12px;
-        line-height: 1.5;
-        color: var(--muted);
-        text-wrap: balance;
         word-break: keep-all;
       }
-      .note {
-        margin-top: 30px;
+      .wrap {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      header.wrap {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 28px;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+        color: inherit;
+        text-decoration: none;
+      }
+      .brand svg {
+        display: block;
+      }
+      .brand .dot {
+        fill: var(--accent);
+      }
+      .gh {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .gh:hover {
+        color: var(--text);
+        text-decoration: underline;
+      }
+
+      main.wrap {
+        flex: 1;
+        padding-bottom: 72px;
+      }
+      .hero {
+        margin: 76px 0 44px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(30px, 5.5vw, 44px);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1.18;
+      }
+      h1 .dot-end {
+        display: inline-block;
+        width: 0.24em;
+        height: 0.24em;
+        margin-left: 0.12em;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .hero p {
+        margin: 14px 0 0;
+        font-size: 15.5px;
+        color: var(--muted);
+      }
+
+      .tools {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(216px, 1fr));
+        gap: 14px;
+      }
+      a.tool {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 22px 22px 18px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--surface);
+        color: inherit;
+        text-decoration: none;
+        transition: border-color 0.12s ease, transform 0.12s ease,
+          box-shadow 0.12s ease;
+      }
+      a.tool:hover {
+        border-color: var(--accent);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px oklch(0 0 0 / 0.08);
+      }
+      a.tool:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .tool svg {
+        display: block;
+        color: var(--muted);
+        margin-bottom: 12px;
+      }
+      .tool .art-accent {
+        fill: var(--accent);
+        stroke: none;
+      }
+      .tool h2 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .tool .desc {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+      .tool .meta {
+        margin-top: auto;
+        padding-top: 14px;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--muted);
+        opacity: 0.85;
+      }
+
+      footer.wrap {
+        padding-bottom: 28px;
         font-size: 12.5px;
         color: var(--muted);
+      }
+      footer a {
+        color: inherit;
+        text-decoration: none;
+      }
+      footer a:hover {
+        color: var(--text);
+        text-decoration: underline;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        a.tool {
+          transition: none;
+        }
+        a.tool:hover {
+          transform: none;
+        }
       }
     </style>
   </head>
   <body>
-    <main>
-      <h1>
-        <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden="true">
+    <header class="wrap">
+      <a class="brand" href="./">
+        <svg width="19" height="19" viewBox="0 0 18 18" aria-hidden="true">
           <rect x="1.6" y="1.6" width="14.8" height="14.8" rx="4.8" fill="none" stroke="currentColor" stroke-width="1.6" />
           <circle class="dot" cx="9" cy="9" r="3.2" />
         </svg>
         local-tools
-      </h1>
-      <p class="tagline">브라우저에서만 동작하는 도구 모음</p>
-      <nav class="tools">
+      </a>
+      <a class="gh" href="https://github.com/cranemont/local-tools">GitHub</a>
+    </header>
+
+    <main class="wrap">
+      <section class="hero">
+        <h1>파일은 브라우저 밖으로 나가지 않아요<span class="dot-end" aria-hidden="true"></span></h1>
+        <p>설치 없이 브라우저에서 쓰는 PDF·GIF·동영상 도구</p>
+      </section>
+
+      <nav class="tools" aria-label="도구">
         <a class="tool" href="./pdf/">
-          <strong>PDF</strong>
-          <span>병합 · 정리 · 이미지 변환 · 암호</span>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3h7l4 4v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+            <path d="M15 3v4h4" />
+            <path d="M4 8v11a3 3 0 0 0 3 3" />
+            <circle class="art-accent" cx="12.5" cy="13.5" r="2.4" />
+          </svg>
+          <h2>PDF</h2>
+          <p class="desc">병합 · 정리 · 이미지 변환 · 암호</p>
+          <span class="meta">단일 HTML · <span data-size="pdf">910 KB</span></span>
         </a>
         <a class="tool" href="./gif/">
-          <strong>GIF</strong>
-          <span>프레임&nbsp;편집 · 동영상&nbsp;변환&nbsp;· WebP·MP4</span>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" />
+            <circle class="art-accent" cx="12" cy="12" r="2.4" />
+          </svg>
+          <h2>GIF</h2>
+          <p class="desc">프레임 편집 · 동영상 변환 · WebP·MP4</p>
+          <span class="meta">단일 HTML · <span data-size="gif">174 KB</span></span>
         </a>
         <a class="tool" href="./video/">
-          <strong>동영상</strong>
-          <span>자르기 · 압축 · 변환&nbsp;· 소리&nbsp;추출</span>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="3" />
+            <path class="art-accent" d="m10.2 8.8 5.2 3.2-5.2 3.2Z" />
+          </svg>
+          <h2>동영상</h2>
+          <p class="desc">자르기 · 압축 · 변환 · 소리 추출</p>
+          <span class="meta">단일 HTML · <span data-size="video">189 KB</span></span>
         </a>
       </nav>
-      <p class="note">파일은 브라우저 밖으로 나가지 않아요</p>
     </main>
+
+    <footer class="wrap">
+      <a href="https://github.com/cranemont/local-tools">github.com/cranemont/local-tools</a>
+    </footer>
   </body>
 </html>

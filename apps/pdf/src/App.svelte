@@ -16,18 +16,26 @@
   ];
 
   let active = $state<TabId>("edit");
+
+  // file://로 직접 연 단일 파일엔 돌아갈 홈이 없다
+  const homeHref = location.protocol === "file:" ? null : "../";
 </script>
 
 <div class="app">
   <header class="topbar">
-    <div class="brand">
+    <svelte:element
+      this={homeHref ? "a" : "div"}
+      class="brand"
+      href={homeHref ?? undefined}
+      title={homeHref ? t.home : undefined}
+    >
       <svg class="logo" viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
         <rect x="1.6" y="1.6" width="14.8" height="14.8" rx="4.8" fill="none" stroke="currentColor" stroke-width="1.6" />
         <circle cx="9" cy="9" r="3.2" fill="var(--accent)" />
       </svg>
       <span class="brand-name">{t.brandName}</span>
       <span class="app-name">{t.appName}</span>
-    </div>
+    </svelte:element>
 
     <div class="tabs" role="tablist" aria-label={t.appName}>
       {#each tabs as tab (tab.id)}
@@ -90,10 +98,15 @@
     font-weight: 600;
     font-size: 14.5px;
     letter-spacing: -0.01em;
+    color: inherit;
+    text-decoration: none;
   }
   .logo {
     display: block;
     color: var(--text);
+  }
+  a.brand:hover .logo {
+    color: var(--accent);
   }
   .app-name {
     padding: 2px 8px;

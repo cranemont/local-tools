@@ -4,6 +4,7 @@
 export const t = {
   brandName: "local-tools",
   appName: "PDF",
+  home: "홈",
   privacyNote: "파일은 브라우저 밖으로 나가지 않아요",
 
   tabs: {
