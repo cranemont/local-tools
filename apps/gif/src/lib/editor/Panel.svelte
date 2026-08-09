@@ -26,7 +26,7 @@
 
   let filename = $state("animation");
   let delayInput = $state(100);
-  let result = $state<{ blob: Blob; revision: number } | null>(null);
+  let result = $state<{ blob: Blob; revision: number; fmt: string } | null>(null);
   let status = $state("");
 
   const stale = $derived(result !== null && result.revision !== editor.revision);
@@ -87,7 +87,7 @@
           onProgress,
         });
       }
-      result = { blob, revision };
+      result = { blob, revision, fmt: fmtLabel };
     } catch (err) {
       editor.error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -445,7 +445,7 @@
 
     {#if result}
       <div class="result" class:stale>
-        <p class="result-size">{t.panel.resultReady(formatBytes(result.blob.size))}</p>
+        <p class="result-size">{t.panel.resultReady(result.fmt, formatBytes(result.blob.size))}</p>
         {#if stale}
           <p class="result-note">{t.panel.resultStale}</p>
         {/if}

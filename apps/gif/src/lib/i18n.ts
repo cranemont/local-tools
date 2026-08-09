@@ -1,10 +1,11 @@
 // 모든 사용자 노출 문구는 여기 한 곳에 모은다.
 // (지금은 한국어 전용. 나중에 영어를 붙일 때 이 구조만 확장하면 됨.)
+// 톤: 짧고 담백하게. 감탄사·이모지·두 문장짜리 안내문 금지.
 
 export const t = {
   brandName: "local-tools",
   appName: "GIF",
-  privacyNote: "모든 처리는 이 브라우저 안에서만 이뤄지고, 파일은 서버로 전송되지 않습니다.",
+  privacyNote: "파일은 브라우저 밖으로 나가지 않아요",
 
   theme: {
     label: "테마",
@@ -14,9 +15,8 @@ export const t = {
   },
 
   editor: {
-    dropHint: "GIF·이미지·동영상을 여기에 끌어다 놓거나 클릭해서 선택하세요",
-    dropSub:
-      "GIF를 편집하거나, 이미지·동영상으로 GIF를 만들 수 있어요 · GIF, PNG, JPG, WebP, MP4, WebM",
+    dropHint: "파일을 끌어다 놓거나 클릭해서 선택",
+    dropSub: "GIF · PNG · JPG · WebP · MP4 · WebM",
     addFiles: "파일 추가",
     clearAll: "모두 비우기",
     loading: (name: string, i: number, total: number) =>
@@ -24,7 +24,7 @@ export const t = {
     decodingFrames: (name: string, i: number, total: number) =>
       `프레임 읽는 중… (${i}/${total}) ${name}`,
     frameCount: (n: number) => `${n}프레임`,
-    selectedCount: (n: number) => `${n}개 선택됨`,
+    selectedCount: (n: number) => `${n}개 선택`,
   },
 
   player: {
@@ -66,8 +66,8 @@ export const t = {
     cropStart: "영역 선택",
     cropCancel: "선택 취소",
     cropClear: "크롭 해제",
-    cropHint: "미리보기에서 드래그해 남길 영역을 선택하세요",
-    cropRect: (w: number, h: number) => `크롭됨 · ${w}×${h}px`,
+    cropHint: "드래그로 남길 영역 선택",
+    cropRect: (w: number, h: number) => `크롭 ${w}×${h}px`,
 
     rotateFlip: "회전·뒤집기",
     rotate: "90° 회전",
@@ -84,58 +84,57 @@ export const t = {
     presetSmall: "작게",
     presetBalanced: "권장",
     presetHigh: "고화질",
-    advanced: "고급 설정",
+    advanced: "고급",
     colors: "색상 수",
-    dither: "디더링 (그라데이션 보정)",
-    webpQuality: "품질 (1~100)",
+    dither: "디더링",
+    webpQuality: "품질",
 
     export: "내보내기",
     format: "형식",
     fileName: "저장 파일 이름",
     encodeAction: (fmt: string) => `${fmt} 만들기`,
     encoding: (i: number, total: number) => `인코딩 중… (${i}/${total})`,
-    resultReady: (size: string) => `완성! 용량 ${size}`,
-    resultStale: "편집 내용이 바뀌었어요. 다시 만들어 주세요.",
+    resultReady: (fmt: string, size: string) => `${fmt} · ${size}`,
+    resultStale: "편집 내용이 바뀌었어요",
     download: "다운로드",
     reEncode: "다시 만들기",
 
     extractPng: "프레임 PNG 추출",
-    extracting: (i: number, total: number) => `PNG로 변환 중… (${i}/${total})`,
+    extracting: (i: number, total: number) => `PNG 변환 중… (${i}/${total})`,
     zipping: "ZIP으로 묶는 중…",
-    savedPng: "프레임 1장을 PNG로 다운로드했어요.",
-    savedZip: (n: number) => `${n}장을 ZIP으로 저장했어요.`,
+    savedPng: "PNG 1장 저장됨",
+    savedZip: (n: number) => `ZIP 저장됨 · ${n}장`,
   },
 
   video: {
-    dialogTitle: "동영상 프레임 가져오기",
+    dialogTitle: "프레임 가져오기",
     meta: (w: number, h: number, s: string) => `${w}×${h}px · ${s}초`,
     fps: "초당 프레임(fps)",
     scale: "해상도",
-    scaleOption: (pct: number, w: number) => `${pct}% · 가로 ${w}px`,
+    scaleOption: (pct: number, w: number) => `${pct}% · ${w}px`,
     range: "구간(초)",
     rangeStart: "시작",
     rangeEnd: "끝",
-    estFrames: (n: number) => `약 ${n}프레임이 추가돼요`,
+    estFrames: (n: number) => `약 ${n}프레임`,
     import: "가져오기",
     cancel: "취소",
-    probing: (name: string) => `동영상 정보 읽는 중… ${name}`,
+    probing: (name: string) => `동영상 읽는 중… ${name}`,
     extracting: (name: string, i: number, total: number) =>
       total ? `프레임 추출 중… (${i}/${total}) ${name}` : `프레임 추출 준비 중… ${name}`,
   },
 
   banner: {
     large: (w: number, h: number) =>
-      `원본이 ${w}×${h}px로 커요. 출력 크기를 줄이면 파일이 훨씬 가벼워져요.`,
+      `원본 ${w}×${h}px — 출력 크기를 줄이면 훨씬 가벼워져요`,
     shrinkTo: (pct: number) => `${pct}%로 줄이기`,
-    dismiss: "그대로 둘게요",
+    dismiss: "유지",
   },
 
   errors: {
     unsupported: (name: string) => `지원하지 않는 형식이에요: ${name}`,
     decodeFail: (name: string) => `파일을 읽지 못했어요: ${name}`,
     noVideoTrack: (name: string) => `영상 트랙을 찾을 수 없어요: ${name}`,
-    noImageDecoder:
-      "이 브라우저는 GIF 디코딩(ImageDecoder)을 지원하지 않아요. 최신 Chrome/Edge에서 열어 주세요.",
-    canvasFail: "canvas 2d 컨텍스트를 만들 수 없어요.",
+    noImageDecoder: "이 브라우저는 GIF 디코딩을 지원하지 않아요 — 최신 Chrome/Edge가 필요해요",
+    canvasFail: "canvas 2d 컨텍스트를 만들 수 없어요",
   },
 } as const;

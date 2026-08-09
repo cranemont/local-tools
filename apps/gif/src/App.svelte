@@ -21,7 +21,7 @@
   </main>
 
   <footer class="footer">
-    <span class="privacy">🔒 {t.privacyNote}</span>
+    <span class="privacy">{t.privacyNote}</span>
   </footer>
 </div>
 
