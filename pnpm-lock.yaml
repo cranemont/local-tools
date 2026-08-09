@@ -23,6 +23,9 @@ importers:
         specifier: ^6.1.200
         version: 6.1.200
     devDependencies:
+      '@local-tools/vite-plugin-self-extracting':
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin-self-extracting
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.2.0
         version: 7.2.0(svelte@5.56.7)(vite@8.1.5)
@@ -46,6 +49,12 @@ importers:
         version: 2.3.3(vite@8.1.5)
 
   packages/theme: {}
+
+  packages/vite-plugin-self-extracting:
+    devDependencies:
+      vite:
+        specifier: ^8.1.5
+        version: 8.1.5
 
 packages:
 

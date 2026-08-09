@@ -9,6 +9,7 @@ apps/         # 도구들 (첫 입주자: pdf)
   pdf/        # PDF — 병합·정리·변환·암호
 packages/
   theme/      # 공용 디자인 토큰 (라이트/다크)
+  vite-plugin-self-extracting/  # 자가해제형 빌드 후처리 플러그인
 ```
 
 새 도구는 `apps/<name>/`로 추가하고 `@local-tools/theme`를 재사용한다.

@@ -16,6 +16,7 @@
     "pdfjs-dist": "^6.1.200"
   },
   "devDependencies": {
+    "@local-tools/vite-plugin-self-extracting": "workspace:*",
     "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "@tsconfig/svelte": "^5.0.8",
     "svelte": "^5.56.7",
