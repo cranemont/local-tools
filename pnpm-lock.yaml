@@ -66,6 +66,37 @@ importers:
         specifier: ^2.3.3
         version: 2.3.3(vite@8.1.5)
 
+  apps/drop:
+    dependencies:
+      '@local-tools/theme':
+        specifier: workspace:*
+        version: link:../../packages/theme
+    devDependencies:
+      '@local-tools/vite-plugin-self-extracting':
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin-self-extracting
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.2.0
+        version: 7.2.0(svelte@5.56.7)(vite@8.1.5)
+      '@tsconfig/svelte':
+        specifier: ^5.0.8
+        version: 5.0.8
+      svelte:
+        specifier: ^5.56.7
+        version: 5.56.7
+      svelte-check:
+        specifier: ^4.7.3
+        version: 4.7.3(picomatch@4.0.5)(svelte@5.56.7)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^8.1.5
+        version: 8.1.5
+      vite-plugin-singlefile:
+        specifier: ^2.3.3
+        version: 2.3.3(vite@8.1.5)
+
   apps/gif:
     dependencies:
       '@local-tools/theme':
