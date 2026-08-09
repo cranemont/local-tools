@@ -108,26 +108,34 @@
         padding: 0 24px;
       }
 
-      header.wrap {
+      main.wrap {
+        flex: 1;
+        padding-bottom: 72px;
+      }
+      .hero {
+        padding: 72px 0 28px;
+        margin-bottom: 32px;
+        border-bottom: 1px solid var(--border);
+      }
+      .hero-top {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding-top: 28px;
+        gap: 16px;
       }
-      .brand {
+      h1 {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        font-weight: 600;
-        font-size: 15px;
-        letter-spacing: -0.01em;
-        color: inherit;
-        text-decoration: none;
+        gap: 11px;
+        margin: 0;
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
       }
-      .brand svg {
+      h1 svg {
         display: block;
       }
-      .brand .dot {
+      h1 .dot {
         fill: var(--accent);
       }
       .gh {
@@ -140,33 +148,35 @@
         color: var(--text);
         text-decoration: underline;
       }
-
-      main.wrap {
-        flex: 1;
-        padding-bottom: 72px;
+      .tagline {
+        margin: 14px 0 0;
+        font-size: 15px;
+        color: var(--muted);
       }
-      .hero {
-        margin: 76px 0 44px;
+      .facts {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 18px 0 0;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
       }
-      h1 {
-        margin: 0;
-        font-size: clamp(30px, 5.5vw, 44px);
-        font-weight: 700;
-        letter-spacing: -0.03em;
-        line-height: 1.18;
-      }
-      h1 .dot-end {
-        display: inline-block;
-        width: 0.24em;
-        height: 0.24em;
-        margin-left: 0.12em;
+      .led {
+        width: 7px;
+        height: 7px;
         border-radius: 50%;
         background: var(--accent);
+        animation: breathe 2.4s ease-in-out infinite;
       }
-      .hero p {
-        margin: 14px 0 0;
-        font-size: 15.5px;
-        color: var(--muted);
+      @keyframes breathe {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.45;
+        }
       }
 
       .tools {
@@ -226,20 +236,6 @@
         opacity: 0.85;
       }
 
-      footer.wrap {
-        padding-bottom: 28px;
-        font-size: 12.5px;
-        color: var(--muted);
-      }
-      footer a {
-        color: inherit;
-        text-decoration: none;
-      }
-      footer a:hover {
-        color: var(--text);
-        text-decoration: underline;
-      }
-
       @media (prefers-reduced-motion: reduce) {
         a.tool {
           transition: none;
@@ -247,25 +243,30 @@
         a.tool:hover {
           transform: none;
         }
+        .led {
+          animation: none;
+        }
       }
     </style>
   </head>
   <body>
-    <header class="wrap">
-      <a class="brand" href="./">
-        <svg width="19" height="19" viewBox="0 0 18 18" aria-hidden="true">
-          <rect x="1.6" y="1.6" width="14.8" height="14.8" rx="4.8" fill="none" stroke="currentColor" stroke-width="1.6" />
-          <circle class="dot" cx="9" cy="9" r="3.2" />
-        </svg>
-        local-tools
-      </a>
-      <a class="gh" href="https://github.com/cranemont/local-tools">GitHub</a>
-    </header>
-
     <main class="wrap">
       <section class="hero">
-        <h1>파일은 브라우저 밖으로 나가지 않아요<span class="dot-end" aria-hidden="true"></span></h1>
-        <p>설치 없이 브라우저에서 쓰는 PDF·GIF·동영상 도구</p>
+        <div class="hero-top">
+          <h1>
+            <svg width="30" height="30" viewBox="0 0 18 18" aria-hidden="true">
+              <rect x="1.6" y="1.6" width="14.8" height="14.8" rx="4.8" fill="none" stroke="currentColor" stroke-width="1.6" />
+              <circle class="dot" cx="9" cy="9" r="3.2" />
+            </svg>
+            local-tools
+          </h1>
+          <a class="gh" href="https://github.com/cranemont/local-tools">GitHub</a>
+        </div>
+        <p class="tagline">설치 없이 브라우저에서 쓰는 PDF·GIF·동영상 도구</p>
+        <p class="facts">
+          <span class="led" aria-hidden="true"></span>
+          업로드 없음 · 광고 없음 · 애널리틱스 없음
+        </p>
       </section>
 
       <nav class="tools" aria-label="도구">
@@ -301,9 +302,5 @@
         </a>
       </nav>
     </main>
-
-    <footer class="wrap">
-      <a href="https://github.com/cranemont/local-tools">github.com/cranemont/local-tools</a>
-    </footer>
   </body>
 </html>
