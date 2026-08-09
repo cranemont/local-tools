@@ -476,7 +476,9 @@
     align-items: center;
   }
   .codeinput {
-    flex: 0 1 220px;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 220px;
     padding: 12px 16px;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     font-size: 26px;
@@ -620,6 +622,7 @@
   }
   .textinput {
     flex: 1;
+    min-width: 0;
     padding: 8px 12px;
     font-size: 13px;
     color: var(--text);
