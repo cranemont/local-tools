@@ -15,6 +15,8 @@
     "preview:video": "pnpm --filter @local-tools/video preview",
     "dev:dev": "pnpm --filter @local-tools/dev dev",
     "preview:dev": "pnpm --filter @local-tools/dev preview",
+    "dev:image": "pnpm --filter @local-tools/image dev",
+    "preview:image": "pnpm --filter @local-tools/image preview",
     "build": "pnpm -r build",
     "check": "pnpm -r check"
   }
