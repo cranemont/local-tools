@@ -9,6 +9,8 @@
   "scripts": {
     "dev:pdf": "pnpm --filter @local-tools/pdf dev",
     "preview:pdf": "pnpm --filter @local-tools/pdf preview",
+    "dev:gif": "pnpm --filter @local-tools/gif dev",
+    "preview:gif": "pnpm --filter @local-tools/gif preview",
     "build": "pnpm -r build",
     "check": "pnpm -r check"
   }
