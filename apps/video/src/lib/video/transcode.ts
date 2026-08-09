@@ -6,20 +6,42 @@ import {
   BufferTarget,
   Conversion,
   ConversionCanceledError,
+  FlacOutputFormat,
   Input,
+  Mp3OutputFormat,
   Mp4OutputFormat,
+  OggOutputFormat,
   Output,
   Quality,
   QUALITY_HIGH,
   QUALITY_LOW,
   QUALITY_MEDIUM,
+  WavOutputFormat,
+  WebMOutputFormat,
   type ConversionVideoOptions,
+  type OutputFormat,
 } from "mediabunny";
 import { t } from "../i18n";
 import { VIDEO_FORMATS } from "./probe";
 
 export type CutMode = "exact" | "lossless";
 export type PresetId = "small" | "balanced" | "high";
+/** 출력 컨테이너. */
+export type ContainerId = "mp4" | "webm";
+
+/** 무손실(복사) 상태로 각 컨테이너에 담을 수 있는 비디오 코덱. */
+const CONTAINER_VIDEO_CODECS: Record<ContainerId, readonly string[]> = {
+  mp4: ["avc", "hevc", "vp9", "av1"],
+  webm: ["vp8", "vp9", "av1"],
+};
+
+/** 무손실 모드에서 이 코덱을 복사로 담을 수 있는지 (아니면 재인코딩됨). */
+export function losslessCompatible(
+  videoCodec: string | null,
+  container: ContainerId,
+): boolean {
+  return videoCodec !== null && CONTAINER_VIDEO_CODECS[container].includes(videoCodec);
+}
 
 const PRESET_QUALITY: Record<PresetId, Quality> = {
   small: QUALITY_LOW,
@@ -38,6 +60,9 @@ export interface TranscodeOptions {
   /** null이면 전체 구간. */
   trim: { start: number; end: number } | null;
   mode: CutMode;
+  container: ContainerId;
+  /** true면 오디오 트랙 제거. */
+  mute: boolean;
   preset: PresetId;
   /** 출력 세로 픽셀 (null = 원본 크기). 정확 컷에서만 적용. */
   height: number | null;
@@ -62,7 +87,10 @@ export interface TranscodeResult {
 }
 
 function exactVideoOptions(opts: TranscodeOptions): ConversionVideoOptions {
-  const video: ConversionVideoOptions = { forceTranscode: true, codec: "avc" };
+  const video: ConversionVideoOptions = {
+    forceTranscode: true,
+    codec: opts.container === "webm" ? "vp9" : "avc",
+  };
 
   if (opts.targetBytes) {
     const totalBps = (opts.targetBytes * 8) / Math.max(0.1, opts.clipDurationS);
@@ -95,21 +123,31 @@ export async function transcodeMp4(
   const input = new Input({ source: new BlobSource(file), formats: VIDEO_FORMATS });
   try {
     const output = new Output({
-      format: new Mp4OutputFormat(),
+      format:
+        opts.container === "webm" ? new WebMOutputFormat() : new Mp4OutputFormat(),
       target: new BufferTarget(),
     });
+    // 정확 모드 오디오는 컨테이너 표준 코덱을 명시한다(mp4→aac, webm→opus).
+    // 코덱이 이미 맞으면 복사되고, 다르면 재인코딩 — opus-in-mp4처럼 크롬에서만
+    // 재생되는 조합을 막는다. 무손실 모드는 복사 우선(호환성보다 원본 보존).
+    const audio = opts.mute
+      ? ({ discard: true } as const)
+      : opts.mode === "exact"
+        ? ({ codec: opts.container === "webm" ? "opus" : "aac" } as const)
+        : undefined;
     const conversion = await Conversion.init({
       input,
       output,
       tracks: "primary",
       trim: opts.trim ?? undefined,
-      // 무손실: 옵션 없음 = 가능하면 패킷 복사. 오디오는 두 모드 모두 복사 우선.
+      // 무손실: 옵션 없음 = 가능하면 패킷 복사.
       video: opts.mode === "exact" ? exactVideoOptions(opts) : {},
+      audio,
       showWarnings: false,
     });
-    const audioDropped = conversion.discardedTracks.some((d) =>
-      d.track.isAudioTrack(),
-    );
+    const audioDropped =
+      !opts.mute &&
+      conversion.discardedTracks.some((d) => d.track.isAudioTrack());
     if (!conversion.isValid) throw new Error(t.errors.encodeFail);
 
     conversion.onProgress = (p) => opts.onProgress?.(p);
@@ -123,7 +161,93 @@ export async function transcodeMp4(
 
     const buffer = output.target.buffer;
     if (!buffer) throw new Error(t.errors.encodeFail);
-    return { blob: new Blob([buffer], { type: "video/mp4" }), audioDropped };
+    const mime = opts.container === "webm" ? "video/webm" : "video/mp4";
+    return { blob: new Blob([buffer], { type: mime }), audioDropped };
+  } finally {
+    input.dispose();
+  }
+}
+
+// ── 소리 추출 — 비디오를 버리고 오디오 트랙을 (가능하면) 그대로 복사 ──
+
+interface AudioContainer {
+  makeFormat: () => OutputFormat;
+  ext: string;
+  mime: string;
+}
+
+/** 원본 오디오 코덱 → 재인코딩 없이 담을 수 있는 컨테이너. */
+const AUDIO_CONTAINERS: Record<string, AudioContainer> = {
+  aac: { makeFormat: () => new Mp4OutputFormat(), ext: "m4a", mime: "audio/mp4" },
+  opus: { makeFormat: () => new OggOutputFormat(), ext: "ogg", mime: "audio/ogg" },
+  vorbis: { makeFormat: () => new OggOutputFormat(), ext: "ogg", mime: "audio/ogg" },
+  mp3: { makeFormat: () => new Mp3OutputFormat(), ext: "mp3", mime: "audio/mpeg" },
+  flac: { makeFormat: () => new FlacOutputFormat(), ext: "flac", mime: "audio/flac" },
+};
+
+/** 그 외 코덱(pcm 등)의 폴백. wav는 무압축이지만 어떤 pcm이든 담긴다. */
+const AUDIO_FALLBACK: AudioContainer = {
+  makeFormat: () => new WavOutputFormat(),
+  ext: "wav",
+  mime: "audio/wav",
+};
+
+export interface ExtractAudioOptions {
+  /** null이면 전체 구간. */
+  trim: { start: number; end: number } | null;
+  audioCodec: string | null;
+  onProgress?: (progress: number) => void;
+  registerCancel?: (cancel: () => void) => void;
+}
+
+export interface ExtractAudioResult {
+  /** 취소되면 null. */
+  blob: Blob | null;
+  ext: string;
+}
+
+export async function extractAudio(
+  file: File,
+  opts: ExtractAudioOptions,
+): Promise<ExtractAudioResult> {
+  const container =
+    opts.audioCodec && opts.audioCodec.startsWith("pcm")
+      ? AUDIO_FALLBACK
+      : (AUDIO_CONTAINERS[opts.audioCodec ?? ""] ??
+        // 모르는 코덱은 m4a로 — 복사가 안 되면 Conversion이 aac로 재인코딩한다.
+        AUDIO_CONTAINERS.aac);
+  const input = new Input({ source: new BlobSource(file), formats: VIDEO_FORMATS });
+  try {
+    const output = new Output({
+      format: container.makeFormat(),
+      target: new BufferTarget(),
+    });
+    const conversion = await Conversion.init({
+      input,
+      output,
+      tracks: "primary",
+      trim: opts.trim ?? undefined,
+      video: { discard: true },
+      showWarnings: false,
+    });
+    if (!conversion.isValid) throw new Error(t.errors.encodeFail);
+
+    conversion.onProgress = (p) => opts.onProgress?.(p);
+    opts.registerCancel?.(() => void conversion.cancel());
+    try {
+      await conversion.execute();
+    } catch (err) {
+      if (err instanceof ConversionCanceledError)
+        return { blob: null, ext: container.ext };
+      throw err;
+    }
+
+    const buffer = output.target.buffer;
+    if (!buffer) throw new Error(t.errors.encodeFail);
+    return {
+      blob: new Blob([buffer], { type: container.mime }),
+      ext: container.ext,
+    };
   } finally {
     input.dispose();
   }

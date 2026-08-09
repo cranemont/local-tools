@@ -1,5 +1,5 @@
 # main 푸시마다 전체 앱을 빌드해 GitHub Pages로 배포한다.
-# 산출 구조: / (site/index.html 랜딩) · /pdf/ · /gif/ — 각각 자기완결 단일 HTML.
+# 산출 구조: / (site/index.html 랜딩) · /pdf/ · /gif/ · /video/ — 각각 자기완결 단일 HTML.
 name: deploy
 
 on:
@@ -31,10 +31,11 @@ jobs:
       - run: pnpm build
       - name: Assemble site
         run: |
-          mkdir -p _site/pdf _site/gif
+          mkdir -p _site/pdf _site/gif _site/video
           cp -R site/. _site/
           cp apps/pdf/dist/index.html _site/pdf/index.html
           cp apps/gif/dist/index.html _site/gif/index.html
+          cp apps/video/dist/index.html _site/video/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

@@ -2,7 +2,12 @@
   import Icon from "../Icon.svelte";
   import { fmtTime, t } from "../i18n";
   import { downloadBlob, formatBytes } from "../video/save";
-  import { transcodeMp4, type PresetId } from "../video/transcode";
+  import {
+    extractAudio,
+    losslessCompatible,
+    transcodeMp4,
+    type PresetId,
+  } from "../video/transcode";
   import {
     editor,
     MAX_TARGET_MB,
@@ -17,10 +22,24 @@
   };
 
   let filename = $state("video");
-  let result = $state<{ blob: Blob; revision: number; audioDropped: boolean } | null>(null);
+  let result = $state<{
+    blob: Blob;
+    revision: number;
+    audioDropped: boolean;
+    fmt: string;
+    ext: string;
+  } | null>(null);
   let status = $state("");
 
   const stale = $derived(result !== null && result.revision !== editor.revision);
+  const FORMAT_LABELS = { mp4: "MP4", webm: "WebM" } as const;
+  const fmtLabel = $derived(FORMAT_LABELS[editor.exportFormat]);
+  /** 무손실인데 원본 코덱을 선택한 형식에 복사로 못 담는 경우. */
+  const losslessRecode = $derived(
+    editor.cutMode === "lossless" &&
+      editor.meta !== null &&
+      !losslessCompatible(editor.meta.videoCodec, editor.exportFormat),
+  );
 
   /** 정확 컷에서 실제로 내보낼 크기 (프리뷰용). */
   const outDims = $derived.by(() => {
@@ -69,6 +88,8 @@
           ? { start: editor.trimStart, end: editor.trimEnd }
           : null,
         mode: editor.cutMode,
+        container: editor.exportFormat,
+        mute: editor.muteAudio,
         preset: editor.preset,
         height: exact ? editor.resHeight : null,
         targetBytes:
@@ -84,7 +105,13 @@
         registerCancel: (cancel) => (editor.cancelCurrent = cancel),
       });
       if (res.blob) {
-        result = { blob: res.blob, revision, audioDropped: res.audioDropped };
+        result = {
+          blob: res.blob,
+          revision,
+          audioDropped: res.audioDropped,
+          fmt: fmtLabel,
+          ext: editor.exportFormat,
+        };
       } else {
         status = t.panel.canceled;
       }
@@ -100,7 +127,41 @@
 
   function saveResult() {
     if (!result) return;
-    downloadBlob(result.blob, `${cleanName()}.mp4`);
+    downloadBlob(result.blob, `${cleanName()}.${result.ext}`);
+  }
+
+  // ── 소리만 저장 — 추출 즉시 다운로드 ──────────────
+  async function extract() {
+    if (!editor.file || !editor.meta || editor.busy) return;
+    editor.videoEl?.pause();
+    editor.error = "";
+    status = "";
+    editor.busy = true;
+    editor.progress = 0;
+    editor.busyMsg = t.panel.extracting;
+    try {
+      const res = await extractAudio(editor.file, {
+        trim: editor.isTrimmed
+          ? { start: editor.trimStart, end: editor.trimEnd }
+          : null,
+        audioCodec: editor.meta.audioCodec,
+        onProgress: (p) => (editor.progress = p),
+        registerCancel: (cancel) => (editor.cancelCurrent = cancel),
+      });
+      if (res.blob) {
+        downloadBlob(res.blob, `${cleanName()}.${res.ext}`);
+        status = t.panel.savedAudio(res.ext.toUpperCase(), formatBytes(res.blob.size));
+      } else {
+        status = t.panel.canceled;
+      }
+    } catch (err) {
+      editor.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      editor.busy = false;
+      editor.busyMsg = "";
+      editor.progress = null;
+      editor.cancelCurrent = null;
+    }
   }
 
   function onStartChange(e: Event) {
@@ -266,6 +327,37 @@
   <!-- 내보내기 -->
   <section class="sec">
     <h3>{t.panel.export}</h3>
+    <div class="chips" role="group" aria-label={t.panel.format}>
+      <button
+        type="button"
+        class="chip"
+        class:active={editor.exportFormat === "mp4"}
+        onclick={() => editor.setExportFormat("mp4")}
+      >
+        MP4
+      </button>
+      <button
+        type="button"
+        class="chip"
+        class:active={editor.exportFormat === "webm"}
+        onclick={() => editor.setExportFormat("webm")}
+      >
+        WebM
+      </button>
+    </div>
+    {#if losslessRecode}
+      <p class="info">{t.panel.losslessRecode}</p>
+    {/if}
+    {#if editor.meta?.hasAudio}
+      <label class="row checkrow">
+        <input
+          type="checkbox"
+          checked={editor.muteAudio}
+          onchange={(e) => editor.setMuteAudio((e.target as HTMLInputElement).checked)}
+        />
+        <span class="lbl">{t.panel.mute}</span>
+      </label>
+    {/if}
     <span class="namefield">
       <input
         class="fname"
@@ -274,7 +366,7 @@
         spellcheck="false"
         autocomplete="off"
       />
-      <span class="ext">.mp4</span>
+      <span class="ext">.{editor.exportFormat}</span>
     </span>
 
     <button
@@ -284,13 +376,13 @@
       disabled={editor.busy || !editor.file}
     >
       <Icon name="film" size={15} />
-      {result ? t.panel.reEncode : t.panel.encodeAction}
+      {result ? t.panel.reEncode : t.panel.encodeAction(fmtLabel)}
     </button>
 
     {#if result}
       <div class="result" class:stale>
         <p class="result-size">
-          {t.panel.resultReady("MP4", formatBytes(result.blob.size))}
+          {t.panel.resultReady(result.fmt, formatBytes(result.blob.size))}
         </p>
         {#if result.audioDropped}
           <p class="result-note">{t.panel.audioDropped}</p>
@@ -302,6 +394,17 @@
           <Icon name="download" size={15} /> {t.panel.download}
         </button>
       </div>
+    {/if}
+
+    {#if editor.meta?.hasAudio}
+      <button
+        type="button"
+        class="btn"
+        onclick={extract}
+        disabled={editor.busy || !editor.file}
+      >
+        <Icon name="audio" size={15} /> {t.panel.extractAudio}
+      </button>
     {/if}
 
     {#if status}

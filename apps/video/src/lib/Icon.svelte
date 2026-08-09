@@ -22,7 +22,8 @@
     | "reverse"
     | "scissors"
     | "film"
-    | "image";
+    | "image"
+    | "audio";
 
   let { name, size = 18 }: { name: IconName; size?: number } = $props();
 </script>
@@ -107,6 +108,9 @@
     <rect x="3" y="4" width="18" height="16" rx="2" />
     <circle cx="8.5" cy="9.5" r="1.5" />
     <path d="m21 16-5-5L5 20" />
+  {:else if name === "audio"}
+    <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+    <path d="M15.5 8.5a5 5 0 0 1 0 7" />
   {/if}
 </svg>
 

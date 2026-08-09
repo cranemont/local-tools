@@ -7,10 +7,10 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
     />
-    <title>local-tools — 브라우저에서만 동작하는 PDF·GIF 도구</title>
+    <title>local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상 도구</title>
     <meta
       name="description"
-      content="설치 없이 브라우저에서 쓰는 도구 모음 — PDF 병합·정리·이미지 변환·암호, GIF 프레임 편집·동영상 변환. 파일은 서버로 전송되지 않습니다."
+      content="설치 없이 브라우저에서 쓰는 도구 모음 — PDF 병합·정리·암호, GIF 프레임 편집, 동영상 자르기·압축·변환. 파일은 서버로 전송되지 않습니다."
     />
     <link rel="canonical" href="https://cranemont.github.io/local-tools/" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(0.978 0.003 240)" />
@@ -18,10 +18,10 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="local-tools" />
     <meta property="og:locale" content="ko_KR" />
-    <meta property="og:title" content="local-tools — 브라우저에서만 동작하는 PDF·GIF 도구" />
+    <meta property="og:title" content="local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상 도구" />
     <meta
       property="og:description"
-      content="설치 없이 브라우저에서 쓰는 PDF·GIF 도구. 파일은 서버로 전송되지 않습니다."
+      content="설치 없이 브라우저에서 쓰는 PDF·GIF·동영상 도구. 파일은 서버로 전송되지 않습니다."
     />
     <meta property="og:url" content="https://cranemont.github.io/local-tools/" />
     <meta property="og:image" content="https://cranemont.github.io/local-tools/og/home.png" />
@@ -49,6 +49,12 @@
             "name": "local-tools GIF",
             "url": "https://cranemont.github.io/local-tools/gif/",
             "description": "GIF 프레임 편집, 이미지·동영상을 GIF·WebP·MP4로 변환"
+          },
+          {
+            "@type": "WebApplication",
+            "name": "local-tools 동영상",
+            "url": "https://cranemont.github.io/local-tools/video/",
+            "description": "동영상 구간 자르기(트림)·용량 압축·MP4·WebM 변환·소리 추출"
           }
         ]
       }
@@ -156,6 +162,10 @@
         <a class="tool" href="./gif/">
           <strong>GIF</strong>
           <span>프레임&nbsp;편집 · 동영상&nbsp;변환&nbsp;· WebP·MP4</span>
+        </a>
+        <a class="tool" href="./video/">
+          <strong>동영상</strong>
+          <span>자르기 · 압축 · 변환&nbsp;· 소리&nbsp;추출</span>
         </a>
       </nav>
       <p class="note">파일은 브라우저 밖으로 나가지 않아요</p>

@@ -6,7 +6,7 @@ import {
   probeVideo,
   type VideoMeta,
 } from "../video/probe";
-import type { CutMode, PresetId } from "../video/transcode";
+import type { ContainerId, CutMode, PresetId } from "../video/transcode";
 
 /** 트림 구간의 최소 길이(초). */
 export const MIN_RANGE_S = 0.1;
@@ -32,6 +32,8 @@ export class EditorState {
   rangePlaying = $state(false);
 
   cutMode = $state<CutMode>("exact");
+  exportFormat = $state<ContainerId>("mp4");
+  muteAudio = $state(false);
   preset = $state<PresetId>("balanced");
   /** 출력 세로 픽셀 (null = 원본). */
   resHeight = $state<number | null>(null);
@@ -147,6 +149,18 @@ export class EditorState {
     if (mode === this.cutMode) return;
     this.cutMode = mode;
     if (mode === "lossless") this.setTrimStart(this.trimStart); // 기존 시작점도 스냅
+    this.touch();
+  }
+
+  setExportFormat(f: ContainerId): void {
+    if (f === this.exportFormat) return;
+    this.exportFormat = f;
+    this.touch();
+  }
+
+  setMuteAudio(on: boolean): void {
+    if (on === this.muteAudio) return;
+    this.muteAudio = on;
     this.touch();
   }
 
