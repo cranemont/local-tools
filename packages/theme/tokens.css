@@ -1,5 +1,16 @@
 /* @local-tools/theme — 공용 디자인 토큰 (OKLCH, 크로미엄 전용)
- * 브랜드: 차분한 azure(hue 240). 중성색은 같은 색조를 아주 옅게 머금는다.
+ * 브랜드: 차분한 azure(hue 240).
+ *
+ * 중성색 규칙: 회색 계열은 같은 색조를 아주 옅게 머금는다(채도 0.003~0.016).
+ *   예외 하나 — `--surface`는 의도적으로 순백(oklch(1 0 0))이다. 카드가 페이지 배경
+ *   위에서 확실히 떠 보여야 하고, L=1에서는 채도를 넣어도 sRGB에서 흰색으로 클리핑된다.
+ *
+ * 대비 규약(라이트/다크 모두 실측 검증):
+ *   --accent        면(버튼 배경)에만. 그 위 글자는 --accent-contrast.
+ *   --accent-ink    글자/아이콘용 accent. --surface·--surface-2·--accent-weak 위 4.5:1 이상.
+ *                   틴트 위에 accent 색 글자를 올릴 때는 반드시 이쪽을 쓸 것.
+ *   --border        장식용 헤어라인(대비 요구 없음).
+ *   --border-strong 컨트롤 경계(입력·버튼 등 식별에 필요한 선). 표면 대비 3:1 이상.
  * 라이트/다크 대응(시스템 + data-theme 토글). */
 
 :root {
@@ -11,19 +22,73 @@
   --brand-200: oklch(0.892 0.05 240);
   --brand-300: oklch(0.815 0.088 240);
   --brand-400: oklch(0.716 0.125 240);
-  --brand-500: oklch(0.62 0.158 240); /* primary */
-  --brand-600: oklch(0.545 0.155 242);
-  --brand-700: oklch(0.474 0.138 243);
+  --brand-500: oklch(0.62 0.158 240);
+  --brand-600: oklch(0.545 0.155 242); /* primary — 흰 글자 4.77:1 */
+  --brand-700: oklch(0.474 0.138 243); /* accent 글자용 — 흰 배경 6.49:1 */
   --brand-800: oklch(0.408 0.112 243);
   --brand-900: oklch(0.348 0.088 243);
 
-  /* ── 형태/여백/타이포 ──────────────────────────────────── */
+  /* ── 형태 ──────────────────────────────────────────────── */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* ── 타이포 ────────────────────────────────────────────── */
   --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont,
     "Apple SD Gothic Neo", "Segoe UI", Roboto, "Helvetica Neue", Arial,
     "Noto Sans KR", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+
+  /* 기존 실사용 값(16종)에서 뽑은 단계. 값은 보존하고 이웃만 병합했다:
+   * 10.5→11, 14→14.5 (각 +0.5px), 16→17 (+1px, cron 표시 1곳). 나머지는 그대로. */
+  --text-2xs: 11px;
+  --text-xs: 11.5px;
+  --text-sm: 12px;
+  --text-md: 12.5px;
+  --text-base: 13px;
+  --text-lg: 13.5px;
+  --text-xl: 14.5px;
+  --text-2xl: 15px;
+  --text-3xl: 17px;
+  --text-4xl: 20px;
+  --text-5xl: 22px;
+  --text-6xl: 26px;
+  --text-display: 44px;
+
+  /* ── 간격 (4pt) ────────────────────────────────────────── */
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs: 6px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+  --space-4xl: 40px;
+  --space-5xl: 48px;
+
+  /* ── 모션 (오버슈트 금지, 브라우저 기본 ease 금지) ───────── */
+  --dur-fast: 90ms;
+  --dur-short: 120ms;
+  --dur-mid: 180ms;
+  --dur-spin: 800ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.64, 0, 0.78, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ── 레이어 ────────────────────────────────────────────── */
+  --z-raised: 5;
+  --z-sticky: 10;
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+
+  /* ── 최소 터치 타깃 ────────────────────────────────────── */
+  --tap-min: 44px;
+
   --shadow-1: 0 1px 2px oklch(0 0 0 / 0.05), 0 2px 6px oklch(0 0 0 / 0.05);
   --shadow-2: 0 12px 32px oklch(0 0 0 / 0.14);
 
@@ -31,15 +96,35 @@
   --bg: oklch(0.978 0.003 240);
   --surface: oklch(1 0 0);
   --surface-2: oklch(0.958 0.005 240);
+  --surface-raised: oklch(1 0 0); /* 융기면 — 라이트에선 표면보다 밝다 */
   --text: oklch(0.235 0.015 250);
   --text-muted: oklch(0.51 0.022 248);
   --border: oklch(0.917 0.008 240);
-  --accent: var(--brand-500);
-  --accent-hover: var(--brand-600);
+  --border-strong: oklch(0.64 0.012 240);
+  --accent: var(--brand-600);
+  --accent-hover: var(--brand-700);
+  --accent-ink: var(--brand-700);
   --accent-contrast: oklch(1 0 0);
-  --accent-weak: oklch(0.62 0.158 240 / 0.09);
-  --danger: oklch(0.585 0.2 27);
-  --focus: var(--brand-500);
+  --accent-weak: oklch(0.545 0.155 242 / 0.1);
+  --danger: oklch(0.54 0.2 27);
+  --success: oklch(0.52 0.14 150);
+  --focus: var(--brand-600);
+
+  /* ── 범주형 팔레트 ────────────────────────────────────────
+   * 계열이 다른 것들을 나란히 놓을 때 쓴다(지도·차트의 갈래 색).
+   * 브랜드색과 같은 규약: `--cat-N`은 면·선, 글자는 `--cat-N-ink`.
+   * cat-1은 브랜드에 얹어 두어 테마 전환을 저절로 따라간다.
+   * 라이트/다크 모두 표면 대비 실측 — ink ≥ 6.1:1, 면 ≥ 3.9:1, 전부 sRGB 가멋 안. */
+  --cat-1: var(--accent);
+  --cat-1-ink: var(--accent-ink);
+  --cat-2: oklch(0.52 0.105 165);
+  --cat-2-ink: oklch(0.45 0.09 165);
+  --cat-3: oklch(0.53 0.17 300);
+  --cat-3-ink: oklch(0.462 0.155 300);
+  --cat-4: oklch(0.58 0.13 55);
+  --cat-4-ink: oklch(0.478 0.115 52);
+  --cat-5: oklch(0.55 0.028 250);
+  --cat-5-ink: oklch(0.45 0.025 250);
 }
 
 /* 시스템 다크 */
@@ -48,15 +133,30 @@
     --bg: oklch(0.172 0.008 250);
     --surface: oklch(0.212 0.01 250);
     --surface-2: oklch(0.252 0.012 250);
+    /* 다크에선 그림자가 안 보인다 — 융기는 밝기로 표현한다 */
+    --surface-raised: oklch(0.295 0.013 250);
     --text: oklch(0.93 0.006 240);
     --text-muted: oklch(0.685 0.018 245);
     --border: oklch(0.31 0.014 248);
+    --border-strong: oklch(0.52 0.016 248);
     --accent: var(--brand-400);
     --accent-hover: var(--brand-300);
+    --accent-ink: var(--brand-300);
     --accent-contrast: oklch(0.165 0.02 250);
-    --accent-weak: oklch(0.716 0.125 240 / 0.14);
+    --accent-weak: oklch(0.716 0.125 240 / 0.16);
     --danger: oklch(0.687 0.165 22);
+    --success: oklch(0.75 0.14 150);
     --focus: var(--brand-400);
+    --cat-2: oklch(0.72 0.105 165);
+    --cat-2-ink: oklch(0.82 0.085 165);
+    --cat-3: oklch(0.73 0.13 300);
+    --cat-3-ink: oklch(0.83 0.085 300);
+    --cat-4: oklch(0.76 0.13 62);
+    --cat-4-ink: oklch(0.85 0.105 65);
+    --cat-5: oklch(0.66 0.022 250);
+    --cat-5-ink: oklch(0.78 0.018 250);
+    --shadow-1: 0 1px 2px oklch(0 0 0 / 0.3), 0 2px 6px oklch(0 0 0 / 0.24);
+    --shadow-2: 0 12px 32px oklch(0 0 0 / 0.45);
   }
 }
 
@@ -65,28 +165,56 @@
   --bg: oklch(0.978 0.003 240);
   --surface: oklch(1 0 0);
   --surface-2: oklch(0.958 0.005 240);
+  --surface-raised: oklch(1 0 0);
   --text: oklch(0.235 0.015 250);
   --text-muted: oklch(0.51 0.022 248);
   --border: oklch(0.917 0.008 240);
-  --accent: var(--brand-500);
-  --accent-hover: var(--brand-600);
+  --border-strong: oklch(0.64 0.012 240);
+  --accent: var(--brand-600);
+  --accent-hover: var(--brand-700);
+  --accent-ink: var(--brand-700);
   --accent-contrast: oklch(1 0 0);
-  --accent-weak: oklch(0.62 0.158 240 / 0.09);
-  --danger: oklch(0.585 0.2 27);
-  --focus: var(--brand-500);
+  --accent-weak: oklch(0.545 0.155 242 / 0.1);
+  --danger: oklch(0.54 0.2 27);
+  --success: oklch(0.52 0.14 150);
+  --focus: var(--brand-600);
+  --cat-2: oklch(0.52 0.105 165);
+  --cat-2-ink: oklch(0.45 0.09 165);
+  --cat-3: oklch(0.53 0.17 300);
+  --cat-3-ink: oklch(0.462 0.155 300);
+  --cat-4: oklch(0.58 0.13 55);
+  --cat-4-ink: oklch(0.478 0.115 52);
+  --cat-5: oklch(0.55 0.028 250);
+  --cat-5-ink: oklch(0.45 0.025 250);
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.05), 0 2px 6px oklch(0 0 0 / 0.05);
+  --shadow-2: 0 12px 32px oklch(0 0 0 / 0.14);
 }
 
 :root[data-theme="dark"] {
   --bg: oklch(0.172 0.008 250);
   --surface: oklch(0.212 0.01 250);
   --surface-2: oklch(0.252 0.012 250);
+  --surface-raised: oklch(0.295 0.013 250);
   --text: oklch(0.93 0.006 240);
   --text-muted: oklch(0.685 0.018 245);
   --border: oklch(0.31 0.014 248);
+  --border-strong: oklch(0.52 0.016 248);
   --accent: var(--brand-400);
   --accent-hover: var(--brand-300);
+  --accent-ink: var(--brand-300);
   --accent-contrast: oklch(0.165 0.02 250);
-  --accent-weak: oklch(0.716 0.125 240 / 0.14);
+  --accent-weak: oklch(0.716 0.125 240 / 0.16);
   --danger: oklch(0.687 0.165 22);
+  --success: oklch(0.75 0.14 150);
   --focus: var(--brand-400);
+  --cat-2: oklch(0.72 0.105 165);
+  --cat-2-ink: oklch(0.82 0.085 165);
+  --cat-3: oklch(0.73 0.13 300);
+  --cat-3-ink: oklch(0.83 0.085 300);
+  --cat-4: oklch(0.76 0.13 62);
+  --cat-4-ink: oklch(0.85 0.105 65);
+  --cat-5: oklch(0.66 0.022 250);
+  --cat-5-ink: oklch(0.78 0.018 250);
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.3), 0 2px 6px oklch(0 0 0 / 0.24);
+  --shadow-2: 0 12px 32px oklch(0 0 0 / 0.45);
 }

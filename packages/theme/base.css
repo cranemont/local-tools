@@ -1,0 +1,253 @@
+/* @local-tools/theme — 공용 리셋 + UI 프리미티브
+ *
+ * tokens.css 다음에, 앱별 app.css 앞에 로드한다(main.ts 순서가 그 계약이다).
+ * 여기 있는 건 6개 앱이 전부 똑같이 쓰던 것들이다. 앱에서 다시 정의하지 말 것 —
+ * 변형이 필요하면 modifier 클래스를 쓰거나, 앱 스코프에서 토큰만 덮어쓴다.
+ *
+ * 버튼은 8상태를 전부 갖춘다: default · hover · focus-visible · active ·
+ * disabled · (로딩=.spinner) · danger · selected(.active).
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  /* 어떤 뷰포트에서도 가로 스크롤을 만들지 않는다.
+   * hidden이 아니라 clip — clip은 자손의 position: sticky/fixed를 보존한다. */
+  overflow-x: clip;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#app {
+  height: 100%;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* 포커스 링은 즉시 나타나고, 대상 요소의 형태를 바꾸지 않는다.
+ * (예전엔 여기서 border-radius를 지정해 알약·체크박스가 포커스 시 모양이 변했다.) */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ── 버튼 ─────────────────────────────────────────────────────
+ * 기본형은 아웃라인(표면 + 헤어라인). 변형: .primary .ghost .danger
+ * .active(선택됨) .small .large .pill */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.2;
+  transition:
+    background-color var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    color var(--dur-short) var(--ease-out);
+}
+
+/* hover 신호는 하나만 — 테두리 색. 배경까지 같이 바꾸면 신호가 겹친다. */
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+/* 눌림 — 6개 앱에 통째로 빠져 있던 상태 */
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+.btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.btn.ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: transparent;
+  color: var(--text);
+}
+.btn.ghost.danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+/* 선택됨 — 툴 패널의 토글 버튼들이 쓰던 상태 */
+.btn.active {
+  background: var(--accent-weak);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent-ink);
+}
+
+.btn.small {
+  padding: var(--space-xs) var(--space-md);
+  font-size: var(--text-md);
+}
+
+.btn.large {
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.btn.pill {
+  border-radius: var(--radius-pill);
+  padding-inline: var(--space-xl);
+}
+.btn.pill.small {
+  padding-inline: var(--space-md);
+}
+
+/* 아이콘 전용 정사각 버튼 */
+.icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  transition:
+    color var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out);
+}
+.icon-btn:hover:not(:disabled) {
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+.icon-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 손가락 입력에선 최소 타깃을 보장한다(마우스 UI 밀도는 그대로 둔다).
+ * 작은 아이콘 버튼은 실제 크기를 키우면 카드 오버레이가 넘치므로,
+ * 레이아웃은 그대로 두고 히트 영역만 의사요소로 넓힌다. */
+@media (pointer: coarse) {
+  .btn {
+    min-height: var(--tap-min);
+  }
+  .icon-btn::after {
+    content: "";
+    position: absolute;
+    inset: 50% auto auto 50%;
+    translate: -50% -50%;
+    width: var(--tap-min);
+    height: var(--tap-min);
+  }
+}
+
+/* ── 로딩 표시 ───────────────────────────────────────────────
+ * 6개 앱이 각자 복제하던 @keyframes spin을 하나로. */
+
+.spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  animation: lt-spin var(--dur-spin) linear infinite;
+}
+
+@keyframes lt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes lt-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ── 모션 축소 ───────────────────────────────────────────────
+ * 공간 이동은 전부 끄되, 로딩 표시는 계속 "진행 중"을 알려야 하므로
+ * 회전 대신 비공간(투명도) 맥동으로 바꾼다. */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .btn:active:not(:disabled),
+  .icon-btn:active:not(:disabled) {
+    transform: none;
+  }
+
+  .spinner {
+    animation: lt-pulse 1.4s var(--ease-in-out) infinite !important;
+    animation-duration: 1.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* ── 접근성 유틸 ─────────────────────────────────────────────
+ * 6개 앱의 ThemeToggle이 각자 복제하던 것. */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

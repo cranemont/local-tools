@@ -129,7 +129,7 @@
   }
   .slash {
     font-family: var(--font-mono);
-    font-size: 15px;
+    font-size: var(--text-2xl);
     color: var(--text-muted);
   }
   .pattern {
@@ -138,7 +138,7 @@
     max-width: 520px;
     padding: 8px 12px;
     font-family: var(--font-mono);
-    font-size: 13.5px;
+    font-size: var(--text-lg);
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -154,9 +154,9 @@
   }
   .count {
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--text-md);
     font-weight: 600;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .count.none {
     color: var(--text-muted);
@@ -167,7 +167,7 @@
     flex: 1;
     min-height: 240px;
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-all;
@@ -195,7 +195,7 @@
     align-items: center;
     gap: 10px;
     padding: 6px 10px;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -208,7 +208,7 @@
   .whole {
     font-family: var(--font-mono);
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
     padding: 1px 6px;
     border-radius: 4px;
   }
@@ -219,7 +219,7 @@
   }
   .grp em {
     font-style: normal;
-    font-size: 11px;
+    font-size: var(--text-2xs);
     color: var(--text-muted);
   }
   .grp code {

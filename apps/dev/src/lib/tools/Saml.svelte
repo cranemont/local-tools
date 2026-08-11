@@ -310,7 +310,7 @@
   .binding {
     padding: 2px 9px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -325,11 +325,11 @@
     display: grid;
     grid-template-columns: 130px 1fr;
     gap: 10px;
-    font-size: 13px;
+    font-size: var(--text-base);
   }
   .k {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
     color: var(--text-muted);
     padding-top: 1px;
@@ -342,10 +342,10 @@
     margin-left: 6px;
     padding: 1px 8px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .chip.bad {
     background: color-mix(in oklab, var(--danger) 10%, transparent);
@@ -358,7 +358,7 @@
     width: 100%;
     margin-top: 4px;
     border-collapse: collapse;
-    font-size: 12.5px;
+    font-size: var(--text-md);
   }
   td {
     padding: 4px 10px 4px 0;
@@ -367,7 +367,7 @@
   }
   td code {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--text-sm);
     word-break: break-all;
   }
   .av {
@@ -381,7 +381,7 @@
     padding: 12px;
     max-height: 420px;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--text-md);
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-all;

@@ -5,6 +5,15 @@
 
   const SCALE_OPTIONS = [100, 75, 50, 25];
 
+  let dialogEl = $state<HTMLDialogElement | null>(null);
+
+  // showModal()이 포커스 트랩·배경 inert·Escape 닫기를 전부 켠다
+  $effect(() => {
+    const el = dialogEl;
+    if (!el || el.open) return;
+    el.showModal();
+  });
+
   let fps = $state(12);
   let scalePct = $state(100);
   let startS = $state(0);
@@ -55,8 +64,14 @@
 
 {#if editor.videoDialog}
   {@const d = editor.videoDialog}
-  <div class="backdrop">
-    <div class="modal" role="dialog" aria-modal="true" aria-label={t.video.dialogTitle}>
+  <!-- 네이티브 dialog — Escape·포커스 트랩·배경 inert를 브라우저가 처리한다 -->
+  <dialog
+    bind:this={dialogEl}
+    class="backdrop"
+    aria-label={t.video.dialogTitle}
+    onclose={() => editor.cancelVideoImport()}
+  >
+    <div class="modal">
       <h2>{t.video.dialogTitle}</h2>
       <p class="meta" title={d.file.name}>{d.file.name}</p>
       <p class="meta">{t.video.meta(d.width, d.height, String(round1(d.durationS)))}</p>
@@ -122,7 +137,7 @@
       <p class="est">{t.video.estFrames(estFrames)}</p>
 
       <div class="actions">
-        <button type="button" class="btn" onclick={() => editor.cancelVideoImport()}>
+        <button type="button" class="btn" onclick={() => dialogEl?.close()}>
           {t.video.cancel}
         </button>
         <button type="button" class="btn primary" onclick={confirm} disabled={invalid}>
@@ -130,17 +145,32 @@
         </button>
       </div>
     </div>
-  </div>
+  </dialog>
 {/if}
 
 <style>
   .backdrop {
+    /* dialog 기본값(border/padding/그림자)을 걷어내고 전체 화면 중앙 정렬로 */
     position: fixed;
     inset: 0;
-    z-index: 40;
+    z-index: var(--z-overlay);
+    max-width: none;
+    max-height: none;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+  .backdrop:not([open]) {
+    display: none;
+  }
+  .backdrop::backdrop {
     background: color-mix(in srgb, var(--bg) 60%, transparent);
     backdrop-filter: blur(2px);
   }
@@ -158,12 +188,12 @@
   }
   h2 {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--text-2xl);
     font-weight: 700;
   }
   .meta {
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -181,12 +211,12 @@
     gap: 6px;
   }
   .lbl {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     flex: 1;
   }
   .sub {
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--text-muted);
   }
   .chips {
@@ -200,7 +230,7 @@
     border-radius: 999px;
     background: var(--surface);
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
@@ -211,7 +241,7 @@
   .chip.active {
     background: var(--accent-weak);
     border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .num {
     width: 76px;
@@ -220,7 +250,7 @@
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text);
-    font-size: 13px;
+    font-size: var(--text-base);
     font-family: inherit;
     font-variant-numeric: tabular-nums;
   }
@@ -230,8 +260,8 @@
   }
   .est {
     margin: 0;
-    font-size: 12.5px;
-    color: var(--accent);
+    font-size: var(--text-md);
+    color: var(--accent-ink);
     font-weight: 600;
   }
   .actions {
@@ -239,33 +269,5 @@
     justify-content: flex-end;
     gap: 6px;
     margin-top: 4px;
-  }
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .btn:hover:not(:disabled) {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  }
-  .btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-  .btn.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-contrast);
-  }
-  .btn.primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
   }
 </style>

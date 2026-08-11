@@ -131,20 +131,20 @@
           ></textarea>
           <div class="actions">
             <button
-              class="btn"
+              class="btn primary pill"
               disabled={!answerInput.trim() || drop.busy}
               onclick={() => drop.acceptAnswer(answerInput)}
             >
               {t.host.connect}
             </button>
-            <button class="btn ghost" onclick={() => (scanFor = "answer")}>
+            <button class="btn pill" onclick={() => (scanFor = "answer")}>
               {t.scan.open}
             </button>
           </div>
         </div>
       </details>
       <div class="actions">
-        <button class="btn ghost" onclick={restart}>{t.common.back}</button>
+        <button class="btn pill" onclick={restart}>{t.common.back}</button>
       </div>
       {#if drop.error}<p class="error">{drop.error}</p>{/if}
     </div>
@@ -175,7 +175,7 @@
               autocomplete="one-time-code"
             />
             <button
-              class="btn"
+              class="btn primary pill"
               type="submit"
               disabled={codeInput.replace(/\D/g, "").length !== 6 || drop.busy}
             >
@@ -195,20 +195,20 @@
             ></textarea>
             <div class="actions">
               <button
-                class="btn"
+                class="btn primary pill"
                 disabled={!offerInput.trim() || drop.busy}
                 onclick={() => drop.makeAnswer(offerInput)}
               >
                 {t.guest.makeAnswer}
               </button>
-              <button class="btn ghost" onclick={() => (scanFor = "offer")}>
+              <button class="btn pill" onclick={() => (scanFor = "offer")}>
                 {t.scan.open}
               </button>
             </div>
           </div>
         </details>
         <div class="actions">
-          <button class="btn ghost" onclick={restart}>{t.common.back}</button>
+          <button class="btn pill" onclick={restart}>{t.common.back}</button>
         </div>
       {:else}
         <div class="step">
@@ -232,37 +232,39 @@
   {:else if drop.stage === "failed" || drop.stage === "closed"}
     <div class="center">
       <p class="error">{drop.stage === "failed" ? t.conn.failed : t.conn.closed}</p>
-      <button class="btn" onclick={restart}>{t.common.back}</button>
+      <button class="btn primary pill" onclick={restart}>{t.common.back}</button>
     </div>
   {:else}
     <div class="session">
       <div class="session-head">
         <span class="chip">{t.conn.connected}</span>
-        <button class="btn ghost small" onclick={restart}>{t.common.back}</button>
+        <button class="btn pill small" onclick={restart}>{t.common.back}</button>
       </div>
 
-      <button
-        class="dropzone"
-        class:over={dragOver}
-        onclick={() => fileInput?.click()}
-        ondragover={(e) => {
-          e.preventDefault();
-          dragOver = true;
-        }}
-        ondragleave={() => (dragOver = false)}
-        ondrop={onDrop}
-      >
-        <Icon name="file" size={22} />
-        <span>{t.transfer.drop}</span>
-      </button>
-      <input
-        class="hidden-input"
-        type="file"
-        multiple
-        bind:this={fileInput}
-        onchange={(e) => pickFiles(e.currentTarget.files)}
-      />
-      <p class="limit">{t.transfer.limitNote}</p>
+      <div class="dropgroup">
+        <button
+          class="dropzone"
+          class:over={dragOver}
+          onclick={() => fileInput?.click()}
+          ondragover={(e) => {
+            e.preventDefault();
+            dragOver = true;
+          }}
+          ondragleave={() => (dragOver = false)}
+          ondrop={onDrop}
+        >
+          <Icon name="file" size={22} />
+          <span>{t.transfer.drop}</span>
+        </button>
+        <input
+          class="hidden-input"
+          type="file"
+          multiple
+          bind:this={fileInput}
+          onchange={(e) => pickFiles(e.currentTarget.files)}
+        />
+        <p class="limit">{t.transfer.limitNote}</p>
+      </div>
 
       <form
         class="textrow"
@@ -280,7 +282,7 @@
           spellcheck="false"
           autocomplete="off"
         />
-        <button class="btn" type="submit" disabled={!textInput.trim()}>
+        <button class="btn primary pill" type="submit" disabled={!textInput.trim()}>
           {t.transfer.textSend}
         </button>
       </form>
@@ -312,7 +314,7 @@
                   {/if}
                 </div>
                 {#if item.dir === "in" && item.blob}
-                  <button class="save" title={t.transfer.save} onclick={() => drop.saveItem(item)}>
+                  <button class="save icon-btn" title={t.transfer.save} onclick={() => drop.saveItem(item)}>
                     <Icon name="download" size={16} />
                   </button>
                 {/if}
@@ -338,18 +340,19 @@
   }
 
   .intro {
+    /* 중앙 정렬은 제목·부제까지만. 카드와 주석은 왼쪽 기준으로 축을 깬다. */
     text-align: center;
-    margin-top: 8vh;
+    margin-top: var(--space-3xl);
   }
   h1 {
     margin: 0 0 8px;
-    font-size: 22px;
+    font-size: var(--text-5xl);
     letter-spacing: -0.02em;
   }
   .sub {
     margin: 0 0 28px;
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: var(--text-xl);
   }
   .roles {
     display: grid;
@@ -364,9 +367,10 @@
   .role {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    padding: 26px 18px;
+    align-items: flex-start;
+    text-align: left;
+    gap: var(--space-sm);
+    padding: var(--space-2xl) var(--space-xl);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
@@ -374,29 +378,30 @@
   }
   .role:hover {
     border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .role-title {
-    font-size: 15px;
+    font-size: var(--text-2xl);
     font-weight: 700;
   }
   .role-desc {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
   .note {
-    margin: 24px auto 0;
+    margin: var(--space-2xl) 0 0;
     max-width: 520px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--text-muted);
     line-height: 1.6;
+    text-align: left;
   }
 
   .panel {
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    margin-top: 4vh;
+    gap: var(--space-xl);
+    margin-top: var(--space-3xl);
   }
   .step {
     display: flex;
@@ -410,7 +415,7 @@
     gap: 10px;
   }
   .step-label {
-    font-size: 13px;
+    font-size: var(--text-base);
     font-weight: 600;
   }
   .code {
@@ -418,8 +423,8 @@
     min-height: 110px;
     resize: vertical;
     padding: 12px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
     line-height: 1.5;
     word-break: break-all;
     color: var(--text);
@@ -436,11 +441,11 @@
   .bigcode {
     align-self: center;
     padding: 18px 34px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 44px;
+    font-family: var(--font-mono);
+    font-size: var(--text-display);
     font-weight: 700;
     letter-spacing: 0.08em;
-    color: var(--accent);
+    color: var(--accent-ink);
     background: var(--accent-weak);
     border-radius: var(--radius-md);
   }
@@ -452,7 +457,7 @@
   }
   .alt summary {
     padding: 12px 0;
-    font-size: 13px;
+    font-size: var(--text-base);
     font-weight: 600;
     color: var(--text-muted);
     cursor: pointer;
@@ -480,8 +485,8 @@
     min-width: 0;
     max-width: 220px;
     padding: 12px 16px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 26px;
+    font-family: var(--font-mono);
+    font-size: var(--text-6xl);
     font-weight: 700;
     letter-spacing: 0.1em;
     text-align: center;
@@ -521,50 +526,21 @@
     display: flex;
     gap: 10px;
   }
-  .btn {
-    padding: 8px 18px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--accent-contrast);
-    background: var(--accent);
-    border: 0;
-    border-radius: 999px;
-  }
-  .btn:hover:enabled {
-    background: var(--accent-hover);
-  }
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-  .btn.ghost {
-    color: var(--text-muted);
-    background: transparent;
-    border: 1px solid var(--border);
-  }
-  .btn.ghost:hover {
-    color: var(--text);
-    background: var(--surface-2);
-  }
-  .btn.small {
-    padding: 5px 12px;
-    font-size: 12px;
-  }
   .waiting {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--text-base);
     color: var(--text-muted);
   }
   .error {
     margin: 0;
     padding: 8px 12px;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--danger);
     background: color-mix(in oklab, var(--danger) 8%, transparent);
     border-radius: var(--radius-sm);
   }
   .center {
-    margin-top: 14vh;
+    margin-top: var(--space-3xl);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -575,7 +551,7 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    margin-top: 12px;
+    margin-top: var(--space-3xl);
   }
   .session-head {
     display: flex;
@@ -585,10 +561,10 @@
   .chip {
     padding: 3px 11px;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .dropzone {
     display: flex;
@@ -597,22 +573,27 @@
     gap: 8px;
     padding: 34px 18px;
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--text-base);
     background: var(--surface);
-    border: 1.5px dashed var(--border);
+    border: 1px dashed var(--border-strong);
     border-radius: var(--radius-md);
   }
   .dropzone:hover,
   .dropzone.over {
-    color: var(--accent);
+    color: var(--accent-ink);
     border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   }
   .hidden-input {
     display: none;
   }
+  .dropgroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
   .limit {
-    margin: -6px 0 0;
-    font-size: 11.5px;
+    margin: 0;
+    font-size: var(--text-xs);
     color: var(--text-muted);
     text-align: center;
   }
@@ -624,7 +605,7 @@
     flex: 1;
     min-width: 0;
     padding: 8px 12px;
-    font-size: 13px;
+    font-size: var(--text-base);
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -635,7 +616,7 @@
     opacity: 0.7;
   }
   .body {
-    font-size: 13.5px;
+    font-size: var(--text-lg);
     word-break: break-all;
     white-space: pre-wrap;
   }
@@ -661,7 +642,7 @@
     flex: none;
     padding: 2px 9px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -670,7 +651,7 @@
   .dir.in {
     background: var(--accent-weak);
     border-color: transparent;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .meta {
     flex: 1;
@@ -680,15 +661,16 @@
     gap: 3px;
   }
   .name {
-    font-size: 13.5px;
+    font-size: var(--text-lg);
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .size {
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
   }
   progress {
     width: 100%;
@@ -697,18 +679,5 @@
   }
   .save {
     flex: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    color: var(--text-muted);
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-  }
-  .save:hover {
-    color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   }
 </style>

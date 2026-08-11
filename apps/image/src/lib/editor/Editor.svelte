@@ -106,7 +106,7 @@
     flex-direction: column;
     gap: 12px;
     border-radius: var(--radius-lg);
-    transition: box-shadow 0.12s ease;
+    transition: box-shadow var(--dur-short) var(--ease-out);
   }
   .editor.dragover {
     box-shadow: 0 0 0 3px var(--accent) inset;
@@ -139,17 +139,17 @@
     align-items: center;
     justify-content: center;
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .dz-title {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--text-2xl);
     font-weight: 600;
     color: var(--text);
   }
   .dz-sub {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   /* 툴바 */
@@ -163,44 +163,11 @@
     flex: 1;
   }
   .count {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     margin-right: 4px;
   }
 
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .btn:hover:not(:disabled) {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  }
-  .btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-  .btn.ghost {
-    background: transparent;
-    border-color: transparent;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-  .btn.ghost:hover:not(:disabled) {
-    background: var(--surface-2);
-    color: var(--text);
-    border-color: transparent;
-  }
-  .btn.ghost.danger:hover:not(:disabled) {
-    color: var(--danger);
-  }
 
   /* 작업 공간 */
   .workspace {
@@ -222,7 +189,7 @@
     border-radius: var(--radius-sm);
     background: color-mix(in srgb, var(--danger) 12%, transparent);
     color: var(--danger);
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   /* 로딩 오버레이 */
@@ -238,20 +205,18 @@
     backdrop-filter: blur(2px);
     border-radius: var(--radius-lg);
     color: var(--text-muted);
-    font-size: 13.5px;
-    z-index: 5;
+    font-size: var(--text-lg);
+    z-index: var(--z-raised);
   }
-  .spinner {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
+
+  /* 264px 패널 + 미리보기가 한 줄에 들어가지 않는 폭에서는 세로로 쌓는다.
+   * (이 규칙이 없을 때 375px에서 stage에 약 61px만 남았다) */
+  @media (max-width: 760px) {
+    .workspace {
+      flex-direction: column;
+    }
+    .stage {
+      min-height: 46dvh;
     }
   }
 </style>

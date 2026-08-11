@@ -96,23 +96,8 @@
     gap: 10px;
   }
   .time {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
-  }
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 12.5px;
-    font-weight: 600;
-  }
-  .btn:hover {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   }
 </style>

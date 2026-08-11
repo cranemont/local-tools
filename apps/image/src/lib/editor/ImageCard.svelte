@@ -64,8 +64,8 @@
     justify-content: center;
     overflow: hidden;
     transition:
-      border-color 0.12s ease,
-      box-shadow 0.12s ease;
+      border-color var(--dur-short) var(--ease-out),
+      box-shadow var(--dur-short) var(--ease-out);
   }
   .thumb:hover {
     border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
@@ -100,11 +100,19 @@
     display: flex;
     gap: 3px;
     opacity: 0;
-    transition: opacity 0.12s ease;
+    transition: opacity var(--dur-short) var(--ease-out);
   }
   .card:hover .controls,
   .card:focus-within .controls {
     opacity: 1;
+  }
+
+  /* 터치 기기엔 hover도 focus-within도 없다 — 컨트롤을 항상 노출한다.
+   * 이게 없으면 폰·태블릿에서 회전·삭제에 아예 닿을 수 없다. */
+  @media (hover: none) {
+    .controls {
+      opacity: 1;
+    }
   }
   .controls button {
     width: 22px;
@@ -129,7 +137,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     color: var(--text-muted);
     padding: 0 2px;
   }
@@ -141,7 +149,7 @@
     white-space: nowrap;
   }
   .card.current .name {
-    color: var(--accent);
+    color: var(--accent-ink);
     font-weight: 700;
   }
   .size {

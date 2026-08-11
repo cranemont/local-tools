@@ -51,39 +51,56 @@
 <style>
   .toggle {
     display: inline-flex;
-    padding: 2px;
-    gap: 2px;
+    padding: var(--space-3xs);
+    gap: var(--space-3xs);
     background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
   }
+  /* 주의: `.opt:active`는 눌림, `.opt.active`는 선택됨 — 다른 상태다. */
   .opt {
+    position: relative;
     border: 0;
     background: transparent;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     width: 30px;
     height: 26px;
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1;
     color: var(--text-muted);
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    transition:
+      color var(--dur-short) var(--ease-out),
+      background-color var(--dur-short) var(--ease-out);
   }
+  .opt:hover {
+    color: var(--text);
+  }
+  .opt:active {
+    transform: translateY(1px);
+  }
+  /* 선택 표시의 융기는 밝기로 낸다 — 다크에서 그림자는 보이지 않는다. */
   .opt.active {
-    background: var(--surface);
+    background: var(--surface-raised);
     box-shadow: var(--shadow-1);
     color: var(--text);
   }
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
+  /* 히트 영역만 넓힌다 — 실제 크기를 키우면 좁은 상단바가 넘친다 */
+  @media (pointer: coarse) {
+    .opt::after {
+      content: "";
+      position: absolute;
+      inset: 50% auto auto 50%;
+      translate: -50% -50%;
+      width: var(--tap-min);
+      height: var(--tap-min);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .opt:active {
+      transform: none;
+    }
   }
 </style>

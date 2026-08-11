@@ -142,7 +142,7 @@
     gap: 4px;
     padding: 36px 20px;
     font-family: inherit;
-    font-size: 13.5px;
+    font-size: var(--text-lg);
     color: var(--text-muted);
     background: var(--surface);
     border: 1.5px dashed var(--border);
@@ -159,7 +159,7 @@
     color: var(--text);
   }
   .meta {
-    font-size: 12.5px;
+    font-size: var(--text-md);
   }
   .rows {
     display: flex;
@@ -178,13 +178,13 @@
     border-radius: var(--radius-md);
   }
   .algo {
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 700;
     color: var(--text-muted);
   }
   .value {
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--text-md);
     word-break: break-all;
   }
 </style>

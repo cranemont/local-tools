@@ -5,8 +5,16 @@
 
   let video = $state<HTMLVideoElement | null>(null);
   let error = $state<string | null>(null);
+  let dialogEl = $state<HTMLDialogElement | null>(null);
 
   const supported = "BarcodeDetector" in globalThis;
+
+  // showModal()이 포커스 트랩·배경 inert·Escape 닫기를 전부 켠다
+  $effect(() => {
+    const el = dialogEl;
+    if (!el || el.open) return;
+    el.showModal();
+  });
 
   $effect(() => {
     if (!video || !supported) {
@@ -52,7 +60,8 @@
   });
 </script>
 
-<div class="overlay" role="dialog" aria-label={t.scan.title}>
+<!-- 네이티브 dialog — Escape·포커스 트랩·배경 inert를 브라우저가 처리한다 -->
+<dialog bind:this={dialogEl} class="overlay" aria-label={t.scan.title} onclose={onclose}>
   <div class="box">
     {#if error}
       <p class="error">{error}</p>
@@ -61,18 +70,33 @@
       <video bind:this={video} playsinline muted></video>
       <p class="hint">{t.scan.hint}</p>
     {/if}
-    <button class="btn" onclick={onclose}>{t.scan.cancel}</button>
+    <button class="btn pill" onclick={() => dialogEl?.close()}>{t.scan.cancel}</button>
   </div>
-</div>
+</dialog>
 
 <style>
   .overlay {
+    /* dialog 기본값(border/padding/그림자)을 걷어내고 전체 화면 중앙 정렬로 */
     position: fixed;
     inset: 0;
-    z-index: 50;
+    z-index: var(--z-modal);
+    max-width: none;
+    max-height: none;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+  .overlay:not([open]) {
+    display: none;
+  }
+  .overlay::backdrop {
     background: color-mix(in oklab, var(--bg) 60%, transparent);
     backdrop-filter: blur(4px);
   }
@@ -97,28 +121,15 @@
   }
   .hint {
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
   .error {
     margin: 0;
     padding: 8px 12px;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--danger);
     background: color-mix(in oklab, var(--danger) 8%, transparent);
     border-radius: var(--radius-sm);
-  }
-  .btn {
-    padding: 7px 16px;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text-muted);
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-  }
-  .btn:hover {
-    color: var(--text);
-    background: var(--surface-2);
   }
 </style>

@@ -235,13 +235,13 @@
   }
   .name {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     font-weight: 600;
   }
   .value {
     margin-top: 6px;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     word-break: break-all;
     max-height: 60px;
@@ -256,7 +256,7 @@
   .attr {
     padding: 2px 8px;
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: var(--text-xs);
     background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: 999px;
@@ -268,20 +268,20 @@
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 8px;
-    font-size: 12.5px;
+    font-size: var(--text-md);
   }
   .k {
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
     color: var(--text-muted);
   }
   .chip {
     padding: 2px 8px;
     border-radius: 999px;
-    font-size: 11.5px;
+    font-size: var(--text-xs);
     font-weight: 600;
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .chip.bad {
     background: color-mix(in oklab, var(--danger) 10%, transparent);
@@ -293,7 +293,7 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
   .issues li.bad {
@@ -301,13 +301,13 @@
   }
   .muted {
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
   table {
     width: 100%;
     margin-top: 8px;
     border-collapse: collapse;
-    font-size: 12.5px;
+    font-size: var(--text-md);
   }
   td {
     padding: 4px 10px 4px 0;
@@ -316,7 +316,7 @@
   }
   .pv {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--text-sm);
     word-break: break-all;
   }
   .num {

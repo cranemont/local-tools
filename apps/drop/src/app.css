@@ -1,37 +1,8 @@
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  height: 100%;
-}
+/* 드롭 전용 — 리셋·프리미티브는 @local-tools/theme/base.css 에 있다.
+ * 여기엔 이 앱에만 필요한 규칙만 둔다. */
 
 body {
-  margin: 0;
-  font-family: var(--font-sans);
-  background: var(--bg);
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
   /* 한국어 안내문이 단어 중간에서 꺾이지 않게 — 코드·URL 영역은 각자 break-all로 오버라이드 */
   word-break: keep-all;
   overflow-wrap: break-word;
-}
-
-#app {
-  height: 100%;
-}
-
-button {
-  font-family: inherit;
-  cursor: pointer;
-}
-
-:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }

@@ -53,7 +53,7 @@
     border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: var(--z-sticky);
   }
 
   .brand {
@@ -61,7 +61,7 @@
     align-items: center;
     gap: 8px;
     font-weight: 600;
-    font-size: 14.5px;
+    font-size: var(--text-xl);
     letter-spacing: -0.01em;
     color: inherit;
     text-decoration: none;
@@ -71,14 +71,20 @@
     color: var(--text);
   }
   a.brand:hover .logo {
-    color: var(--accent);
+    color: var(--accent-ink);
+  }
+  /* 워드마크는 하이픈에서 꺾이지 않는다 — 배지가 넓은 앱(VIDEO)에서 320px일 때
+   * "local-" / "tools" 두 줄로 갈라졌다. */
+  .brand-name {
+    white-space: nowrap;
   }
   .app-name {
+    flex: none;
     padding: 2px 8px;
     border-radius: 999px;
     background: var(--accent-weak);
-    color: var(--accent);
-    font-size: 11.5px;
+    color: var(--accent-ink);
+    font-size: var(--text-xs);
     font-weight: 600;
   }
 
@@ -100,7 +106,7 @@
     border-top: 1px solid var(--border);
     background: var(--surface);
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--text-sm);
     text-align: center;
   }
 </style>

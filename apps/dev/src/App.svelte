@@ -148,7 +148,7 @@
     border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: var(--z-sticky);
   }
 
   .brand {
@@ -156,7 +156,7 @@
     align-items: center;
     gap: 8px;
     font-weight: 600;
-    font-size: 14.5px;
+    font-size: var(--text-xl);
     letter-spacing: -0.01em;
     color: inherit;
     text-decoration: none;
@@ -166,14 +166,20 @@
     color: var(--text);
   }
   a.brand:hover .logo {
-    color: var(--accent);
+    color: var(--accent-ink);
+  }
+  /* 워드마크는 하이픈에서 꺾이지 않는다 — 배지가 넓은 앱(VIDEO)에서 320px일 때
+   * "local-" / "tools" 두 줄로 갈라졌다. */
+  .brand-name {
+    white-space: nowrap;
   }
   .app-name {
+    flex: none;
     padding: 2px 8px;
     border-radius: 999px;
     background: var(--accent-weak);
-    color: var(--accent);
-    font-size: 11.5px;
+    color: var(--accent-ink);
+    font-size: var(--text-xs);
     font-weight: 600;
   }
 
@@ -217,7 +223,7 @@
     border: 0;
     background: transparent;
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--text-base);
     color: var(--text);
     outline: none;
   }
@@ -233,7 +239,7 @@
 
   .group {
     margin: 10px 6px 4px;
-    font-size: 11px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.04em;
     color: var(--text-muted);
@@ -251,7 +257,7 @@
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-muted);
-    font-size: 13.5px;
+    font-size: var(--text-lg);
     font-weight: 600;
     text-align: left;
   }
@@ -261,12 +267,12 @@
   }
   .item.active {
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
 
   .empty {
     margin: 10px 6px;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
 
@@ -283,12 +289,12 @@
   }
   .tool-head h1 {
     margin: 0;
-    font-size: 17px;
+    font-size: var(--text-3xl);
     letter-spacing: -0.01em;
   }
   .tool-head p {
     margin: 3px 0 0;
-    font-size: 13px;
+    font-size: var(--text-base);
     color: var(--text-muted);
   }
 
@@ -297,7 +303,7 @@
     border-top: 1px solid var(--border);
     background: var(--surface);
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--text-sm);
     text-align: center;
   }
 

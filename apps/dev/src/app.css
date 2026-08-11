@@ -1,90 +1,63 @@
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  background: var(--bg);
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-#app {
-  height: 100%;
-}
-
-button {
-  font-family: inherit;
-  cursor: pointer;
-}
-
-:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
-
-:root {
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-}
-
-/* ── 도구 공용 프리미티브 (컴포넌트마다 반복하지 않도록 전역) ── */
+/* 개발자 유틸 전용 — 리셋·버튼·스피너는 @local-tools/theme/base.css 에 있다.
+ * 여기엔 도구 16종이 공유하는 폼 프리미티브(.t-*)만 둔다. */
 
 .t-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-md);
 }
 
 .t-label {
-  font-size: 12.5px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-muted);
 }
 
 .t-chiprow {
   display: inline-flex;
-  gap: 4px;
-  padding: 2px;
+  gap: var(--space-2xs);
+  padding: var(--space-3xs);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .t-chip {
   border: 0;
   background: transparent;
-  border-radius: 999px;
-  padding: 5px 12px;
-  font-size: 12.5px;
+  border-radius: var(--radius-pill);
+  padding: 5px var(--space-md);
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-muted);
+  transition:
+    color var(--dur-short) var(--ease-out),
+    background-color var(--dur-short) var(--ease-out);
 }
-.t-chip:hover {
+.t-chip:hover:not(:disabled) {
   color: var(--text);
 }
+.t-chip:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.t-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .t-chip.active {
-  background: var(--surface);
+  /* 융기는 밝기로 — 다크에서 그림자는 보이지 않는다 */
+  background: var(--surface-raised);
   box-shadow: var(--shadow-1);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .t-checkrow {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
+  gap: var(--space-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
@@ -97,32 +70,32 @@ button {
 
 .t-select {
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  padding: 5px 8px;
+  padding: 5px var(--space-sm);
 }
 
 .t-panes {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-md);
   min-height: 0;
   flex: 1;
 }
 @media (max-width: 900px) {
   .t-panes {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 .t-pane {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-xs);
   min-height: 0;
   min-width: 0;
 }
@@ -130,7 +103,7 @@ button {
 .t-pane-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-sm);
   min-height: 26px;
 }
 .t-pane-head .t-label {
@@ -142,13 +115,13 @@ button {
   flex: 1;
   min-height: 240px;
   resize: vertical;
-  padding: 12px;
+  padding: var(--space-md);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.55;
   color: var(--text);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   tab-size: 2;
 }
@@ -161,10 +134,11 @@ button {
 }
 
 .t-error {
+  /* 에러 문구가 생겼다 사라져도 레이아웃이 밀리지 않게 자리를 잡아둔다 */
   margin: 10px 0 0;
-  padding: 8px 12px;
+  padding: var(--space-sm) var(--space-md);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-md);
   white-space: pre-wrap;
   color: var(--danger);
   background: color-mix(in oklab, var(--danger) 8%, transparent);
@@ -173,6 +147,6 @@ button {
 
 .t-note {
   margin: 10px 0 0;
-  font-size: 12.5px;
+  font-size: var(--text-md);
   color: var(--text-muted);
 }

@@ -70,12 +70,12 @@
   }
   .num {
     font-family: var(--font-mono);
-    font-size: 20px;
+    font-size: var(--text-4xl);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
   .label {
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--text-muted);
   }
   .main {

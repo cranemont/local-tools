@@ -276,7 +276,7 @@
     background: color-mix(in srgb, var(--bg) 85%, transparent);
     border: 1px solid var(--border);
     color: var(--text-muted);
-    font-size: 12.5px;
+    font-size: var(--text-md);
     pointer-events: none;
     white-space: nowrap;
   }
@@ -319,7 +319,7 @@
   .counter {
     min-width: 64px;
     text-align: center;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }

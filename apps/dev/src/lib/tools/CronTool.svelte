@@ -73,7 +73,7 @@
     flex: 0 1 260px;
     padding: 8px 12px;
     font-family: var(--font-mono);
-    font-size: 14px;
+    font-size: var(--text-xl);
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -88,7 +88,7 @@
   }
   .desc {
     margin: 6px 0 18px;
-    font-size: 16px;
+    font-size: var(--text-3xl);
     font-weight: 600;
     letter-spacing: -0.01em;
   }
@@ -109,11 +109,11 @@
   }
   .row code {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     font-variant-numeric: tabular-nums;
   }
   .muted {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
 </style>

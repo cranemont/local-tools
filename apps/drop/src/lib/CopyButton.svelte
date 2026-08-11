@@ -27,7 +27,7 @@
     align-items: center;
     gap: 5px;
     padding: 4px 10px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
     color: var(--text-muted);
     background: var(--surface);
@@ -43,7 +43,7 @@
     cursor: default;
   }
   .copy.copied {
-    color: var(--accent);
+    color: var(--accent-ink);
     border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   }
 </style>

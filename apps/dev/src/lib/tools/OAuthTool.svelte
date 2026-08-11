@@ -167,7 +167,7 @@
       {/each}
     </div>
     <div class="actions">
-      <button class="btn" onclick={generate}>{t.oauth.generate}</button>
+      <button class="btn primary pill" onclick={generate}>{t.oauth.generate}</button>
       <span class="t-note note">{t.oauth.pkceNote}</span>
     </div>
   {/if}
@@ -188,10 +188,10 @@
   .kind {
     padding: 3px 10px;
     border-radius: 999px;
-    font-size: 11.5px;
+    font-size: var(--text-xs);
     font-weight: 600;
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .params {
     display: flex;
@@ -213,7 +213,7 @@
   }
   .pkey code {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     font-weight: 600;
   }
   .pkey :global(button) {
@@ -222,7 +222,7 @@
   .frag {
     padding: 1px 7px;
     border-radius: 999px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -231,7 +231,7 @@
   .pval {
     margin-top: 4px;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--text-md);
     word-break: break-all;
     max-height: 72px;
     overflow: auto;
@@ -245,14 +245,14 @@
   .scope {
     padding: 2px 8px;
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: var(--text-xs);
     background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: 999px;
   }
   .pdesc {
     margin-top: 4px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--text-muted);
   }
   .issues {
@@ -261,7 +261,7 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
   .issues li.bad {
@@ -289,7 +289,7 @@
   .gen code {
     flex: 1;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--text-md);
     word-break: break-all;
   }
   .actions {
@@ -297,18 +297,6 @@
     align-items: center;
     gap: 12px;
     margin-top: 16px;
-  }
-  .btn {
-    padding: 7px 14px;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--accent-contrast);
-    background: var(--accent);
-    border: 0;
-    border-radius: 999px;
-  }
-  .btn:hover {
-    background: var(--accent-hover);
   }
   .note {
     margin: 0;

@@ -179,7 +179,7 @@
         />
       </label>
 
-      <button type="button" class="btn primary run" onclick={run} disabled={busy}>
+      <button type="button" class="btn primary large run" onclick={run} disabled={busy}>
         <Icon name="lock" size={15} />
         {mode === "encrypt" ? t.pw.runSet : t.pw.runRemove}
       </button>
@@ -209,7 +209,7 @@
     align-items: flex-start;
     justify-content: center;
     border-radius: var(--radius-lg);
-    transition: box-shadow 0.12s ease;
+    transition: box-shadow var(--dur-short) var(--ease-out);
     overflow: auto;
   }
   .tool.dragover {
@@ -239,7 +239,7 @@
     background: transparent;
     border-radius: 999px;
     padding: 7px 20px;
-    font-size: 13px;
+    font-size: var(--text-base);
     font-weight: 600;
     color: var(--text-muted);
   }
@@ -275,17 +275,17 @@
     align-items: center;
     justify-content: center;
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .dz-title {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--text-2xl);
     font-weight: 600;
     color: var(--text);
   }
   .dz-sub {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   .filechip {
@@ -297,7 +297,7 @@
     border-radius: var(--radius-md);
     background: var(--surface);
     color: var(--text);
-    font-size: 13.5px;
+    font-size: var(--text-lg);
   }
   .fname {
     flex: 1;
@@ -308,8 +308,8 @@
   .link {
     border: 0;
     background: transparent;
-    color: var(--accent);
-    font-size: 12.5px;
+    color: var(--accent-ink);
+    font-size: var(--text-md);
     font-weight: 600;
   }
 
@@ -319,7 +319,7 @@
     gap: 6px;
   }
   .flabel {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     font-weight: 600;
   }
@@ -329,7 +329,7 @@
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text);
-    font-size: 14px;
+    font-size: var(--text-xl);
     font-family: inherit;
   }
   .field input:focus {
@@ -337,37 +337,11 @@
     outline-offset: 1px;
   }
 
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 10px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 14px;
-    font-weight: 700;
-  }
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .btn.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-contrast);
-  }
-  .btn.primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-  }
 
   .ok {
     margin: 0;
-    font-size: 13px;
-    color: var(--accent);
+    font-size: var(--text-base);
+    color: var(--accent-ink);
   }
   .error {
     margin: 0;
@@ -375,11 +349,11 @@
     border-radius: var(--radius-sm);
     background: color-mix(in srgb, var(--danger) 12%, transparent);
     color: var(--danger);
-    font-size: 13px;
+    font-size: var(--text-base);
   }
   .note {
     margin: 8px 0 0;
-    font-size: 12px;
+    font-size: var(--text-sm);
     line-height: 1.6;
     color: var(--text-muted);
   }
@@ -396,21 +370,8 @@
     backdrop-filter: blur(2px);
     border-radius: var(--radius-lg);
     color: var(--text-muted);
-    font-size: 13.5px;
+    font-size: var(--text-lg);
     text-align: center;
     padding: 20px;
-  }
-  .spinner {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 </style>

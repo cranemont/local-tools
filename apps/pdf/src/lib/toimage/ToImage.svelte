@@ -261,7 +261,7 @@
     flex-direction: column;
     gap: 14px;
     border-radius: var(--radius-lg);
-    transition: box-shadow 0.12s ease;
+    transition: box-shadow var(--dur-short) var(--ease-out);
   }
   .tool.dragover {
     box-shadow: 0 0 0 3px var(--accent) inset;
@@ -293,17 +293,17 @@
     align-items: center;
     justify-content: center;
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .dz-title {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--text-2xl);
     font-weight: 600;
     color: var(--text);
   }
   .dz-sub {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   .toolbar {
@@ -322,16 +322,16 @@
     flex: 1;
   }
   .qlabel {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
   .status {
-    font-size: 12.5px;
-    color: var(--accent);
+    font-size: var(--text-md);
+    color: var(--accent-ink);
     margin-right: 4px;
   }
   .count {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     margin-right: 4px;
   }
@@ -351,7 +351,7 @@
     border: 0;
     background: transparent;
     color: var(--text);
-    font-size: 13px;
+    font-size: var(--text-base);
     padding: 7px 8px;
     width: 110px;
     font-family: inherit;
@@ -360,7 +360,7 @@
     outline: none;
   }
   .ext {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
 
@@ -377,7 +377,7 @@
     background: transparent;
     border-radius: 999px;
     padding: 5px 12px;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     font-weight: 600;
     color: var(--text-muted);
   }
@@ -387,47 +387,6 @@
     color: var(--text);
   }
 
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .btn:hover:not(:disabled) {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  }
-  .btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-  .btn.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-contrast);
-  }
-  .btn.primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-  }
-  .btn.ghost {
-    background: transparent;
-    border-color: transparent;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-  .btn.ghost:hover {
-    background: var(--surface-2);
-    color: var(--text);
-  }
-  .btn.ghost.danger:hover {
-    color: var(--danger);
-  }
 
   .grid {
     flex: 1;
@@ -468,7 +427,7 @@
   }
   .label {
     flex: 1;
-    font-size: 11.5px;
+    font-size: var(--text-xs);
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -487,7 +446,7 @@
     justify-content: center;
   }
   .dl:hover {
-    color: var(--accent);
+    color: var(--accent-ink);
     border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   }
 
@@ -501,7 +460,7 @@
     border-radius: var(--radius-sm);
     background: color-mix(in srgb, var(--danger) 12%, transparent);
     color: var(--danger);
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   .overlay {
@@ -516,19 +475,6 @@
     backdrop-filter: blur(2px);
     border-radius: var(--radius-lg);
     color: var(--text-muted);
-    font-size: 13.5px;
-  }
-  .spinner {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    font-size: var(--text-lg);
   }
 </style>

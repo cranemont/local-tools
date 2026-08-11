@@ -55,9 +55,9 @@
   }
   .counts {
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--text-md);
     font-weight: 600;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .counts.same {
     color: var(--text-muted);
@@ -66,7 +66,7 @@
     margin: 12px 0 0;
     padding: 12px;
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-all;
@@ -77,7 +77,7 @@
     max-height: 50vh;
   }
   .add {
-    background: oklch(0.62 0.15 150 / 0.16);
+    background: color-mix(in oklab, var(--success) 16%, transparent);
   }
   .del {
     background: color-mix(in oklab, var(--danger) 14%, transparent);

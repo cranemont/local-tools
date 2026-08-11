@@ -148,7 +148,7 @@
           spellcheck="false"
           autocomplete="off"
         />
-        <button class="btn" onclick={verify} disabled={!secret}>{t.jwt.verify}</button>
+        <button class="btn primary pill" onclick={verify} disabled={!secret}>{t.jwt.verify}</button>
         {#if verified === "ok"}<span class="status">{t.jwt.verifyOk}</span>{/if}
         {#if verified === "fail"}<span class="status bad">{t.jwt.verifyFail}</span>{/if}
         <span class="muted note">{t.jwt.secretNote}</span>
@@ -177,7 +177,7 @@
     flex: 1;
     min-height: 160px;
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-all;
@@ -196,11 +196,11 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 13px;
+    font-size: var(--text-base);
   }
   .key {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
     padding: 2px 7px;
     background: var(--surface-2);
@@ -209,15 +209,15 @@
   }
   .muted {
     color: var(--text-muted);
-    font-size: 12.5px;
+    font-size: var(--text-md);
   }
   .status {
     padding: 2px 8px;
     border-radius: 999px;
-    font-size: 11.5px;
+    font-size: var(--text-xs);
     font-weight: 600;
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .status.bad {
     background: color-mix(in oklab, var(--danger) 10%, transparent);
@@ -234,26 +234,10 @@
     flex: 0 1 280px;
     padding: 7px 10px;
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-  }
-  .btn {
-    padding: 7px 14px;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--accent-contrast);
-    background: var(--accent);
-    border: 0;
-    border-radius: 999px;
-  }
-  .btn:hover:enabled {
-    background: var(--accent-hover);
-  }
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
 </style>

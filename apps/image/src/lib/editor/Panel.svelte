@@ -414,7 +414,7 @@
   }
   .sec h3 {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -432,7 +432,7 @@
 
   .info {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
@@ -448,7 +448,7 @@
     border-radius: 999px;
     background: var(--surface);
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
   }
   .chip:hover {
@@ -458,11 +458,11 @@
   .chip.active {
     background: var(--accent-weak);
     border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
 
   .lbl {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     flex: 1;
   }
@@ -478,7 +478,7 @@
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text);
-    font-size: 13px;
+    font-size: var(--text-base);
     font-family: inherit;
     font-variant-numeric: tabular-nums;
   }
@@ -487,55 +487,6 @@
     border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   }
 
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .btn:hover:not(:disabled) {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  }
-  .btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-  .btn.small {
-    padding: 6px 10px;
-    font-size: 12.5px;
-  }
-  .btn.ghost {
-    background: transparent;
-    border-color: transparent;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-  .btn.ghost:hover:not(:disabled) {
-    background: var(--surface-2);
-    color: var(--text);
-    border-color: transparent;
-  }
-  .btn.active {
-    background: var(--accent-weak);
-    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-    color: var(--accent);
-  }
-  .btn.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-contrast);
-  }
-  .btn.primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-  }
 
   .namefield {
     display: inline-flex;
@@ -552,7 +503,7 @@
     border: 0;
     background: transparent;
     color: var(--text);
-    font-size: 13px;
+    font-size: var(--text-base);
     padding: 7px 8px;
     flex: 1;
     min-width: 0;
@@ -562,13 +513,13 @@
     outline: none;
   }
   .ext {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
 
   .status {
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
 
@@ -581,7 +532,7 @@
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 4px 10px;
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
   .kv dt {
     color: var(--text-muted);
@@ -598,5 +549,12 @@
   }
   .checkrow input {
     accent-color: var(--accent);
+  }
+
+  @media (max-width: 760px) {
+    .panel {
+      width: auto;
+      overflow-y: visible;
+    }
   }
 </style>

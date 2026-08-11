@@ -113,7 +113,7 @@
     align-items: center;
     gap: 5px;
     padding: 5px 12px;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     font-weight: 600;
     color: var(--accent-contrast);
     background: var(--accent);

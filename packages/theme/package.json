@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./tokens.css": "./tokens.css"
+    "./tokens.css": "./tokens.css",
+    "./base.css": "./base.css"
   },
   "files": [
-    "tokens.css"
+    "tokens.css",
+    "base.css"
   ]
 }

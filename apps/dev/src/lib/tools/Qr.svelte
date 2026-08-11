@@ -286,7 +286,7 @@
   .fin {
     padding: 8px 11px;
     font-family: inherit;
-    font-size: 13.5px;
+    font-size: var(--text-lg);
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -325,7 +325,7 @@
     align-items: center;
     gap: 5px;
     padding: 5px 11px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
     color: var(--text-muted);
     background: var(--surface);
@@ -337,7 +337,7 @@
     background: var(--surface-2);
   }
   .act.done {
-    color: var(--accent);
+    color: var(--accent-ink);
     border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   }
   .drop {
@@ -347,7 +347,7 @@
     gap: 4px;
     padding: 36px 20px;
     font-family: inherit;
-    font-size: 13.5px;
+    font-size: var(--text-lg);
     color: var(--text-muted);
     background: var(--surface);
     border: 1.5px dashed var(--border);
@@ -369,7 +369,7 @@
     margin: 0;
     padding: 12px;
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     white-space: pre-wrap;
     word-break: break-all;
     background: var(--surface-2);

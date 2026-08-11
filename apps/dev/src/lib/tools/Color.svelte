@@ -83,7 +83,7 @@
     flex: 0 1 380px;
     padding: 9px 12px;
     font-family: var(--font-mono);
-    font-size: 13.5px;
+    font-size: var(--text-lg);
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -117,13 +117,13 @@
     border-radius: var(--radius-md);
   }
   .label {
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 700;
     color: var(--text-muted);
   }
   .value {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     word-break: break-all;
   }
 </style>

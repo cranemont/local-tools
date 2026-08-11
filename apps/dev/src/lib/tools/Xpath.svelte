@@ -163,7 +163,7 @@
     flex: 1;
     padding: 8px 12px;
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -191,7 +191,7 @@
   .single {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     white-space: pre-wrap;
     word-break: break-all;
   }
@@ -205,14 +205,14 @@
     display: block;
     margin-bottom: 3px;
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: var(--text-xs);
     font-weight: 600;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .ntext {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--text-md);
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-all;

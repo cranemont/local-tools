@@ -124,7 +124,7 @@
     align-items: center;
     gap: 5px;
     padding: 5px 11px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
     color: var(--text-muted);
     background: var(--surface);

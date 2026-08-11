@@ -97,7 +97,7 @@
     max-width: 460px;
     padding: 9px 12px;
     font-family: var(--font-mono);
-    font-size: 13.5px;
+    font-size: var(--text-lg);
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -124,13 +124,13 @@
     border-radius: var(--radius-md);
   }
   .label {
-    font-size: 12.5px;
+    font-size: var(--text-md);
     font-weight: 600;
     color: var(--text-muted);
   }
   .value {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--text-base);
     font-variant-numeric: tabular-nums;
     word-break: break-all;
   }

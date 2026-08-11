@@ -330,7 +330,7 @@
     background: color-mix(in srgb, var(--bg) 85%, transparent);
     border: 1px solid var(--border);
     color: var(--text-muted);
-    font-size: 12.5px;
+    font-size: var(--text-md);
     pointer-events: none;
     white-space: nowrap;
   }
@@ -351,7 +351,7 @@
     background: transparent;
     border-radius: 999px;
     padding: 4px 12px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
     color: var(--text-muted);
   }
@@ -365,7 +365,7 @@
     position: absolute;
     top: 14px;
     right: 14px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--text-muted);
   }
 
@@ -375,7 +375,7 @@
     justify-content: center;
     gap: 10px;
     min-height: 26px;
-    font-size: 12.5px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
@@ -390,7 +390,7 @@
   .badge.smaller {
     border-color: color-mix(in srgb, var(--accent) 40%, transparent);
     background: var(--accent-weak);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .badge.larger {
     border-color: color-mix(in srgb, var(--danger) 40%, transparent);
