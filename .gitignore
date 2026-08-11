@@ -6,3 +6,6 @@ dist/
 .svelte-kit/
 .idea/
 .vscode/
+
+# 외부에서 가져온 스킬 (npx skills add nutlope/hallmark 또는 수동 클론으로 재설치)
+.claude/skills/hallmark/
