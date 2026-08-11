@@ -19,6 +19,8 @@
     "preview:image": "pnpm --filter @local-tools/image preview",
     "dev:drop": "pnpm --filter @local-tools/drop dev",
     "preview:drop": "pnpm --filter @local-tools/drop preview",
+    "dev:stack": "pnpm --filter @local-tools/stack dev",
+    "preview:stack": "pnpm --filter @local-tools/stack preview",
     "build": "pnpm -r build",
     "check": "pnpm -r check"
   }

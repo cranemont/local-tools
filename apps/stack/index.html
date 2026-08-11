@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
+    />
+    <title>기술 지도 — 어떤 기능이 어떤 기술 위에 서 있나 — local-tools</title>
+    <meta
+      name="description"
+      content="local-tools의 여섯 도구가 어떤 브라우저 API·라이브러리 위에 서 있는지, 그리고 그중 무엇이 네트워크를 타는지 보여주는 인터랙티브 지도. 기능과 기술을 짚으면 연결이 드러나고, 파이프라인으로 들어가면 데이터가 거치는 단계가 보입니다."
+    />
+    <link rel="canonical" href="https://cranemont.github.io/local-tools/stack/" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(1 0 0)" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="oklch(0.212 0.01 250)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="local-tools" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="기술 지도 — 어떤 기능이 어떤 기술 위에 서 있나" />
+    <meta
+      property="og:description"
+      content="여섯 도구의 기능 하나하나가 어떤 브라우저 API·라이브러리 위에 서 있는지, 그리고 그중 무엇이 네트워크를 타는지."
+    />
+    <meta property="og:url" content="https://cranemont.github.io/local-tools/stack/" />
+    <meta property="og:image" content="https://cranemont.github.io/local-tools/og/home.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="local-tools 기술 지도" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "local-tools 기술 지도",
+        "url": "https://cranemont.github.io/local-tools/stack/",
+        "description": "local-tools의 기능과 그것을 떠받치는 브라우저 API·라이브러리를 연결해 보여주는 인터랙티브 지도.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
+        "inLanguage": "ko",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
+        "featureList": [
+          "기능 ↔ 기술 이분 그래프 — 짚으면 연결이 드러나고 누르면 고정",
+          "기술에서 거꾸로 조회 — 이 기술을 쓰는 기능이 전부 표시",
+          "성격별 레인 필터(브라우저 네이티브·순수 JS·직접 구현·wasm·빌드)",
+          "네트워크를 타는 지점만 남기는 필터",
+          "파이프라인 드릴다운 — 데이터가 거치는 단계를 순서대로 재생",
+          "모든 항목이 저장소 소스 파일로 연결"
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>
+      기술 지도는 JavaScript가 필요합니다 —
+      <a href="https://cranemont.github.io/local-tools/">local-tools</a>
+    </noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

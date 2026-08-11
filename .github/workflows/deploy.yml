@@ -1,5 +1,5 @@
 # main 푸시마다 전체 앱을 빌드해 GitHub Pages로 배포한다.
-# 산출 구조: / (site/index.html 랜딩) · /pdf/ · /gif/ · /video/ · /dev/ · /image/ · /drop/ — 각각 자기완결 단일 HTML.
+# 산출 구조: / (site/index.html 랜딩) · /pdf/ · /gif/ · /video/ · /dev/ · /image/ · /drop/ · /stack/ — 각각 자기완결 단일 HTML.
 name: deploy
 
 on:
@@ -31,7 +31,7 @@ jobs:
       - run: pnpm build
       - name: Assemble site
         run: |
-          mkdir -p _site/pdf _site/gif _site/video _site/dev _site/image _site/drop
+          mkdir -p _site/pdf _site/gif _site/video _site/dev _site/image _site/drop _site/stack
           cp -R site/. _site/
           cp apps/pdf/dist/index.html _site/pdf/index.html
           cp apps/gif/dist/index.html _site/gif/index.html
@@ -39,6 +39,8 @@ jobs:
           cp apps/dev/dist/index.html _site/dev/index.html
           cp apps/image/dist/index.html _site/image/index.html
           cp apps/drop/dist/index.html _site/drop/index.html
+          # 기술 지도만 단일 HTML이 아니다(메타 페이지 — three.js를 따로 내려받는다)
+          cp -R apps/stack/dist/. _site/stack/
           # 랜딩 카드의 용량 표기를 실제 빌드 산출물 크기로 갱신
           for app in pdf gif video dev image drop; do
             kb=$(( $(stat -c%s "apps/$app/dist/index.html") / 1024 ))
