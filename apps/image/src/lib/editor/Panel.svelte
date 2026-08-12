@@ -103,7 +103,8 @@
   }
 
   function toggleCropMode() {
-    editor.cropMode = !editor.cropMode;
+    if (editor.cropMode) editor.cancelCrop();
+    else editor.startCrop();
   }
   function onKeepExifChange(e: Event) {
     editor.setKeepExif((e.target as HTMLInputElement).checked);
@@ -312,7 +313,7 @@
             type="button"
             class="chip"
             class:active={editor.cropRatio === r.value}
-            onclick={() => (editor.cropRatio = r.value)}
+            onclick={() => editor.setCropRatio(r.value)}
           >
             {r.label}
           </button>

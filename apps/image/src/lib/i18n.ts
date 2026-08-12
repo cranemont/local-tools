@@ -20,6 +20,8 @@ export const t = {
     dropSub: "JPG · PNG · WebP · AVIF · HEIC · GIF · BMP · SVG",
     addFiles: "파일 추가",
     clearAll: "모두 비우기",
+    undo: "되돌리기",
+    redo: "다시 실행",
     loading: (name: string, i: number, total: number) =>
       `불러오는 중… (${i}/${total}) ${name}`,
     imageCount: (n: number) => `${n}장`,
@@ -37,7 +39,10 @@ export const t = {
     sizeBadge: (from: string, to: string, deltaPct: number) =>
       `${from} → ${to} · ${deltaPct > 0 ? "+" : ""}${deltaPct}%`,
     dims: (w: number, h: number) => `${w}×${h}px`,
-    cropHint: "드래그로 남길 영역 선택",
+    cropHint: "드래그해서 남길 영역을 잡으세요",
+    cropAdjust: "모서리를 끌어 조정한 뒤 자르기",
+    cropApply: "자르기",
+    cropArea: "크롭 영역",
   },
 
   edit: {

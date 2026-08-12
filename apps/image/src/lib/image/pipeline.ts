@@ -19,12 +19,16 @@ export interface ProcessResult {
   height: number;
 }
 
+/** 회전만 적용한 크기 — 크롭 좌표계(CropRect)의 기준. */
+export function rotatedSize(item: ImageItem): { w: number; h: number } {
+  const swap = item.transform.rotation % 180 !== 0;
+  return swap ? { w: item.height, h: item.width } : { w: item.width, h: item.height };
+}
+
 /** 장별 편집(회전·크롭) 적용 후 크기 — 리사이즈 입력의 기준. */
 export function effectiveSize(item: ImageItem): { w: number; h: number } {
-  const tf = item.transform;
-  if (tf.crop) return { w: tf.crop.w, h: tf.crop.h };
-  const swap = tf.rotation % 180 !== 0;
-  return swap ? { w: item.height, h: item.width } : { w: item.width, h: item.height };
+  const crop = item.transform.crop;
+  return crop ? { w: crop.w, h: crop.h } : rotatedSize(item);
 }
 
 /** 리사이즈 설정을 적용한 목표 크기 — 비율은 항상 유지. */

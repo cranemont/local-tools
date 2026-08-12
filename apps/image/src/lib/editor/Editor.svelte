@@ -33,7 +33,42 @@
     dragOver = false;
     editor.addFiles(e.dataTransfer.files);
   }
+
+  // ── 단축키 ────────────────────────────────────────
+  // 입력란 안에서는 브라우저 기본 되돌리기가 이겨야 하므로 비켜 준다.
+  function typingIn(el: EventTarget | null): boolean {
+    const node = el as HTMLElement | null;
+    if (!node) return false;
+    return node.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName);
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (typingIn(e.target)) return;
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+    if (mod && key === "z") {
+      e.preventDefault();
+      if (e.shiftKey) editor.redo();
+      else editor.undo();
+      return;
+    }
+    if (mod && key === "y") {
+      e.preventDefault();
+      editor.redo();
+      return;
+    }
+    if (!editor.cropMode) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      editor.cancelCrop();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      editor.applyCropDraft();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 <div
   class="editor"
@@ -63,6 +98,26 @@
     <div class="toolbar">
       <button type="button" class="btn" onclick={pick}>
         <Icon name="plus" size={15} /> {t.editor.addFiles}
+      </button>
+
+      <button
+        type="button"
+        class="btn"
+        disabled={!editor.canUndo}
+        title="{t.editor.undo} (Ctrl+Z)"
+        onclick={() => editor.undo()}
+      >
+        <Icon name="undo" size={15} /> {t.editor.undo}
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        disabled={!editor.canRedo}
+        aria-label={t.editor.redo}
+        title="{t.editor.redo} (Ctrl+Shift+Z)"
+        onclick={() => editor.redo()}
+      >
+        <Icon name="redo" size={15} />
       </button>
 
       <span class="spacer"></span>

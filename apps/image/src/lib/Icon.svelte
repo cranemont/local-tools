@@ -11,7 +11,9 @@
     | "trash"
     | "image"
     | "crop"
-    | "rotate";
+    | "rotate"
+    | "undo"
+    | "redo";
 
   let { name, size = 18 }: { name: IconName; size?: number } = $props();
 </script>
@@ -61,6 +63,12 @@
   {:else if name === "rotate"}
     <path d="M21 12a9 9 0 1 1-2.64-6.36" />
     <path d="M21 3v5h-5" />
+  {:else if name === "undo"}
+    <path d="M9 14 4 9l5-5" />
+    <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+  {:else if name === "redo"}
+    <path d="m15 14 5-5-5-5" />
+    <path d="M20 9H10a6 6 0 0 0 0 12h3" />
   {/if}
 </svg>
 
