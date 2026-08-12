@@ -1,0 +1,31 @@
+/* 문서 전용 — 리셋·프리미티브는 @local-tools/theme/base.css 에 있다.
+ * 여기엔 이 앱에만 필요한 규칙만 둔다. */
+
+body {
+  /* 한국어 안내문이 단어 중간에서 꺾이지 않게 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* 인쇄 = 이 도구의 PDF 내보내기다.
+ * 원본 페이지는 이미 A4 비율의 SVG로 그려져 있으므로, 종이 여백을 0으로 두고
+ * 페이지마다 한 장씩 끊는다. 브라우저 인쇄 대화상자에서 "PDF로 저장"을 고르면
+ * 래스터가 아니라 벡터 PDF가 나온다. */
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    background: white;
+  }
+}
+
+/* docx-preview가 넣는 문서 스타일은 흰 종이를 전제로 한다.
+ * 다크 테마에서 종이만 흰색으로 남겨 두는 편이 글자를 뒤집는 것보다 정확하다 —
+ * 워드가 지정한 글자색·표 테두리가 그대로 살아야 "재현"이기 때문이다. */
+.docx-wrapper {
+  color-scheme: light;
+}

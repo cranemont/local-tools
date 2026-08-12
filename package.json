@@ -23,6 +23,8 @@
     "preview:stack": "pnpm --filter @local-tools/stack preview",
     "dev:sheet": "pnpm --filter @local-tools/sheet dev",
     "preview:sheet": "pnpm --filter @local-tools/sheet preview",
+    "dev:doc": "pnpm --filter @local-tools/doc dev",
+    "preview:doc": "pnpm --filter @local-tools/doc preview",
     "build": "pnpm -r build",
     "check": "pnpm -r check"
   }

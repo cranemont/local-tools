@@ -1,3 +1,5 @@
 packages:
   - "apps/*"
   - "packages/*"
+minimumReleaseAgeExclude:
+  - '@rhwp/core@0.8.4'
