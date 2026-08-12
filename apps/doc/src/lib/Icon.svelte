@@ -16,6 +16,9 @@
     | "alert"
     | "install"
     | "link"
+    | "pencil"
+    | "undo"
+    | "redo"
     | "chevron-up"
     | "chevron-down";
 </script>
@@ -85,6 +88,15 @@
   {:else if name === "link"}
     <path d="M10 13a4 4 0 0 0 5.7 0l3-3a4 4 0 1 0-5.7-5.7L11.5 6" />
     <path d="M14 11a4 4 0 0 0-5.7 0l-3 3a4 4 0 1 0 5.7 5.7l1.5-1.5" />
+  {:else if name === "pencil"}
+    <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
+    <path d="m14.5 6.5 3 3" />
+  {:else if name === "undo"}
+    <path d="M9 8H5V4" />
+    <path d="M5 8a8 8 0 1 1 0 8" />
+  {:else if name === "redo"}
+    <path d="M15 8h4V4" />
+    <path d="M19 8a8 8 0 1 0 0 8" />
   {:else if name === "chevron-up"}
     <path d="m6 15 6-6 6 6" />
   {:else if name === "chevron-down"}

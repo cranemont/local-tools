@@ -63,6 +63,51 @@
 
   <div class="spacer"></div>
 
+  {#if editor.editable}
+    <button
+      class="btn small"
+      class:active={editor.editing}
+      onclick={() => editor.toggleEditing()}
+      title={t.edit.hint}
+    >
+      <Icon name="pencil" size={15} />
+      {editor.editing ? t.edit.stop : t.edit.start}
+    </button>
+  {/if}
+
+  {#if editor.editing}
+    <button
+      class="icon-btn tool"
+      onclick={() => editor.undo()}
+      disabled={!editor.canUndo}
+      title={t.edit.undo}
+    >
+      <Icon name="undo" size={16} />
+      <span class="sr-only">{t.edit.undo}</span>
+    </button>
+    <button
+      class="icon-btn tool"
+      onclick={() => editor.redo()}
+      disabled={!editor.canRedo}
+      title={t.edit.redo}
+    >
+      <Icon name="redo" size={16} />
+      <span class="sr-only">{t.edit.redo}</span>
+    </button>
+  {/if}
+
+  {#if editor.dirty}
+    <button
+      class="btn small primary"
+      onclick={() => void editor.saveEdited()}
+      disabled={busy}
+      title={t.edit.saveHint}
+    >
+      <Icon name="download" size={15} />
+      {t.edit.save}
+    </button>
+  {/if}
+
   {#if canFind}
     <button class="icon-btn tool" onclick={toggleFind} title={t.actions.find}>
       <Icon name="search" size={16} />

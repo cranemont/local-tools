@@ -22,7 +22,7 @@ export class PasswordRequiredError extends Error {
   }
 }
 
-function messageOf(error: unknown): string {
+export function messageOf(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   return String(error);
@@ -32,7 +32,7 @@ function messageOf(error: unknown): string {
  * 엔진 호출을 감싼다. 패닉은 다른 실패와 성질이 다르다 — 그 뒤로는 무엇을 불러도 안 되므로
  * 조용히 삼키면 화면이 "빈 문서"처럼 보이게 된다. 만나는 즉시 상태를 굳히고 위로 던진다.
  */
-function guard<T>(run: () => T): T {
+export function guard<T>(run: () => T): T {
   try {
     return run();
   } catch (error) {

@@ -11,6 +11,11 @@
 </script>
 
 <div class="markdown" data-pane="markdown">
+  <!-- 편집한 내용은 아직 여기 없다 — 문서 전체를 다시 훑는 일이라 편집을 끝낼 때 한 번만 한다. -->
+  {#if editor.markdownStale}
+    <div class="stale">{t.edit.stale}</div>
+  {/if}
+
   {#if editor.notes.length > 0}
     <div class="notes">
       <span class="notes-title">{t.notes.title}</span>
@@ -46,6 +51,16 @@
     white-space: pre-wrap;
     word-break: break-word;
     tab-size: 2;
+  }
+
+  /* 편집 중이라 이 판이 낡았다는 표시 — 오해하지 않게 결과물 위에 둔다. */
+  .stale {
+    margin-bottom: var(--space-sm);
+    padding: var(--space-2xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: var(--accent-weak);
+    color: var(--accent-ink);
+    font-size: var(--text-sm);
   }
 
   /* 옮기며 잃은 것 — 조용히 사라지지 않게 결과물 바로 위에 둔다. */

@@ -59,6 +59,21 @@ export const t = {
     savingMarkdown: "마크다운 만드는 중…",
     copying: "복사하는 중…",
     converting: ".hwpx로 바꾸는 중…",
+    saving: "저장하는 중…",
+  },
+
+  edit: {
+    start: "편집",
+    stop: "편집 끝",
+    hint: "원본 위에서 바로 고칠 수 있어요",
+    docxHint: "워드 문서는 아직 편집할 수 없어요",
+    undo: "되돌리기",
+    redo: "다시 실행",
+    save: "저장",
+    saveHint: "고친 내용을 원래 형식으로 내려받아요",
+    unsaved: "저장하지 않은 편집이 있어요. 버리고 닫을까요?",
+    stale: "편집한 내용이에요. 편집을 끝내면 여기도 다시 계산해요.",
+    placeCaret: "글자를 누르면 커서가 놓여요",
   },
 
   flash: {
