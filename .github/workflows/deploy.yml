@@ -1,5 +1,6 @@
 # main 푸시마다 전체 앱을 빌드해 GitHub Pages로 배포한다.
-# 산출 구조: / (site/index.html 랜딩) · /pdf/ · /gif/ · /video/ · /dev/ · /image/ · /drop/ · /stack/ — 각각 자기완결 단일 HTML.
+# 산출 구조: / (site/index.html 랜딩) · /pdf/ · /gif/ · /video/ · /dev/ · /image/ · /drop/ · /sheet/ · /stack/
+# — 대부분 자기완결 단일 HTML. 예외 둘: /stack/(메타 페이지, 코드 분할)과 /sheet/(PWA — 파일 연결용).
 name: deploy
 
 on:
@@ -31,7 +32,7 @@ jobs:
       - run: pnpm build
       - name: Assemble site
         run: |
-          mkdir -p _site/pdf _site/gif _site/video _site/dev _site/image _site/drop _site/stack
+          mkdir -p _site/pdf _site/gif _site/video _site/dev _site/image _site/drop _site/sheet _site/stack
           cp -R site/. _site/
           cp apps/pdf/dist/index.html _site/pdf/index.html
           cp apps/gif/dist/index.html _site/gif/index.html
@@ -41,11 +42,17 @@ jobs:
           cp apps/drop/dist/index.html _site/drop/index.html
           # 기술 지도만 단일 HTML이 아니다(메타 페이지 — three.js를 따로 내려받는다)
           cp -R apps/stack/dist/. _site/stack/
+          # 시트는 두 벌이다. /sheet/는 PWA(설치해야 .csv 더블클릭이 이 앱으로 온다),
+          # 단일 HTML은 그 옆에 내려받기용으로 둔다.
+          cp -R apps/sheet/dist-pwa/. _site/sheet/
+          cp apps/sheet/dist/index.html _site/sheet/local-tools-sheet.html
           # 랜딩 카드의 용량 표기를 실제 빌드 산출물 크기로 갱신
           for app in pdf gif video dev image drop; do
             kb=$(( $(stat -c%s "apps/$app/dist/index.html") / 1024 ))
             sed -i "s|data-size=\"$app\">[^<]*<|data-size=\"$app\">${kb} KB<|" _site/index.html
           done
+          kb=$(( $(stat -c%s "apps/sheet/dist/index.html") / 1024 ))
+          sed -i "s|data-size=\"sheet\">[^<]*<|data-size=\"sheet\">${kb} KB<|" _site/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

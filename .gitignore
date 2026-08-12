@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-pwa/
+.playwright-mcp/
 *.log
 .DS_Store
 .vite/
