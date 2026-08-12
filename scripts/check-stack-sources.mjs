@@ -6,6 +6,8 @@
 //  ① 데이터가 가리키는 "apps/..."·"packages/..." 경로가 전부 실재하는가
 //  ② 지도의 서드파티 목록(pkg)과 각 앱 package.json의 dependencies가 정확히 일치하는가
 //  ③ 지도가 그리는 네트워크 상대(net.hosts)가 그 소스에 실제로 적혀 있는가
+//  ④ 파이프라인의 모든 단계가 도시의 유닛 하나에 착지하는가(끊긴 배관 방지)
+//  ⑤ 도구 이름·한 줄 설명이 랜딩(site/index.html) 카드와 같은가
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -91,6 +93,71 @@ if (phantom.length > 0) {
   process.exit(1);
 }
 
+// ── ④ 끊긴 흐름 잡기 ─────────────────────────────────────────────
+// 도시의 배관은 "이 단계가 어느 기능에서 벌어지는가"에서 나온다. 그 답이 없는 단계는
+// 화면에서 관이 끊긴 채로 나타나므로(예전에 pdfjs.ts·nostr.ts가 그랬다) 여기서 막는다.
+//
+// 해석 규칙은 apps/stack/src/lib/city/route.ts와 같다 — feat이 있으면 그것,
+// 없으면 src를 가진 기능. 저쪽을 고치면 여기도 같이 고쳐야 한다.
+// (데이터 모듈은 import가 없는 순수 TS라 node가 그대로 읽을 수 있다.)
+const { PIPELINES } = await import(join(dataDir, "pipelines.ts"));
+const { APPS, FEATURES } = await import(join(dataDir, "stack.ts"));
+
+const featIds = new Set(FEATURES.map((feat) => feat.id));
+const dangling = [];
+const landed = new Set();
+
+for (const pipeline of PIPELINES) {
+  for (const [i, step] of pipeline.steps.entries()) {
+    let where = null;
+    if (step.feat) where = featIds.has(step.feat) ? step.feat : null;
+    else if (step.src) where = FEATURES.find((feat) => feat.src.includes(step.src))?.id ?? null;
+
+    if (where) landed.add(where);
+    else dangling.push(`${pipeline.id} ${i + 1}단계 "${step.label}" — ${step.feat ?? step.src ?? "src 없음"}`);
+  }
+}
+
+if (dangling.length > 0) {
+  console.error("\n[stack] 어느 유닛에도 닿지 않는 흐름 단계가 있어요(도시에 관이 끊깁니다):\n");
+  for (const line of dangling) console.error(`  ${line}`);
+  console.error(
+    "\n그 파일을 쓰는 기능의 src에 넣거나, 여러 기능이 나눠 쓰는 파일이면 단계에 feat: \"<feature id>\"를 적어 주세요.\n",
+  );
+  process.exit(1);
+}
+
+// ── ⑤ 도구 이름 대조 ─────────────────────────────────────────────
+// 같은 도구가 홈 카드와 지도 목록에서 다른 이름으로 불리면 그냥 다른 물건으로 읽힌다.
+// 정본은 랜딩 카드다 — 카드 문구를 고치면 APPS도 따라와야 통과한다.
+const CARD_RE =
+  /href="\.\/(\w+)\/">([^<]+)<\/a><\/h2>\s*<p class="desc">([^<]+)<\/p>/g;
+const landing = readFileSync(join(root, "site/index.html"), "utf8");
+const cards = new Map(
+  [...landing.matchAll(CARD_RE)].map(([, id, label, desc]) => [id, { label, desc }]),
+);
+
+const renamed = [];
+for (const app of APPS) {
+  if (app.path === null) continue; // 출입구는 도구가 아니라 카드가 없다
+  const card = cards.get(app.id);
+  if (!card) renamed.push(`${app.id} — 랜딩에 카드가 없어요`);
+  else if (card.label !== app.label || card.desc !== app.blurb) {
+    renamed.push(`${app.id}\n      홈   "${card.label} / ${card.desc}"\n      지도 "${app.label} / ${app.blurb}"`);
+  }
+}
+
+if (renamed.length > 0) {
+  console.error("\n[stack] 도구 이름이 홈 카드와 어긋나요:\n");
+  for (const line of renamed) console.error(`  ${line}`);
+  console.error(
+    "\n정본은 site/index.html의 카드예요. apps/stack/src/lib/data/stack.ts의 APPS를 맞춰 주세요.\n",
+  );
+  process.exit(1);
+}
+
 console.log(
-  `[stack] 소스 경로 ${checked}개 확인 — 전부 실재 · 서드파티 ${mapped.size}개 package.json과 일치 · 네트워크 상대 ${hosts.size}곳 소스와 일치`,
+  `[stack] 소스 경로 ${checked}개 확인 — 전부 실재 · 서드파티 ${mapped.size}개 package.json과 일치 · ` +
+    `네트워크 상대 ${hosts.size}곳 소스와 일치 · 흐름 ${PIPELINES.length}개가 유닛 ${landed.size}개에 전부 착지 · ` +
+    `도구 이름 ${cards.size}개 홈 카드와 일치`,
 );

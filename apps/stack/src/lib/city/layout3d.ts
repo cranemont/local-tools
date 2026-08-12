@@ -7,9 +7,9 @@
 // 데이터에 network가 적힌 기술 수만큼만 생긴다 — 손으로 그리지 않는다.
 //
 // 유닛의 생김새도 마찬가지다. 입력 포트 수 = 그 기능이 기대는 기술 수,
-// 계기판 눈금 = 소스 줄 수, 지붕 안테나 = 바깥과 통하는가. 세어 보면 맞아야 한다.
+// 높이 = 흐름이 여기를 몇 번 지나는가, 지붕 안테나 = 바깥과 통하는가.
+// 전부 세어서 맞출 수 있어야 한다 — 손으로 정한 숫자는 하나도 없다.
 
-import { LOC } from "virtual:stack-loc";
 import {
   APPS,
   FEATURES,
@@ -22,6 +22,7 @@ import {
 } from "../data/stack";
 import { PIPELINES } from "../data/pipelines";
 import { routeFor } from "./route";
+import { buildStage, type RendezvousStage } from "./rendezvous";
 
 const GRID = 3.9; // 유닛 간격 — 배관이 지날 통로를 남긴다
 const FOOT = 2.2; // 유닛 바닥 한 변
@@ -30,8 +31,15 @@ const PLOT_PAD = 3.0; // 구역 판 여백
 /** 구역 판 두께 — 유닛은 이 위에 선다. 배관 높이 계산이 이 값에 걸려 있어 여기 둔다. */
 export const PLOT_H = 0.4;
 
-/** 줄 수 → 높이. 로그를 먹여 큰 파일이 혼자 탑처럼 솟는 걸 막되, 스카이라인은 남긴다. */
-const heightOf = (loc: number): number => 1 + Math.log2(1 + loc / 35) * 1.85;
+/**
+ * 단계 수 → 높이. **파일이 여기서 몇 번 손을 타는가**로 센다.
+ *
+ * 흐름에 한 번도 안 나오는 기능은 아예 유닛을 세우지 않는다(아래 onFlow) —
+ * 예전엔 납작한 슬래브로 세웠는데, 스물몇 개가 이름표만 달고 서 있으니
+ * "무엇을 보라는 건지" 알 수 없는 상자밭이 됐다. 그런 기능은 오른쪽 목록에서
+ * 읽는 편이 낫다. 도시에는 파일이 실제로 지나는 자리만 남긴다.
+ */
+const heightOf = (steps: number): number => 1.4 + steps * 0.8;
 
 export interface Port {
   /** 유닛 중심 기준 상대 좌표 */
@@ -55,12 +63,10 @@ export interface Building {
   kind: TechKind;
   /** 이 기능이 성문 밖과 연결되는가 */
   outside: boolean;
-  /** 높이의 근거 — 툴팁에 그대로 쓴다 */
-  loc: number;
+  /** 높이의 근거 — 이 유닛에서 벌어지는 흐름 단계 수 */
+  steps: number;
   /** 입력 포트 — 기대는 기술 하나당 하나 */
   ports: Port[];
-  /** 계기판 눈금 0..1 — 가장 큰 기능 대비 줄 수 */
-  fill: number;
   /** 지붕 안테나 — 바깥과 통하는 유닛 */
   mast: boolean;
   /** 지붕 배기관 — wasm을 쓰는 유닛 */
@@ -125,21 +131,22 @@ export interface CityLayout {
   gates: Gate[];
   /** 배관층 높이 — 카메라·안개가 이 값을 참고한다 */
   rackY: number;
-  /** 드롭 전용 — 옆 기기와 그리로 놓인 직결 링크 */
-  peer: { x: number; z: number; fromX: number; fromZ: number } | null;
+  /**
+   * 드롭의 랑데부 무대 — 게시판(릴레이)·거울(STUN)·상대 기기·직결 관.
+   * 이 둘은 성벽 밖 "설비"로 뭉뚱그리지 않는다. 역할이 서로 다르고,
+   * 배치(곁길 대 직선)가 곧 설명이라 전용 무대로 세운다.
+   */
+  stage: RendezvousStage | null;
 }
 
-/** 여러 기능이 한 파일을 공유하면 줄 수를 나눠 갖는다(중복 계상 금지). */
-function shareAdjustedLoc(): Map<string, number> {
-  const holders = new Map<string, number>();
-  for (const feat of FEATURES) {
-    for (const path of feat.src) holders.set(path, (holders.get(path) ?? 0) + 1);
-  }
+/** 유닛마다 흐름 단계가 몇 번 지나가는가 — 높이의 근거. 파이프라인 데이터에서 나온다. */
+function stepsPerBuilding(): Map<string, number> {
   const out = new Map<string, number>();
-  for (const feat of FEATURES) {
-    let sum = 0;
-    for (const path of feat.src) sum += (LOC[path] ?? 0) / (holders.get(path) ?? 1);
-    out.set(feat.id, Math.round(sum));
+  for (const pipeline of PIPELINES) {
+    for (const stop of routeFor(pipeline.id)) {
+      if (!stop.buildingId) continue;
+      out.set(stop.buildingId, (out.get(stop.buildingId) ?? 0) + 1);
+    }
   }
   return out;
 }
@@ -258,13 +265,19 @@ function computePipes(buildings: Building[], rackY: number): Pipe[] {
 }
 
 export function computeCity(): CityLayout {
-  const locOf = shareAdjustedLoc();
-  const maxLoc = Math.max(1, ...FEATURES.map((feat) => locOf.get(feat.id) ?? 0));
+  const stepsOf = stepsPerBuilding();
 
-  // ① 구역별 격자 크기를 먼저 재서 링 반지름을 정한다.
-  const ringApps = APPS.filter((app) => app.id !== "common");
-  const sized = [...ringApps, APPS.find((a) => a.id === "common")!].map((app) => {
-    const feats = FEATURES.filter((f) => f.app === app.id);
+  // ① 흐름이 지나는 기능만 추린 뒤, 구역별 격자 크기를 재서 링 반지름을 정한다.
+  //    남는 게 하나도 없는 구역(개발자 유틸·이 페이지 자신)은 도시에 서지 않는다.
+  const featsOf = (appId: AppId) =>
+    FEATURES.filter((f) => f.app === appId && (stepsOf.get(f.id) ?? 0) > 0);
+
+  const ringApps = APPS.filter((app) => app.id !== "common" && featsOf(app.id).length > 0);
+  const centre = APPS.find((a) => a.id === "common");
+  const centred = centre && featsOf(centre.id).length > 0 ? [centre] : [];
+
+  const sized = [...ringApps, ...centred].map((app) => {
+    const feats = featsOf(app.id);
     const cols = Math.max(1, Math.ceil(Math.sqrt(feats.length)));
     const rows = Math.ceil(feats.length / cols);
     return {
@@ -305,8 +318,8 @@ export function computeCity(): CityLayout {
     s.feats.forEach((feat, i) => {
       const col = i % s.cols;
       const row = Math.floor(i / s.cols);
-      const loc = locOf.get(feat.id) ?? 0;
-      const h = heightOf(loc);
+      const steps = stepsOf.get(feat.id) ?? 0;
+      const h = heightOf(steps);
       const techs = feat.techs.map((id) => TECH_BY_ID.get(id));
       buildings.push({
         id: feat.id,
@@ -319,9 +332,8 @@ export function computeCity(): CityLayout {
         h,
         kind: dominantKind(feat.techs),
         outside: techs.some((tech) => Boolean(tech?.network)),
-        loc,
+        steps,
         ports: portsFor(feat.techs, h),
-        fill: loc / maxLoc,
         mast: techs.some((tech) => Boolean(tech?.network)),
         duct: techs.some((tech) => tech?.kind === "wasm"),
       });
@@ -340,7 +352,10 @@ export function computeCity(): CityLayout {
   const gates: Gate[] = [];
   const byAngle = new Map<AppId, number>(districts.map((d) => [d.id, d.angle]));
 
-  const networked = TECHS.filter((tech) => tech.network);
+  // websocket·webrtc는 여기서 빼고 랑데부 무대가 통째로 맡는다 — 둘은 "바깥에 있는 설비"가
+  // 아니라 서로 역할이 다른 배우라서, 같은 모양의 탑으로 세우면 그 차이가 지워진다.
+  const STAGED = new Set(["websocket", "webrtc"]);
+  const networked = TECHS.filter((tech) => tech.network && !STAGED.has(tech.id));
   const perDistrict = new Map<AppId, string[]>();
   for (const tech of networked) {
     const user = FEATURES.find((feat) => feat.techs.includes(tech.id));
@@ -390,20 +405,20 @@ export function computeCity(): CityLayout {
     });
   }
 
-  // ⑤ 옆 기기 — 드롭의 P2P 상대. 릴레이를 거치지 않고 직결 링크로 건너간다.
-  const dropAngle = byAngle.get("drop");
-  const peer =
-    dropAngle === undefined
-      ? null
-      : {
-          x: Math.cos(dropAngle + 0.55) * (wallRadius + 30),
-          z: Math.sin(dropAngle + 0.55) * (wallRadius + 30),
-          fromX: Math.cos(dropAngle) * ring,
-          fromZ: Math.sin(dropAngle) * ring,
-        };
-  if (dropAngle !== undefined) {
-    gates.push({ angle: dropAngle + 0.55, techId: "webrtc", label: "P2P 직결" });
+  // ⑤ 랑데부 무대 — 드롭 구역 바깥에 세운다. 성문 하나가 이 무대로 열린다.
+  const dropDistrict = districts.find((d) => d.id === "drop");
+  const relayHosts = TECH_BY_ID.get("websocket")?.net?.hosts ?? [];
+  const stage = dropDistrict
+    ? buildStage(
+        { x: dropDistrict.cx, z: dropDistrict.cz },
+        dropDistrict.angle,
+        wallRadius,
+        relayHosts,
+      )
+    : null;
+  if (dropDistrict) {
+    gates.push({ angle: dropDistrict.angle, techId: "webrtc", label: "P2P 직결" });
   }
 
-  return { districts, buildings, sites, pipes, wallRadius, gates, rackY, peer };
+  return { districts, buildings, sites, pipes, wallRadius, gates, rackY, stage };
 }

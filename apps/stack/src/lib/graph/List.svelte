@@ -6,6 +6,7 @@
   import { graph } from "./state.svelte";
   import { APPS, KIND_LABEL, KIND_ORDER, type AppId, type TechKind } from "../data/stack";
   import { FEATURES_WITH_MECH } from "../mech/mechanisms";
+  import { FEATURES_ON_FLOW } from "../city/route";
   import { t } from "../i18n";
   import Icon from "../Icon.svelte";
 
@@ -54,8 +55,11 @@
                   onfocus={() => graph.hover(feat.id)}
                   onblur={() => graph.hover(null)}
                   onclick={() => graph.pin(feat.id)}
+                  title={FEATURES_ON_FLOW.has(feat.id) ? undefined : t.list.offMap}
                 >
-                  <span class="name">{feat.label}</span>
+                  <span class="name" class:offmap={!FEATURES_ON_FLOW.has(feat.id)}>
+                    {feat.label}
+                  </span>
                   {#if FEATURES_WITH_MECH.has(feat.id)}
                     <Icon name="eye" size={13} />
                   {/if}
@@ -201,6 +205,12 @@
     flex: 1;
     min-width: 0;
     overflow-wrap: anywhere;
+  }
+  /* 도시에 지형이 없는 기능 — 눌러도 카메라가 갈 데가 없다는 걸 미리 알린다.
+   * 점선 밑줄만 둔다(흐리게 하면 "꺼진 항목"으로 읽혀서 못 누르는 줄 안다). */
+  .row .name.offmap {
+    text-decoration: underline dotted var(--border-strong);
+    text-underline-offset: 3px;
   }
   .row:hover {
     background: var(--surface-2);

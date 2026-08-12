@@ -7,10 +7,26 @@
 //    모든 경로의 실재를 검증한다 — 파일을 옮기면 CI가 빨갛게 뜬다. 설명이 코드보다
 //    먼저 낡는 걸 막는 유일한 장치이므로 경로를 지우지 말 것.
 
-/** 기술의 성격 — 그래프 오른쪽 레인이 이 값으로 갈린다. */
-export type TechKind = "native" | "lib" | "own" | "wasm" | "build";
+/**
+ * 기술의 성격.
+ *
+ * 예전엔 "빌드·기반"이 하나 더 있었다(Vite·Svelte·토큰·자가해제). 뺐다 —
+ * 이 지도는 **데이터가 어디로 흐르는가**를 말하는 곳이고, 빌드 도구는 그 흐름에
+ * 등장하지 않는다. 무엇으로 컴파일했는지는 저장소를 열면 보이지만, 파일이 무엇으로
+ * 바뀌어 어디로 나가는지는 코드를 읽어도 잘 안 보이니까.
+ */
+export type TechKind = "native" | "lib" | "own" | "wasm";
 
-export type AppId = "pdf" | "gif" | "video" | "image" | "drop" | "dev" | "stack" | "common";
+export type AppId =
+  | "pdf"
+  | "gif"
+  | "video"
+  | "image"
+  | "sheet"
+  | "drop"
+  | "dev"
+  | "stack"
+  | "common";
 
 /** 통로 한 겹 — 아래(전송)에서 위(앱 프로토콜)로 쌓는다. */
 export interface NetLayer {
@@ -66,7 +82,7 @@ export interface AppMeta {
   id: AppId;
   label: string;
   blurb: string;
-  /** 배포 경로 — 공통 기반은 없다 */
+  /** 배포 경로 — 출입구는 앱이 아니라서 없다 */
   path: string | null;
   /** 도구가 아니라 이 페이지 자신 — "도구 N개" 셈에서 빠진다 */
   meta?: boolean;
@@ -77,7 +93,6 @@ export const KIND_LABEL: Record<TechKind, string> = {
   lib: "순수 JS 라이브러리",
   own: "직접 구현",
   wasm: "wasm (CDN 지연 로드)",
-  build: "빌드·기반",
 };
 
 export const KIND_NOTE: Record<TechKind, string> = {
@@ -85,18 +100,31 @@ export const KIND_NOTE: Record<TechKind, string> = {
   lib: "번들에 들어가는 서드파티 — 전부 순수 JS",
   own: "쓸 만한 게 없거나 너무 무거워서 직접 짠 것",
   wasm: "유일하게 인터넷이 필요한 지점 — 엔진 최초 1회",
-  build: "여섯 앱이 공유하는 빌드·디자인 기반",
 };
 
+/**
+ * 도구 이름·한 줄 설명은 **랜딩(site/index.html)의 카드가 정본**이다.
+ * 여기서 따로 짓지 말 것 — 예전엔 dev가 "개발자 유틸 / 도구 16종"이라 홈과 달랐고,
+ * 같은 도구가 화면마다 다른 이름으로 불렸다. 카드 문구를 고치면 여기도 같이 고친다.
+ */
 export const APPS: AppMeta[] = [
-  { id: "pdf", label: "PDF", blurb: "병합·정리·변환·암호", path: "../pdf/" },
-  { id: "gif", label: "GIF", blurb: "프레임 편집·WebP·MP4", path: "../gif/" },
-  { id: "video", label: "동영상", blurb: "트림·압축·변환·소리", path: "../video/" },
-  { id: "image", label: "이미지", blurb: "변환·압축·리사이즈·EXIF", path: "../image/" },
-  { id: "drop", label: "드롭", blurb: "서버 없는 P2P 파일 전송", path: "../drop/" },
-  { id: "dev", label: "개발자 유틸", blurb: "도구 16종", path: "../dev/" },
-  { id: "stack", label: "기술 지도", blurb: "이 페이지 자신", path: "../stack/", meta: true },
-  { id: "common", label: "공통 기반", blurb: "여섯 앱이 함께 쓰는 것", path: null },
+  { id: "pdf", label: "PDF", blurb: "병합 · 정리 · 이미지 변환 · 암호", path: "../pdf/" },
+  { id: "gif", label: "GIF", blurb: "프레임 편집 · 동영상 변환 · WebP·MP4", path: "../gif/" },
+  { id: "video", label: "동영상", blurb: "자르기 · 압축 · 변환 · 소리 추출", path: "../video/" },
+  { id: "image", label: "이미지", blurb: "변환 · 압축 · 리사이즈 · EXIF", path: "../image/" },
+  { id: "sheet", label: "시트", blurb: "CSV · 엑셀 · 수식 · 서식", path: "../sheet/" },
+  { id: "drop", label: "드롭", blurb: "기기 간 직접 전송 · 서버 없음", path: "../drop/" },
+  { id: "dev", label: "개발자 도구", blurb: "JSON 변환 · diff · QR · 해시", path: "../dev/" },
+  {
+    id: "stack",
+    label: "기술 지도",
+    blurb: "무엇으로 만들었나 · 기능↔기술 연결 · 3D 도시",
+    path: "../stack/",
+    meta: true,
+  },
+  // 도구가 아니라 파일이 드나드는 자리 — 나가는 출구(다운로드)와
+  // 바깥에서 들어오는 것을 검사하는 문(wasm 검증) 둘뿐이다.
+  { id: "common", label: "출입구", blurb: "파일이 나가는 곳 · 바깥에서 들어오는 것", path: null },
 ];
 
 /**
@@ -294,6 +322,20 @@ export const TECHS: Tech[] = [
     src: ["apps/stack/src/lib/city/scene.ts"],
   },
   {
+    id: "textdecoder",
+    label: "TextDecoder",
+    kind: "native",
+    note: "브라우저가 euc-kr(cp949)를 이미 안다. UTF-8로 엄격하게 읽어 보고 실패하면 cp949로 넘어가는 두 줄이 인코딩 라이브러리를 통째로 대신한다.",
+    src: ["apps/sheet/src/lib/sheet/csv.ts"],
+  },
+  {
+    id: "filehandler",
+    label: "File Handling API",
+    kind: "native",
+    note: "설치된 PWA가 .csv·.xlsx의 열기 대상이 된다. 맥에서 CSV 더블클릭이 Numbers로 가는 걸 브라우저 안에서 바꿀 수 있는 유일한 방법이라, 시트만 PWA 빌드를 따로 낸다.",
+    src: ["apps/sheet/src/lib/launch.ts", "apps/sheet/pwa.ts"],
+  },
+  {
     id: "adownload",
     label: "<a download>",
     kind: "native",
@@ -325,6 +367,22 @@ export const TECHS: Tech[] = [
     pkg: "mediabunny",
     note: "순수 TS 디먹싱·먹싱. 코덱은 WebCodecs가 하고 이쪽은 컨테이너만 만진다 — 그래서 wasm이 없다.",
     src: ["apps/video/src/lib/video/transcode.ts", "apps/gif/src/lib/gif/video.ts"],
+  },
+  {
+    id: "exceljs",
+    label: "ExcelJS",
+    kind: "lib",
+    pkg: "exceljs",
+    note: "xlsx 읽기·쓰기. 서식(글꼴·채우기·테두리·표시 형식)까지 왕복하는 게 선택 이유다 — SheetJS 무료판은 스타일 쓰기가 빠져 있다. 압축 전 848kB라 xlsx를 실제로 열 때만 동적 로드한다.",
+    src: ["apps/sheet/src/lib/sheet/xlsx.ts"],
+  },
+  {
+    id: "formulajs",
+    label: "@formulajs/formulajs",
+    kind: "lib",
+    pkg: "@formulajs/formulajs",
+    note: "엑셀 함수 300여 개의 구현체. 계산 순서와 오류 전파는 이쪽이 모르므로 직접 짠 엔진이 감싼다.",
+    src: ["apps/sheet/src/lib/formula/functions.ts"],
   },
   {
     id: "gifenc",
@@ -462,6 +520,26 @@ export const TECHS: Tech[] = [
     src: ["apps/image/src/lib/image/exif.ts"],
   },
   {
+    id: "formula-engine",
+    label: "수식 엔진",
+    kind: "own",
+    note: "렉서 → 파서 → 의존성 그래프 → 위상 순서 계산. 완성품(HyperFormula)은 GPLv3라 저장소 전체가 전염되고, 직접 짜야 IF의 지연 평가·순환 참조·날짜 서식 물려받기를 우리 값 체계에 맞출 수 있었다.",
+    src: [
+      "apps/sheet/src/lib/formula/tokenize.ts",
+      "apps/sheet/src/lib/formula/parse.ts",
+      "apps/sheet/src/lib/formula/evaluate.ts",
+      "apps/sheet/src/lib/formula/engine.ts",
+      "apps/sheet/src/lib/formula/adjust.ts",
+    ],
+  },
+  {
+    id: "numfmt",
+    label: "표시 형식",
+    kind: "own",
+    note: '엑셀 형식 코드("#,##0.00"·"yyyy-mm-dd"·"₩#,##0;(₩#,##0)")를 해석해 화면 문자열을 만든다. 날짜는 값이 아니라 형식이라, 이게 없으면 46276 같은 일련번호만 보인다.',
+    src: ["apps/sheet/src/lib/sheet/numfmt.ts", "apps/sheet/src/lib/sheet/serial.ts"],
+  },
+  {
     id: "md5",
     label: "MD5 · RFC 1321",
     kind: "own",
@@ -481,13 +559,6 @@ export const TECHS: Tech[] = [
     kind: "own",
     note: "테마 토큰이 전부 oklch인데 three.js 색 파서는 CSS Color 4를 모른다. 3D용 색을 따로 만들지 않으려고 변환식을 직접 넣었다.",
     src: ["apps/stack/src/lib/city/palette.ts"],
-  },
-  {
-    id: "selfextract",
-    label: "자가해제 빌드 후처리",
-    kind: "own",
-    note: "인라인 JS·CSS를 deflate-raw + base64로 넣고 로드 시 풀어 실행한다. 2.1MB → 0.9MB.",
-    src: ["packages/vite-plugin-self-extracting/index.js"],
   },
   {
     id: "wasmloader",
@@ -527,34 +598,6 @@ export const TECHS: Tech[] = [
   },
 
   // ── 빌드·기반 ───────────────────────────────────────────────
-  {
-    id: "svelte",
-    label: "Svelte 5 · runes",
-    kind: "build",
-    note: "런타임이 얇아 단일 파일 예산에 맞는다. 상태는 전부 룬 기반 싱글턴.",
-    src: ["apps/gif/src/lib/editor/state.svelte.ts", "apps/drop/src/lib/editor/state.svelte.ts"],
-  },
-  {
-    id: "vite",
-    label: "Vite 8",
-    kind: "build",
-    note: "여섯 앱이 같은 설정을 쓴다.",
-    src: ["apps/pdf/vite.config.ts", "apps/stack/vite.config.ts"],
-  },
-  {
-    id: "singlefile",
-    label: "vite-plugin-singlefile",
-    kind: "build",
-    note: "JS·CSS를 전부 HTML 안으로 인라인한다. 더블클릭으로 열리는 이유.",
-    src: ["apps/pdf/vite.config.ts"],
-  },
-  {
-    id: "tokens",
-    label: "디자인 토큰 · OKLCH",
-    kind: "build",
-    note: "색·타입·간격·모션·z를 한 곳에서 정의한다. 면(--accent)과 글자(--accent-ink)를 나눈 건 라이트 테마에서 대비가 3.17:1로 미달했기 때문.",
-    src: ["packages/theme/tokens.css", "packages/theme/base.css"],
-  },
 ];
 
 export const FEATURES: Feature[] = [
@@ -565,7 +608,12 @@ export const FEATURES: Feature[] = [
     label: "페이지 캔버스",
     note: "여러 PDF를 한 캔버스에 펼쳐 병합·회전·삭제·재배열한다.",
     techs: ["pdfjs", "worker", "canvas2d"],
-    src: ["apps/pdf/src/lib/canvas/Canvas.svelte", "apps/pdf/src/lib/pdf/engine.ts"],
+    src: [
+      "apps/pdf/src/lib/canvas/Canvas.svelte",
+      "apps/pdf/src/lib/pdf/engine.ts",
+      "apps/pdf/src/lib/pdf/pdfjs.ts",
+    ],
+    pipeline: "pdf-merge",
   },
   {
     id: "pdf-export",
@@ -591,6 +639,7 @@ export const FEATURES: Feature[] = [
     note: "이 앱에서 유일하게 인터넷이 필요한 기능. 엔진을 최초 1회만 받고 파일은 브라우저 안에 머문다.",
     techs: ["qpdf", "wasmloader", "adownload"],
     src: ["apps/pdf/src/lib/pdf/qpdfLoader.ts", "apps/pdf/src/lib/password/Password.svelte"],
+    pipeline: "pdf-password",
   },
 
   // ── GIF ──────────────────────────────────────────────────────
@@ -634,6 +683,7 @@ export const FEATURES: Feature[] = [
     note: "H.264는 짝수 치수만 안전해서 렌더 캔버스를 한 번 더 짝수로 맞춰 넘긴다.",
     techs: ["webcodecs", "mediabunny", "offscreencanvas", "adownload"],
     src: ["apps/gif/src/lib/gif/mp4.ts"],
+    pipeline: "gif-to-mp4",
   },
   {
     id: "gif-video-import",
@@ -651,6 +701,7 @@ export const FEATURES: Feature[] = [
     note: "프레임을 낱장 PNG로 굽고 ZIP 하나로 묶는다.",
     techs: ["converttoblob", "offscreencanvas", "fflate", "adownload"],
     src: ["apps/gif/src/lib/gif/extract.ts"],
+    pipeline: "gif-extract",
   },
 
   // ── 동영상 ───────────────────────────────────────────────────
@@ -694,6 +745,7 @@ export const FEATURES: Feature[] = [
     note: "mp3·wav·flac·ogg로 오디오 트랙만 꺼낸다.",
     techs: ["mediabunny", "adownload"],
     src: ["apps/video/src/lib/video/transcode.ts"],
+    pipeline: "video-audio",
   },
 
   // ── 이미지 ───────────────────────────────────────────────────
@@ -726,9 +778,58 @@ export const FEATURES: Feature[] = [
     id: "image-save",
     app: "image",
     label: "일괄 저장",
-    note: "여러 장이면 ZIP 하나로 묶는다.",
+    note: "여러 장이면 ZIP 하나로 묶는다. 묶는 자리는 필름스트립 패널이고 내보내는 자리는 공용 save다.",
     techs: ["fflate", "adownload"],
-    src: ["apps/image/src/lib/image/save.ts"],
+    src: ["apps/image/src/lib/image/save.ts", "apps/image/src/lib/editor/Panel.svelte"],
+  },
+
+  // ── 시트 ─────────────────────────────────────────────────────
+  {
+    id: "sheet-open",
+    app: "sheet",
+    label: "CSV 열기",
+    note: "인코딩을 먼저 판별하고(UTF-8 실패 → cp949) 구분자를 추론한 다음 RFC 4180으로 읽는다. 설치해 두면 파일 더블클릭이 여기로 들어온다.",
+    techs: ["textdecoder", "filehandler"],
+    src: ["apps/sheet/src/lib/sheet/csv.ts", "apps/sheet/src/lib/launch.ts"],
+    pipeline: "sheet-csv",
+  },
+  {
+    id: "sheet-xlsx",
+    app: "sheet",
+    label: "엑셀 열기·저장",
+    note: "값·수식 원문·서식·병합·틀 고정·열 너비까지 왕복시킨다. 엔진이 무거워서 xlsx를 실제로 만질 때만 내려받는다.",
+    techs: ["exceljs"],
+    src: ["apps/sheet/src/lib/sheet/xlsx.ts"],
+    pipeline: "sheet-xlsx",
+  },
+  {
+    id: "sheet-formula",
+    app: "sheet",
+    label: "수식 계산",
+    note: "셀마다 참조를 뽑아 그래프를 세우고 위상 순서로 계산한다. 순환은 #CIRC!로 끊고, IF·IFERROR는 고른 가지만 계산한다.",
+    techs: ["formula-engine", "formulajs"],
+    src: [
+      "apps/sheet/src/lib/formula/engine.ts",
+      "apps/sheet/src/lib/formula/evaluate.ts",
+      "apps/sheet/src/lib/formula/functions.ts",
+    ],
+  },
+  {
+    id: "sheet-format",
+    app: "sheet",
+    label: "값 해석·표시 형식",
+    note: "사람이 친 글자를 수·날짜·불리언·수식으로 가른 뒤(앞자리 0은 지킨다) 형식 코드로 다시 화면 문자열을 만든다. 날짜는 엑셀처럼 일련번호로 담는다.",
+    techs: ["numfmt"],
+    src: ["apps/sheet/src/lib/sheet/numfmt.ts", "apps/sheet/src/lib/sheet/model.ts"],
+  },
+  {
+    id: "sheet-export",
+    app: "sheet",
+    label: "형식 변환",
+    note: "같은 표를 CSV·TSV·JSON·마크다운 표·HTML 표로 내보낸다. 첫 줄을 머리글로 볼지가 유일한 설정이다.",
+    techs: ["adownload"],
+    src: ["apps/sheet/src/lib/sheet/convert.ts"],
+    pipeline: "sheet-convert",
   },
 
   // ── 드롭 ─────────────────────────────────────────────────────
@@ -874,18 +975,10 @@ export const FEATURES: Feature[] = [
 
   // ── 기술 지도 (이 페이지) ────────────────────────────────────
   {
-    id: "stack-browse",
-    app: "stack",
-    label: "검색·목록 패널",
-    note: "필터·검색에 걸린 것을 이름으로 훑는 곳. 도시는 어디에 있는지를 보여주지만 무엇 무엇이 걸렸는지는 눈으로 찾아야 해서 그 빈자리를 메운다. WebGL이 없는 환경에서는 여기가 유일한 통로다.",
-    techs: ["svelte", "tokens"],
-    src: ["apps/stack/src/lib/graph/List.svelte", "apps/stack/src/lib/graph/state.svelte.ts"],
-  },
-  {
     id: "stack-city",
     app: "stack",
     label: "3D 기계 도시",
-    note: "같은 데이터를 지형으로 본다. 유닛 하나가 기능 하나고, 왼쪽 면의 포트 수 = 기대는 기술 수, 앞면 계기판 = 소스 줄 수, 지붕 안테나 = 바깥과 통함이다. 성벽 밖 통신 설비도 손으로 놓지 않고 network가 적힌 기술 수만큼 생긴다 — 세어서 맞출 수 있어야 지형이 데이터와 어긋나지 않는다.",
+    note: "같은 데이터를 지형으로 본다. 유닛 하나가 기능 하나인데, 흐름이 한 번도 지나지 않는 기능은 아예 세우지 않는다 — 이름표만 단 상자가 늘어서면 무엇을 보라는 건지 알 수 없기 때문이다. 왼쪽 면의 포트 수 = 기대는 기술 수, 앞면 눈금·높이 = 흐름이 여기를 몇 번 지나는가, 지붕 안테나 = 바깥과 통함. 배관도 손으로 긋지 않고 파이프라인이 실제로 거치는 유닛 순서에서 나온다 — 세어서 맞출 수 있어야 지형이 데이터와 어긋나지 않는다.",
     techs: ["three", "webgl", "pointerlock", "oklchconv"],
     src: [
       "apps/stack/src/lib/city/layout3d.ts",
@@ -898,44 +991,11 @@ export const FEATURES: Feature[] = [
     app: "stack",
     label: "네트워크 계층 도식",
     note: "성벽 밖 설비마다 붙는 곳(중계탑)과 그 위에 얹히는 계층이 기둥으로 쌓인다. 호스트 문자열은 검사 스크립트가 실제 소스와 대조하므로 릴레이가 바뀌면 CI가 잡는다.",
-    techs: ["three", "tokens"],
+    techs: ["three"],
     src: ["apps/stack/src/lib/city/layout3d.ts", "scripts/check-stack-sources.mjs"],
-  },
-  {
-    id: "stack-loc",
-    app: "stack",
-    label: "소스 줄 수 계량",
-    note: "건물 높이의 근거를 빌드 시점에 세어 가상 모듈로 넣는다. 손으로 적은 숫자가 없어야 도시가 낡지 않는다.",
-    techs: ["vite"],
-    src: ["apps/stack/vite.config.ts"],
   },
 
   // ── 공통 기반 ────────────────────────────────────────────────
-  {
-    id: "common-singlefile",
-    app: "common",
-    label: "자기완결 단일 HTML",
-    note: "JS·CSS를 전부 HTML 안으로 넣는다. 더블클릭으로 열리고 오프라인에서 그대로 돈다.",
-    techs: ["vite", "singlefile", "svelte"],
-    src: ["apps/pdf/vite.config.ts"],
-  },
-  {
-    id: "common-selfextract",
-    app: "common",
-    label: "자가해제 압축",
-    note: "인라인된 덩어리를 압축해 두고 로드 시점에 브라우저가 푼다. 빌드 로그에 크기 줄이 안 찍히면 후처리가 조용히 건너뛴 것.",
-    techs: ["selfextract", "compressionstream"],
-    src: ["packages/vite-plugin-self-extracting/index.js"],
-    pipeline: "build",
-  },
-  {
-    id: "common-theme",
-    app: "common",
-    label: "디자인 토큰·프리미티브",
-    note: "버튼·색·간격·모션을 한 곳에서 정의한다. 예전엔 .btn이 15개 파일에 복제돼 앱마다 달랐다.",
-    techs: ["tokens"],
-    src: ["packages/theme/tokens.css", "packages/theme/base.css"],
-  },
   {
     id: "common-wasmloader",
     app: "common",
@@ -948,9 +1008,16 @@ export const FEATURES: Feature[] = [
     id: "common-save",
     app: "common",
     label: "표준 다운로드",
-    note: "여섯 앱이 같은 방식으로 저장한다.",
+    note: "어느 도구에서 만든 것이든 여기로 나간다. 여섯 앱에 같은 save.ts가 복제돼 있고, 전부 <a download> 한 가지 방식이다.",
     techs: ["adownload"],
-    src: ["apps/pdf/src/lib/pdf/save.ts"],
+    src: [
+      "apps/pdf/src/lib/pdf/save.ts",
+      "apps/gif/src/lib/gif/save.ts",
+      "apps/video/src/lib/video/save.ts",
+      "apps/image/src/lib/image/save.ts",
+      "apps/sheet/src/lib/sheet/save.ts",
+      "apps/drop/src/lib/rtc/save.ts",
+    ],
   },
 ];
 
@@ -967,7 +1034,7 @@ export const USERS_OF_TECH = new Map<string, string[]>(
   ]),
 );
 
-export const KIND_ORDER: TechKind[] = ["native", "lib", "own", "wasm", "build"];
+export const KIND_ORDER: TechKind[] = ["native", "lib", "own", "wasm"];
 
 /** 상단 요약 숫자 — 데이터에서 세므로 항목을 늘리면 저절로 맞는다. */
 export const SUMMARY = {

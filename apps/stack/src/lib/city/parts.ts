@@ -84,6 +84,101 @@ export function crate(size = 0.72): THREE.BufferGeometry {
   return mergeGeometries([body, band], false)!;
 }
 
+/**
+ * 공개 게시판 — 릴레이 하나. 기둥 둘에 판 하나, 판에는 슬롯 네 칸이 파여 있다.
+ * 상자로 두면 창고로 읽히지만, 슬롯이 보이면 "여기에 무언가를 붙여 두는 곳"이 된다.
+ */
+export function bulletinBoard(slotYs: number[]): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const W = 3.4;
+
+  for (const side of [-1, 1]) {
+    const post = new THREE.BoxGeometry(0.22, 5.0, 0.22);
+    post.translate(side * (W / 2 - 0.2), 2.5, 0);
+    parts.push(post);
+  }
+
+  // 뒷판 — 이게 없으면 가로대만 남아 울타리로 읽힌다. 봉투가 기댈 면이기도 하다.
+  const back = new THREE.BoxGeometry(W, slotYs[slotYs.length - 1] - slotYs[0] + 1.4, 0.12);
+  back.translate(0, (slotYs[0] + slotYs[slotYs.length - 1]) / 2, -0.11);
+  parts.push(back);
+
+  // 판 — 슬롯이 파인 것처럼 보이도록 칸 사이에 가로대만 남긴다
+  const top = new THREE.BoxGeometry(W, 0.18, 0.3);
+  top.translate(0, slotYs[slotYs.length - 1] + 0.62, 0);
+  parts.push(top);
+  const bottom = new THREE.BoxGeometry(W, 0.18, 0.3);
+  bottom.translate(0, slotYs[0] - 0.5, 0);
+  parts.push(bottom);
+  for (const y of slotYs) {
+    const rail = new THREE.BoxGeometry(W, 0.07, 0.34);
+    rail.translate(0, y - 0.3, 0);
+    parts.push(rail);
+  }
+
+  // 지붕 — 게시판이 비를 맞지 않게 생긴 것. 실루엣을 알아보게 하는 역할.
+  const roof = new THREE.BoxGeometry(W + 0.5, 0.16, 0.9);
+  roof.translate(0, 5.05, -0.1);
+  parts.push(roof);
+
+  return mergeGeometries(parts, false)!;
+}
+
+/**
+ * 거울 — STUN. 틀에 낀 판 하나. 가서 자기를 비춰 보고 돌아오는 곳이라
+ * 무엇을 저장하거나 중계하는 물건처럼 보이면 안 된다.
+ */
+export function mirrorPanel(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const post = new THREE.CylinderGeometry(0.18, 0.24, 3.2, 8);
+  post.translate(0, 1.6, 0);
+  parts.push(post);
+  // 받침 — 서 있는 물건이라는 걸 분명히
+  const foot = new THREE.CylinderGeometry(1.0, 1.2, 0.36, 10);
+  foot.translate(0, 0.18, 0);
+  parts.push(foot);
+  // 틀
+  const frame = new THREE.BoxGeometry(3.8, 4.4, 0.3);
+  frame.translate(0, 5.6, 0);
+  parts.push(frame);
+  return mergeGeometries(parts, false)!;
+}
+
+/** 거울 면 — 틀과 색이 달라야 해서 따로 만든다(반사면은 밝게 칠한다) */
+export function mirrorFace(): THREE.BufferGeometry {
+  const face = new THREE.BoxGeometry(3.3, 3.9, 0.1);
+  face.translate(0, 5.6, 0.2);
+  return face;
+}
+
+/** 봉투 — 게시판에 붙는 한 장. 봉인 여부는 색으로 가른다. */
+export function envelope(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const sheet = new THREE.BoxGeometry(1.5, 0.62, 0.1);
+  parts.push(sheet);
+  // 접힌 덮개 — 종이로 보이게 하는 최소한의 실루엣
+  const flap = new THREE.BoxGeometry(1.5, 0.2, 0.14);
+  flap.translate(0, 0.18, 0.02);
+  parts.push(flap);
+  return mergeGeometries(parts, false)!;
+}
+
+/**
+ * 반쪽 자물쇠 — SPAKE2. 양쪽이 하나씩 들고 와 맞물려야 열쇠가 된다.
+ * 이가 맞물리는 모양이라 "혼자서는 아무것도 안 된다"가 형태로 읽힌다.
+ */
+export function lockHalf(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const body = new THREE.BoxGeometry(0.9, 1.2, 0.6);
+  parts.push(body);
+  for (let i = 0; i < 3; i++) {
+    const tooth = new THREE.BoxGeometry(0.42, 0.24, 0.6);
+    tooth.translate(0.62, -0.4 + i * 0.4, 0);
+    parts.push(tooth);
+  }
+  return mergeGeometries(parts, false)!;
+}
+
 /** 꺾인 폴리라인을 부드럽게 뭉개지 않는 경로로 — 배관은 직각이 살아야 한다. */
 export function polyCurve(points: { x: number; y: number; z: number }[]): THREE.CurvePath<THREE.Vector3> {
   const path = new THREE.CurvePath<THREE.Vector3>();

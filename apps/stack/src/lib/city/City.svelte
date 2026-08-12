@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { graph } from "../graph/state.svelte";
   import { PIPELINES, PIPELINE_BY_ID } from "../data/pipelines";
+  import { APPS, FEATURES } from "../data/stack";
   import { t } from "../i18n";
   import Icon from "../Icon.svelte";
   import { onThemeChange } from "./palette";
@@ -18,9 +19,33 @@
   let playing = $state(false);
   let stepIndex = $state<number | null>(null);
   let walking = $state(false);
+  let speed = $state(1);
+  /** 랑데부 무대는 파이프라인 단계가 아니라 자기 박자로 말한다 */
+  let beat = $state<{ index: number; total: number; label: string; note: string } | null>(null);
 
   const flow = $derived(PIPELINE_BY_ID.get(flowId));
-  const step = $derived(stepIndex === null ? null : (flow?.steps[stepIndex] ?? null));
+  const pipeStep = $derived(stepIndex === null ? null : (flow?.steps[stepIndex] ?? null));
+  const card = $derived(
+    beat
+      ? { n: beat.index + 1, total: beat.total, label: beat.label, note: beat.note, form: null }
+      : pipeStep
+        ? {
+            n: (stepIndex ?? 0) + 1,
+            total: flow?.steps.length ?? 0,
+            label: pipeStep.label,
+            note: pipeStep.note,
+            form: pipeStep.cargo?.form ?? null,
+          }
+        : null,
+  );
+
+  // 흐름이 열한 개라 한 줄로 늘어놓으면 어느 도구 것인지 알 수 없다 — 앱별로 묶는다.
+  const flowGroups = APPS.map((app) => ({
+    label: app.label,
+    flows: PIPELINES.filter(
+      (pipe) => FEATURES.find((feat) => feat.pipeline === pipe.id)?.app === app.id,
+    ),
+  })).filter((group) => group.flows.length > 0);
 
   onMount(() => {
     if (!canvas || !overlay) return;
@@ -43,7 +68,11 @@
           onPick: (id) => (id ? graph.pin(id) : graph.clearPin()),
           onStep: (index) => {
             stepIndex = index;
-            if (index === null) playing = false;
+            if (index === null && !beat) playing = false;
+          },
+          onBeat: (next) => {
+            beat = next;
+            if (next === null) playing = false;
           },
           onWalkChange: (on) => (walking = on),
         });
@@ -79,6 +108,10 @@
     if (graph.pinned) scene?.focus(graph.pinned);
   });
 
+  $effect(() => {
+    scene?.setSpeed(speed);
+  });
+
   function toggleFlow() {
     if (!scene) return;
     if (playing) {
@@ -108,11 +141,19 @@
       <p class="walkbar">{t.city.walking}</p>
     {/if}
 
-    {#if step}
+    {#if card}
       <div class="stepcard">
-        <span class="idx">{t.city.step((stepIndex ?? 0) + 1, flow?.steps.length ?? 0)}</span>
-        <strong>{step.label}</strong>
-        <p>{step.note}</p>
+        <div class="rail" aria-hidden="true">
+          {#each { length: card.total } as _, i (i)}
+            <span class="tick" class:done={i < card.n}></span>
+          {/each}
+        </div>
+        <span class="idx">{t.city.step(card.n, card.total)}</span>
+        <strong>{card.label}</strong>
+        <p>{card.note}</p>
+        {#if card.form}
+          <p class="form"><span>{t.city.cargoNow}</span>{card.form}</p>
+        {/if}
       </div>
     {/if}
   </div>
@@ -121,8 +162,12 @@
     <label class="flow">
       <span class="cap">{t.city.flow}</span>
       <select bind:value={flowId} disabled={!scene}>
-        {#each PIPELINES as p (p.id)}
-          <option value={p.id}>{p.label}</option>
+        {#each flowGroups as group (group.label)}
+          <optgroup label={group.label}>
+            {#each group.flows as p (p.id)}
+              <option value={p.id}>{p.label}</option>
+            {/each}
+          </optgroup>
         {/each}
       </select>
     </label>
@@ -131,6 +176,15 @@
       <Icon name={playing ? "stop" : "play"} size={14} />
       {playing ? t.city.stop : t.city.play}
     </button>
+
+    <label class="flow">
+      <span class="cap">{t.city.speed}</span>
+      <select bind:value={speed} disabled={!scene}>
+        {#each t.city.speeds as option (option.mult)}
+          <option value={option.mult}>{option.label}</option>
+        {/each}
+      </select>
+    </label>
 
     <button class="btn small" disabled={!scene} onclick={() => scene?.setWalk(true)}>
       {t.city.walk}
@@ -203,30 +257,65 @@
     font-size: var(--text-sm);
   }
 
+  /* 재생 중 유일하게 글로 말하는 자리다. 3D 위에 얹히는 데다 예전엔 260px에
+   * 흐린 글씨라 읽히지 않았다 — 넓히고, 본문을 본문 색으로 올리고, 뒤가 비치지
+   * 않게 불투명하게 깔았다. */
   .stepcard {
     position: absolute;
     inset: var(--space-md) var(--space-md) auto auto;
-    width: min(260px, 60%);
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
+    width: min(360px, 78%);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
     background: var(--surface-raised);
-    border: 1px solid var(--border-strong);
-    box-shadow: var(--shadow-1);
+    border: 1px solid var(--accent);
+    box-shadow: var(--shadow-2);
+  }
+  /* 어디쯤 왔는지 — 숫자보다 눈금이 먼저 읽힌다 */
+  .rail {
+    display: flex;
+    gap: 3px;
+    margin-bottom: var(--space-sm);
+  }
+  .rail .tick {
+    flex: 1;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--border-strong);
+  }
+  .rail .tick.done {
+    background: var(--accent);
   }
   .stepcard .idx {
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
   .stepcard strong {
     display: block;
-    margin-top: var(--space-3xs);
-    font-size: var(--text-xl);
+    margin-top: var(--space-2xs);
+    font-size: var(--text-2xl);
+    line-height: 1.3;
   }
   .stepcard p {
-    margin: var(--space-2xs) 0 0;
-    font-size: var(--text-md);
-    line-height: 1.55;
+    margin: var(--space-xs) 0 0;
+    font-size: var(--text-base);
+    line-height: 1.6;
+    color: var(--text);
+  }
+  /* 지금 관 안을 지나는 게 무엇인지 — 궤짝 옆 잔글씨를 놓쳐도 여기서 읽힌다 */
+  .stepcard p.form {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border);
+    font-weight: 700;
+    color: var(--accent-ink);
+  }
+  .stepcard p.form span {
+    font-weight: 400;
+    font-size: var(--text-xs);
     color: var(--text-muted);
   }
 

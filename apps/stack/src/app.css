@@ -97,7 +97,12 @@ body {
   --k: var(--cat-4);
   --k-ink: var(--cat-4-ink);
 }
-.k-build {
-  --k: var(--cat-5);
-  --k-ink: var(--cat-5-ink);
+
+/* 화물 이름표 — 궤짝을 따라다니는 한 마디("프레임 여러 장").
+ * 단계 설명은 카드가 맡고, 이건 지금 눈앞의 덩어리가 무엇인지만 말한다. */
+.city-label.cargo {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
 }
