@@ -577,6 +577,106 @@ export const PIPELINES: Pipeline[] = [
     ],
   },
 
+  // ── 문서 ─────────────────────────────────────────────────────
+  {
+    id: "doc-hwp",
+    label: "한글 문서 열고 옮기기",
+    input: ".hwp · .hwpx",
+    output: ".md(+images ZIP) · .hwpx",
+    steps: [
+      {
+        label: "엔진 내려받기",
+        tech: "rhwp",
+        note: "8MB짜리 렌더러는 단일 HTML에 못 넣어 파일 하나로 따로 나간다. 앱이 뜨자마자 배경에서 받아 두고(데이터 절약 모드면 미룬다), 받은 바이트는 해시를 맞춰 본 뒤에만 실행한다.",
+        src: "apps/doc/src/lib/doc/engine.ts",
+        feat: "doc-hwp",
+        cargo: { count: 1, scale: 1, form: "문서 바이트" },
+      },
+      {
+        label: "문서 열기",
+        tech: "rhwp",
+        note: "바이너리 .hwp는 CFB, .hwpx는 ZIP+XML이지만 엔진 안에서 같은 문서 모델이 된다. 비밀번호가 걸려 있으면 여기서 되묻는다 — 비밀번호는 wasm 안으로만 들어간다.",
+        src: "apps/doc/src/lib/doc/hwp.ts",
+        feat: "doc-hwp",
+        cargo: { count: 1, scale: 1, form: "문서 모델" },
+      },
+      {
+        label: "페이지 그리기",
+        tech: "rhwp",
+        note: "쪽마다 SVG 한 장. 표·수식·도형·각주까지 그대로 앉는다. 화면에 들어오는 쪽만 그리고, 인쇄할 때만 전부 그린다.",
+        src: "apps/doc/src/lib/editor/Pages.svelte",
+        feat: "doc-hwp",
+        cargo: { count: 6, scale: 1, form: "쪽별 SVG" },
+      },
+      {
+        label: "문단·표 걷기",
+        tech: "rhwp",
+        note: "표는 문단 텍스트가 아니라 문단에 앵커된 컨트롤이라, 선택 영역만 내보내면 통째로 사라진다. 문단을 따라가며 텍스트와 컨트롤을 번갈아 모은다.",
+        src: "apps/doc/src/lib/doc/hwp.ts",
+        feat: "doc-markdown",
+        cargo: { count: 1, scale: 0.8, form: "구조 있는 HTML" },
+      },
+      {
+        label: "마크다운으로",
+        tech: "turndown",
+        note: "표는 직접 짠 규칙으로 GFM 파이프 표가 된다. 그림은 본문에서 떼어 내 images/로 옮기고 상대경로만 남긴다.",
+        src: "apps/doc/src/lib/doc/markdown.ts",
+        feat: "doc-markdown",
+        cargo: { count: 2, scale: 0.4, form: "md + 그림" },
+      },
+      {
+        label: "hwpx로 쓰기",
+        tech: "rhwp",
+        note: "바이너리 .hwp를 개방형 .hwpx로 그대로 내준다. 원한 사람만 누르는 갈래라 마크다운과 나란히 있다.",
+        src: "apps/doc/src/lib/doc/hwp.ts",
+        feat: "doc-hwpx",
+        cargo: { count: 1, scale: 0.9, form: ".hwpx" },
+      },
+      exitStep("apps/doc/src/lib/doc/save.ts", "md 또는 ZIP"),
+    ],
+  },
+  {
+    id: "doc-docx",
+    label: "워드 문서 열고 한글로",
+    input: ".docx",
+    output: ".md(+images ZIP) · .hwpx",
+    steps: [
+      {
+        label: "페이지 그리기",
+        tech: "docx-preview",
+        note: "워드의 서식·표·머리말을 HTML+CSS로 옮겨 페이지 모양 그대로 보여 준다. 여기까지는 엔진도 인터넷도 필요 없다.",
+        src: "apps/doc/src/lib/doc/docx.ts",
+        feat: "doc-docx",
+        cargo: { count: 1, scale: 1, form: "그려진 쪽" },
+      },
+      {
+        label: "의미 구조만 뽑기",
+        tech: "mammoth",
+        note: "같은 파일에서 서식을 버리고 제목·목록·표만 남긴 HTML을 따로 만든다. 옮길 재료는 이쪽이다. 실제로 변환을 누를 때만 내려받는다.",
+        src: "apps/doc/src/lib/doc/docx.ts",
+        feat: "doc-docx",
+        cargo: { count: 1, scale: 0.8, form: "시맨틱 HTML" },
+      },
+      {
+        label: "마크다운으로",
+        tech: "turndown",
+        note: "한글 쪽과 같은 규칙을 지난다 — 어느 형식에서 왔든 결과물이 같아 보이게.",
+        src: "apps/doc/src/lib/doc/markdown.ts",
+        feat: "doc-markdown",
+        cargo: { count: 2, scale: 0.4, form: "md + 그림" },
+      },
+      {
+        label: "hwpx로 쓰기",
+        tech: "hwp-convert",
+        note: "시맨틱 HTML을 한글이 여는 .hwpx로 쓴다. 표·서식이 보존되고, 만든 파일은 이 도구의 한글 렌더러가 그대로 읽는다.",
+        src: "apps/doc/src/lib/doc/hwp.ts",
+        feat: "doc-hwpx",
+        cargo: { count: 1, scale: 0.9, form: ".hwpx" },
+      },
+      exitStep("apps/doc/src/lib/doc/save.ts", "md 또는 hwpx"),
+    ],
+  },
+
   // ── 드롭 ─────────────────────────────────────────────────────
   // 이 흐름만 궤짝이 아니라 전용 무대(랑데부)로 재생된다 — 단계마다 장소가 바뀌는 게
   // 아니라 등장인물의 역할이 바뀌기 때문이다. cargo를 적지 않는 이유.

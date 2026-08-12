@@ -23,6 +23,7 @@ export type AppId =
   | "video"
   | "image"
   | "sheet"
+  | "doc"
   | "drop"
   | "dev"
   | "stack"
@@ -92,14 +93,14 @@ export const KIND_LABEL: Record<TechKind, string> = {
   native: "브라우저 네이티브",
   lib: "순수 JS 라이브러리",
   own: "직접 구현",
-  wasm: "wasm (CDN 지연 로드)",
+  wasm: "wasm (지연 로드)",
 };
 
 export const KIND_NOTE: Record<TechKind, string> = {
   native: "브라우저가 이미 갖고 있어서 가져다 쓰기만 한 것",
   lib: "번들에 들어가는 서드파티 — 전부 순수 JS",
   own: "쓸 만한 게 없거나 너무 무거워서 직접 짠 것",
-  wasm: "유일하게 인터넷이 필요한 지점 — 엔진 최초 1회",
+  wasm: "유일하게 인터넷이 필요한 지점 — 엔진 최초 1회(그 뒤로는 캐시)",
 };
 
 /**
@@ -113,6 +114,7 @@ export const APPS: AppMeta[] = [
   { id: "video", label: "동영상", blurb: "자르기 · 압축 · 변환 · 소리 추출", path: "../video/" },
   { id: "image", label: "이미지", blurb: "변환 · 압축 · 리사이즈 · EXIF", path: "../image/" },
   { id: "sheet", label: "시트", blurb: "CSV · 엑셀 · 수식 · 서식", path: "../sheet/" },
+  { id: "doc", label: "문서", blurb: "한글 · 워드 열기 · 마크다운 변환", path: "../doc/" },
   { id: "drop", label: "드롭", blurb: "기기 간 직접 전송 · 서버 없음", path: "../drop/" },
   { id: "dev", label: "개발자 도구", blurb: "JSON 변환 · diff · QR · 해시", path: "../dev/" },
   {
@@ -568,7 +570,72 @@ export const TECHS: Tech[] = [
     src: ["packages/wasm-loader/index.js"],
   },
 
+  {
+    id: "docx-preview",
+    label: "docx-preview",
+    kind: "lib",
+    pkg: "docx-preview",
+    note: "워드 문서를 페이지 모양 그대로 HTML로 그린다. 서식·표·머리말을 CSS로 옮기므로 '문서처럼' 보이지만, 구조를 뽑아내기엔 나쁜 소스라 마크다운은 mammoth 쪽으로 간다.",
+    src: ["apps/doc/src/lib/doc/docx.ts"],
+  },
+  {
+    id: "mammoth",
+    label: "mammoth",
+    kind: "lib",
+    pkg: "mammoth",
+    note: "같은 워드 문서에서 서식을 버리고 의미 구조(제목·목록·표)만 남긴 HTML을 준다. 마크다운의 재료는 이쪽이다. 무거워서 실제로 변환할 때만 내려받는다.",
+    src: ["apps/doc/src/lib/doc/docx.ts"],
+  },
+  {
+    id: "turndown",
+    label: "turndown",
+    kind: "lib",
+    pkg: "turndown",
+    note: "HTML → 마크다운. 한글 쪽과 워드 쪽이 서로 다른 HTML을 주지만 마크다운으로 옮기는 규칙은 하나만 둔다 — 입력 형식에 따라 결과가 달라 보이면 안 되니까.",
+    src: ["apps/doc/src/lib/doc/markdown.ts"],
+  },
+  {
+    id: "hwp-convert",
+    label: "hwp-convert",
+    kind: "lib",
+    pkg: "hwp-convert",
+    note: "HTML을 한글이 여는 .hwpx로 쓴다. 원래 rhwp 하나로 닫으려 했는데 제목·문단·표가 섞이면 엔진이 패닉해서(rendering.rs) 이 경로만 순수 TS로 갈랐다. 만든 파일은 rhwp가 정상으로 읽는다.",
+    src: ["apps/doc/src/lib/doc/hwp.ts"],
+  },
+  {
+    id: "md-table",
+    label: "표 → 마크다운 표",
+    kind: "own",
+    note: "turndown 본체는 표를 모른다. 공문서·보고서는 표가 곧 내용이라 GFM 파이프 표 규칙을 직접 짰다. 병합된 셀은 마크다운에 자리가 없어 펴고, 편 사실을 화면에 알린다.",
+    src: ["apps/doc/src/lib/doc/markdown.ts"],
+  },
+
   // ── wasm (여기만 인터넷이 필요하다) ──────────────────────────
+  {
+    id: "rhwp",
+    label: "@rhwp/core",
+    kind: "wasm",
+    pkg: "@rhwp/core",
+    network: "우리 서버 최초 1회",
+    net: {
+      hosts: ["cranemont.github.io"],
+      layers: [
+        { label: "TCP/IP", note: "https:// 라서 443." },
+        { label: "TLS", note: "버전은 브라우저가 협상한다." },
+        {
+          label: "HTTPS",
+          note: "서드파티 CDN이 아니라 이 사이트가 직접 준다. 호스팅에서 열었으면 상대경로로, 내려받은 단일 HTML로 열었으면 이 주소로 받는다.",
+        },
+        {
+          label: "SHA-384 검증",
+          note: "받은 바이트의 해시를 맞춰 보고 어긋나면 실행하지 않는다(fail-closed). 해시는 빌드가 계산해 박으므로 사람이 다시 셀 일이 없다.",
+        },
+      ],
+      carries: "한글 렌더러 바이트 2.1MB — 최초 1회만, 사용자 문서는 올라가지 않는다",
+    },
+    note: "한글 문서(.hwp·.hwpx)를 파싱하고 페이지를 SVG로 그린다. 표·수식·도형·각주·다단까지 그리는 유일한 선택지였다. 8MB라 단일 HTML에 못 넣어 파일 하나로 따로 내보낸다.",
+    src: ["apps/doc/src/lib/doc/engine.ts", "apps/doc/rhwp-wasm.ts"],
+  },
   {
     id: "qpdf",
     label: "qpdf-wasm",
@@ -830,6 +897,46 @@ export const FEATURES: Feature[] = [
     techs: ["adownload"],
     src: ["apps/sheet/src/lib/sheet/convert.ts"],
     pipeline: "sheet-convert",
+  },
+
+  // ── 문서 ─────────────────────────────────────────────────────
+  {
+    id: "doc-hwp",
+    app: "doc",
+    label: "한글 문서 보기",
+    note: "엔진을 받아 문서를 열고 페이지를 SVG로 그린다. 비밀번호가 걸린 문서도 받아 열고, 원본이 그림이라 브라우저 찾기가 안 닿으므로 문서 안 찾기를 따로 붙였다. 설치해 두면 .hwp 더블클릭이 여기로 들어온다.",
+    techs: ["rhwp", "filehandler"],
+    src: [
+      "apps/doc/src/lib/doc/engine.ts",
+      "apps/doc/src/lib/doc/hwp.ts",
+      "apps/doc/src/lib/launch.ts",
+    ],
+    pipeline: "doc-hwp",
+  },
+  {
+    id: "doc-docx",
+    app: "doc",
+    label: "워드 문서 보기",
+    note: "페이지 모양은 docx-preview가 그리고, 옮길 내용은 mammoth가 따로 뽑는다. 한 라이브러리로 둘 다 하려 하면 어느 쪽이든 나빠져서 갈랐다. 워드 쪽은 엔진 없이 완전히 오프라인이다.",
+    techs: ["docx-preview", "mammoth"],
+    src: ["apps/doc/src/lib/doc/docx.ts"],
+    pipeline: "doc-docx",
+  },
+  {
+    id: "doc-markdown",
+    app: "doc",
+    label: "마크다운 변환",
+    note: "원본 옆에 저장될 마크다운을 그대로 띄운다 — 보이는 글자가 곧 내려받을 글자다. 그림은 본문에서 떼어 내 images/로 담고, 옮기며 잃은 것(병합 셀 등)은 결과 위에 적는다.",
+    techs: ["turndown", "md-table", "fflate"],
+    src: ["apps/doc/src/lib/doc/markdown.ts", "apps/doc/src/lib/doc/save.ts"],
+  },
+  {
+    id: "doc-hwpx",
+    app: "doc",
+    label: "hwpx로 저장",
+    note: "한글 문서는 엔진이 그대로 내주고, 워드 문서는 시맨틱 HTML을 거쳐 새 hwpx로 쓴다 — 워드로 받은 문서를 한글에서 열 수 있게 하는 자리다.",
+    techs: ["rhwp", "hwp-convert"],
+    src: ["apps/doc/src/lib/doc/hwp.ts"],
   },
 
   // ── 드롭 ─────────────────────────────────────────────────────
