@@ -12,6 +12,16 @@ export function fetchVerified(
   label: string,
 ): Promise<Uint8Array<ArrayBuffer>>;
 
+/**
+ * 후보 URL을 앞에서부터 시도한다. 못 받으면(네트워크·404) 다음으로 넘어가고,
+ * 해시가 어긋나면 폴백 없이 즉시 던진다(fail-closed).
+ */
+export function fetchVerifiedFrom(
+  urls: string[],
+  sha384: string,
+  label: string,
+): Promise<Uint8Array<ArrayBuffer>>;
+
 /** fetch+검증한 바이트로 blob URL을 만든다. URL당 한 번만 받아 캐시한다. */
 export function verifiedBlobUrl(
   url: string,

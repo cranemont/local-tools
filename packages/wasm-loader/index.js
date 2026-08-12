@@ -41,23 +41,50 @@ export function loadScriptWithSri(src, integrity, { key, label }) {
  * @param {string} label
  * @returns {Promise<Uint8Array>}
  */
-export async function fetchVerified(url, sha384, label) {
-  let resp;
-  try {
-    resp = await fetch(url, { mode: "cors" });
-  } catch {
-    throw new Error(`${label} 다운로드에 실패했어요. 인터넷 연결을 확인해 주세요.`);
+export function fetchVerified(url, sha384, label) {
+  return fetchVerifiedFrom([url], sha384, label);
+}
+
+/**
+ * 후보 URL을 앞에서부터 시도해, SHA-384를 검증한 바이트를 돌려준다.
+ *
+ * **못 받은 것과 다른 것이 온 것을 구분한다** — 네트워크 실패·404면 다음 후보로
+ * 넘어가지만, 해시가 어긋나면 그 자리에서 던진다(fail-closed). 자체 호스팅한 엔진을
+ * 상대경로로 먼저 찾고 없으면 배포 주소로 가는 식의 폴백을 위한 것이다.
+ *
+ * @param {string[]} urls
+ * @param {string} sha384 `sha384-...`
+ * @param {string} label
+ * @returns {Promise<Uint8Array>}
+ */
+export async function fetchVerifiedFrom(urls, sha384, label) {
+  /** @type {Error | null} */
+  let lastFailure = null;
+
+  for (const url of urls) {
+    let resp;
+    try {
+      resp = await fetch(url, { mode: "cors" });
+    } catch {
+      lastFailure = new Error(`${label} 다운로드에 실패했어요. 인터넷 연결을 확인해 주세요.`);
+      continue;
+    }
+    if (!resp.ok) {
+      lastFailure = new Error(`${label} 다운로드에 실패했어요 (HTTP ${resp.status}).`);
+      continue;
+    }
+
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    const digest = await crypto.subtle.digest("SHA-384", bytes);
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+    if (`sha384-${b64}` !== sha384) {
+      // 여기서 다음 후보로 넘어가면 안 된다 — 변조된 파일을 만난 것이므로 멈춘다.
+      throw new Error(`보안 검증 실패: ${label} 파일이 예상과 달라 실행을 중단했어요.`);
+    }
+    return bytes;
   }
-  if (!resp.ok) {
-    throw new Error(`${label} 다운로드에 실패했어요 (HTTP ${resp.status}).`);
-  }
-  const bytes = new Uint8Array(await resp.arrayBuffer());
-  const digest = await crypto.subtle.digest("SHA-384", bytes);
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
-  if (`sha384-${b64}` !== sha384) {
-    throw new Error(`보안 검증 실패: ${label} 파일이 예상과 달라 실행을 중단했어요.`);
-  }
-  return bytes;
+
+  throw lastFailure ?? new Error(`${label}를 받을 주소가 없어요.`);
 }
 
 /** @type {Map<string, Promise<string>>} */
