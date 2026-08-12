@@ -166,6 +166,30 @@ button {
   cursor: not-allowed;
 }
 
+/* 도구줄 변형 — 아이콘 버튼을 여러 개 붙여 놓을 때.
+ * 기본형은 알약 + 상시 테두리라 낱개 동작에는 맞지만, 열 개씩 늘어놓으면
+ * 동그라미가 줄줄이 이어져 무슨 묶음인지 안 보인다. 그래서 모서리를 네모로 눕히고
+ * 테두리는 hover·선택 때만 꺼낸다. */
+.icon-btn.tool {
+  width: 30px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border-color: transparent;
+  color: var(--text);
+}
+.icon-btn.tool:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: transparent;
+  color: var(--accent-ink);
+}
+
+/* 선택됨 — `.btn.active`와 같은 뜻·같은 모양을 아이콘 버튼에도 준다. */
+.icon-btn.active {
+  background: var(--accent-weak);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent-ink);
+}
+
 /* 손가락 입력에선 최소 타깃을 보장한다(마우스 UI 밀도는 그대로 둔다).
  * 작은 아이콘 버튼은 실제 크기를 키우면 카드 오버레이가 넘치므로,
  * 레이아웃은 그대로 두고 히트 영역만 의사요소로 넓힌다. */
