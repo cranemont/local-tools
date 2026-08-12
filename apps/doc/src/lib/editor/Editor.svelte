@@ -18,15 +18,19 @@
   let view = $state<PaneView>("both");
   let sync = $state(true);
   let finding = $state(false);
-  let dragging = $state(false);
+  let findNonce = $state(0);
   let narrow = $state(false);
 
+  // 드래그는 자식 위를 지날 때마다 leave/enter가 번갈아 나므로 깊이를 센다
+  // (0이 될 때만 겹판이 사라진다 — 시트와 같은 방식).
+  let dragDepth = $state(0);
+
   // 좁은 화면에서 두 판을 우겨넣으면 둘 다 못 읽는다 — 한 판만 남긴다.
+  // 고른 view 자체는 건드리지 않는다. 창을 넓히면 보던 배치로 그대로 돌아온다.
   $effect(() => {
     const query = window.matchMedia("(max-width: 900px)");
     const apply = (): void => {
       narrow = query.matches;
-      if (query.matches && view === "both") view = "original";
     };
     apply();
     query.addEventListener("change", apply);
@@ -35,34 +39,66 @@
 
   const effectiveView = $derived<PaneView>(narrow && view === "both" ? "original" : view);
 
+  /** 인쇄는 원본만 내보낸다 — 마크다운만 보고 있어도 그 순간엔 원본 판을 살려 둔다. */
+  const showOriginal = $derived(effectiveView !== "markdown" || editor.printing);
+  const showMarkdown = $derived(effectiveView !== "original");
+  /** 찾기는 원본(그림)을 위한 것이다 — 마크다운만 보고 있으면 브라우저 찾기가 맞다. */
+  const canFind = $derived(editor.kind !== "docx" && effectiveView !== "markdown");
+
   function openFile(file: File): void {
     void editor.open(file);
   }
 
-  function onDrop(event: DragEvent): void {
-    event.preventDefault();
-    dragging = false;
-    const file = event.dataTransfer?.files?.[0];
-    if (file) openFile(file);
+  function onDragEnter(event: DragEvent): void {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    dragDepth++;
+  }
+
+  function onDragLeave(): void {
+    dragDepth = Math.max(0, dragDepth - 1);
   }
 
   function onDragOver(event: DragEvent): void {
     if (!event.dataTransfer?.types.includes("Files")) return;
     event.preventDefault();
-    dragging = true;
+  }
+
+  function onDrop(event: DragEvent): void {
+    event.preventDefault();
+    dragDepth = 0;
+    const file = event.dataTransfer?.files?.[0];
+    if (file) openFile(file);
+  }
+
+  /** 왼쪽은 그림이라 브라우저 Ctrl+F가 닿지 않는다 — 그 화면에서만 우리 찾기를 연다. */
+  function onKeydown(event: KeyboardEvent): void {
+    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "f") return;
+    if (editor.stage !== "ready" || !canFind) return;
+    event.preventDefault();
+    finding = true;
+    findNonce++; // 이미 열려 있어도 입력란으로 돌아가게
   }
 
   /**
    * 스크롤 맞춤 — 비율 근사다. 문단 단위로 정확히 잇는 것은 엔진의 문단 인덱스와
    * 마크다운 출력 위치를 엮어야 해서 비싸고, 표가 끼면 어차피 어긋난다.
    * 그래서 "대충 같은 데를 보고 있다"까지만 한다. 끄고 볼 수도 있게 두었다.
+   *
+   * 스크롤은 위로 올라오지 않으므로(bubbles: false) 캡처로 받는다. 그래서 판을 알아내는
+   * 기준은 **target**이다 — currentTarget은 언제나 여기 이 상자다.
    */
+  let root = $state<HTMLDivElement | null>(null);
   let syncing = false;
+
   function onScroll(event: Event): void {
     if (!sync || effectiveView !== "both" || syncing) return;
-    const from = event.currentTarget as HTMLElement;
-    const other = from.dataset.pane === "original" ? markdownEl : pagesEl;
-    if (!other) return;
+
+    const from = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-pane]");
+    if (!from) return;
+    const other = root?.querySelector<HTMLElement>(
+      from.dataset.pane === "original" ? '[data-pane="markdown"]' : '[data-pane="original"]',
+    );
+    if (!other || other === from) return;
 
     const ratio = from.scrollTop / Math.max(1, from.scrollHeight - from.clientHeight);
     syncing = true;
@@ -71,18 +107,6 @@
       syncing = false;
     });
   }
-
-  let root = $state<HTMLDivElement | null>(null);
-  let pagesEl = $state<HTMLElement | null>(null);
-  let markdownEl = $state<HTMLElement | null>(null);
-
-  // 자식이 만든 스크롤 상자를 잡아 둔다(두 판 모두 자기 컴포넌트 안에 있다).
-  $effect(() => {
-    editor.stage;
-    effectiveView;
-    pagesEl = root?.querySelector<HTMLElement>('[data-pane="original"]') ?? null;
-    markdownEl = root?.querySelector<HTMLElement>('[data-pane="markdown"]') ?? null;
-  });
 
   // 저장 알림은 잠깐만 띄운다.
   $effect(() => {
@@ -93,9 +117,11 @@
 </script>
 
 <svelte:window
+  onkeydown={onKeydown}
+  ondragenter={onDragEnter}
   ondragover={onDragOver}
   ondrop={onDrop}
-  ondragleave={() => (dragging = false)}
+  ondragleave={onDragLeave}
 />
 
 <div class="editor" bind:this={root}>
@@ -132,26 +158,33 @@
   {:else}
     <Toolbar
       view={effectiveView}
+      {narrow}
       setView={(next) => (view = next)}
       {sync}
       toggleSync={() => (sync = !sync)}
-      toggleFind={() => (finding = !finding)}
+      {canFind}
+      toggleFind={() => {
+        finding = !finding;
+        if (finding) findNonce++;
+      }}
     />
-    {#if finding && editor.kind !== "docx"}
-      <FindBar close={() => (finding = false)} />
+    {#if finding && canFind}
+      <FindBar focus={findNonce} close={() => (finding = false)} />
     {/if}
 
+    <!-- 두 판은 언제나 DOM에 둔다 — 인쇄가 마크다운 화면에서도 원본을 내보내야 하고,
+         판을 오갈 때마다 다시 그리지 않아도 된다. 감출 때는 CSS로만 감춘다. -->
     <div class="panes" class:split={effectiveView === "both"} onscrollcapture={onScroll}>
-      {#if effectiveView !== "markdown"}
+      <div class="pane" class:hidden={!showOriginal}>
         <Pages />
-      {/if}
-      {#if effectiveView !== "original"}
+      </div>
+      <div class="pane md" class:hidden={!showMarkdown}>
         <MarkdownPane />
-      {/if}
+      </div>
     </div>
   {/if}
 
-  {#if dragging}
+  {#if dragDepth > 0}
     <div class="overlay">{t.drop.overlay}</div>
   {/if}
 
@@ -179,19 +212,21 @@
     min-height: 0;
     display: flex;
   }
-  /* 두 판을 정확히 반씩 — 어느 쪽도 "곁다리"로 보이지 않게 한다. */
-  .panes.split > :global(*) {
-    width: 50%;
-    min-width: 0;
-  }
-  .panes.split > :global(* + *) {
-    border-left: 1px solid var(--border);
-  }
-  .panes > :global(*) {
+  .pane {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
+  }
+  /* 두 판을 정확히 반씩 — 어느 쪽도 "곁다리"로 보이지 않게 한다. */
+  .panes.split .pane {
+    width: 50%;
+  }
+  .panes.split .pane + .pane {
+    border-left: 1px solid var(--border);
+  }
+  .pane.hidden {
+    display: none;
   }
 
   .center {
@@ -249,8 +284,12 @@
     z-index: var(--z-toast);
   }
 
+  /* 인쇄에는 원본만 남긴다 — 마크다운 판은 통째로 빠진다. */
   @media print {
-    .panes.split > :global(*) {
+    .pane.md {
+      display: none;
+    }
+    .panes.split .pane {
       width: 100%;
       border-left: 0;
     }

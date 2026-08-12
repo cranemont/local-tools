@@ -71,6 +71,8 @@ export const t = {
     placeholder: "문서에서 찾기",
     count: (n: number) => `${n}곳`,
     none: "찾는 내용이 없어요",
+    prev: "이전",
+    next: "다음",
     close: "찾기 닫기",
     hint: "원본은 그림으로 그려져서 브라우저 찾기가 닿지 않아요",
   },

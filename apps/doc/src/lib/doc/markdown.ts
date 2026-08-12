@@ -44,24 +44,36 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-/** `data:image/png;base64,...` 를 파일로 떼어 낸다. 그 밖의 src는 손대지 않는다. */
+/**
+ * `data:image/png;base64,...` 를 파일로 떼어 낸다. 그 밖의 src는 손대지 않는다.
+ *
+ * 같은 그림이 여러 번 나오면(머리말 로고·도장처럼 쪽마다 박히는 것들) 파일은 하나만
+ * 만들고 모두 그것을 가리키게 한다 — 안 그러면 ZIP이 같은 바이트로 부푼다.
+ */
 function extractImages(root: Document): ExtractedImage[] {
   const images: ExtractedImage[] = [];
+  const seen = new Map<string, { path: string; index: number }>();
 
   for (const img of Array.from(root.querySelectorAll("img"))) {
     const src = img.getAttribute("src") ?? "";
     const match = /^data:([^;,]+);base64,(.*)$/s.exec(src);
     if (!match) continue;
 
-    const ext = MIME_EXT[match[1].toLowerCase()] ?? "bin";
-    const path = `images/${images.length + 1}.${ext}`;
-    try {
-      images.push({ path, bytes: base64ToBytes(match[2]) });
-    } catch {
-      continue; // 깨진 data URI — 원본 src를 그대로 둔다.
+    let found = seen.get(src);
+    if (!found) {
+      const ext = MIME_EXT[match[1].toLowerCase()] ?? "bin";
+      const path = `images/${images.length + 1}.${ext}`;
+      try {
+        images.push({ path, bytes: base64ToBytes(match[2]) });
+      } catch {
+        continue; // 깨진 data URI — 원본 src를 그대로 둔다.
+      }
+      found = { path, index: images.length };
+      seen.set(src, found);
     }
-    img.setAttribute("src", path);
-    if (!img.getAttribute("alt")) img.setAttribute("alt", `그림 ${images.length}`);
+
+    img.setAttribute("src", found.path);
+    if (!img.getAttribute("alt")) img.setAttribute("alt", `그림 ${found.index}`);
   }
 
   return images;

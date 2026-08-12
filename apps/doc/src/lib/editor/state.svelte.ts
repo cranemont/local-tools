@@ -200,7 +200,15 @@ class EditorState {
       this.hits = [];
       return;
     }
-    this.hits = searchAll(this.doc, query, false);
+    try {
+      this.hits = searchAll(this.doc, query, false);
+    } catch (error) {
+      // 엔진이 패닉하면 여기까지 올라온다(searchAll은 패닉만 던진다). 상태는 engine이
+      // 이미 굳혔으니 결과를 비우고 이유만 띄운다 — 타이핑 중에 예외가 새어 나가면
+      // 콘솔에만 남고 화면은 "못 찾음"처럼 보인다.
+      this.hits = [];
+      this.flash = error instanceof Error ? error.message : String(error);
+    }
   }
 
   private async run(label: string, job: () => Promise<void>): Promise<void> {

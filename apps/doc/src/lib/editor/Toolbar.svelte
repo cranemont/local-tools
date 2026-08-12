@@ -7,23 +7,31 @@
 
   let {
     view,
+    narrow,
     setView,
     sync,
     toggleSync,
+    canFind,
     toggleFind,
   }: {
     view: PaneView;
+    /** 좁은 화면 — 두 판을 나란히 놓을 자리가 없다 */
+    narrow: boolean;
     setView: (next: PaneView) => void;
     sync: boolean;
     toggleSync: () => void;
+    canFind: boolean;
     toggleFind: () => void;
   } = $props();
 
-  const views: { id: PaneView; label: string }[] = [
+  const all: { id: PaneView; label: string }[] = [
     { id: "original", label: t.panes.original },
     { id: "both", label: t.panes.both },
     { id: "markdown", label: t.panes.markdown },
   ];
+
+  // 좁은 화면에서는 "나란히"를 눌러도 한 판만 나온다 — 아예 내놓지 않는다.
+  const views = $derived(narrow ? all.filter((option) => option.id !== "both") : all);
 
   const busy = $derived(editor.busy !== null);
   const isHwp = $derived(editor.kind !== "docx");
@@ -55,7 +63,7 @@
 
   <div class="spacer"></div>
 
-  {#if isHwp}
+  {#if canFind}
     <button class="icon-btn tool" onclick={toggleFind} title={t.actions.find}>
       <Icon name="search" size={16} />
       <span class="sr-only">{t.actions.find}</span>

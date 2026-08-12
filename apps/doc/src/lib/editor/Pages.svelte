@@ -9,7 +9,6 @@
    * 페이지는 화면에 들어올 때 그린다 — 100쪽짜리를 한 번에 그리면 열자마자 멈춘다.
    * 인쇄할 때만 전부 그린다(그때는 잘라 내면 안 되므로).
    */
-  import { onMount } from "svelte";
   import { editor } from "./state.svelte";
 
   let container = $state<HTMLDivElement | null>(null);
@@ -43,11 +42,6 @@
     return () => io.disconnect();
   }
 
-  onMount(() => {
-    let stop = observePages();
-    return () => stop?.();
-  });
-
   // 문서가 바뀌면 처음부터 다시.
   $effect(() => {
     editor.fileName;
@@ -55,7 +49,7 @@
     if (container) container.scrollTop = 0;
   });
 
-  // 페이지 슬롯이 새로 생기면 관찰 대상도 다시 잡는다.
+  // 페이지 슬롯이 새로 생기면 관찰 대상도 다시 잡는다(첫 관찰도 여기서 시작한다).
   $effect(() => {
     editor.pageCount;
     const stop = observePages();

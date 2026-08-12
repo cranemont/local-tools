@@ -4,21 +4,35 @@
    * 엔진에게 문서 전체를 물어 몇 곳에 있는지 세고, 해당 쪽으로 데려간다.
    * (오른쪽 마크다운은 그냥 글자라 브라우저 찾기가 그대로 먹는다.)
    */
+  import { onDestroy } from "svelte";
   import { t } from "../i18n";
   import Icon from "../Icon.svelte";
   import { editor } from "./state.svelte";
 
-  let { close }: { close: () => void } = $props();
+  /** `focus`는 값이 바뀔 때마다 입력란으로 돌아오라는 신호다(Ctrl+F를 다시 눌렀을 때). */
+  let { close, focus }: { close: () => void; focus: number } = $props();
 
   let query = $state("");
   let current = $state(0);
   let input = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
+    focus;
     input?.focus();
+    input?.select();
   });
 
+  /** 엔진 검색은 문서 전체를 훑는다 — 타자마다 부르면 큰 문서에서 손이 걸린다. */
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  onDestroy(() => clearTimeout(timer));
+
+  function schedule(): void {
+    clearTimeout(timer);
+    timer = setTimeout(run, 150);
+  }
+
   function run(): void {
+    clearTimeout(timer);
     editor.search(query);
     current = 0;
     goto(0);
@@ -56,7 +70,7 @@
     bind:value={query}
     type="search"
     placeholder={t.find.placeholder}
-    oninput={run}
+    oninput={schedule}
     onkeydown={onKey}
     aria-label={t.find.placeholder}
   />
@@ -67,13 +81,23 @@
         ? `${current + 1} / ${t.find.count(editor.hits.length)}`
         : t.find.none}
     </span>
-    <button class="icon-btn tool" onclick={() => step(-1)} disabled={editor.hits.length === 0}>
+    <button
+      class="icon-btn tool"
+      onclick={() => step(-1)}
+      disabled={editor.hits.length === 0}
+      title={t.find.prev}
+    >
       <Icon name="chevron-up" size={16} />
-      <span class="sr-only">이전</span>
+      <span class="sr-only">{t.find.prev}</span>
     </button>
-    <button class="icon-btn tool" onclick={() => step(1)} disabled={editor.hits.length === 0}>
+    <button
+      class="icon-btn tool"
+      onclick={() => step(1)}
+      disabled={editor.hits.length === 0}
+      title={t.find.next}
+    >
       <Icon name="chevron-down" size={16} />
-      <span class="sr-only">다음</span>
+      <span class="sr-only">{t.find.next}</span>
     </button>
   {:else}
     <span class="hint">{t.find.hint}</span>
