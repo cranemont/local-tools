@@ -16,7 +16,7 @@ pnpm build    # 전체 앱 빌드 — 자가해제형 단일 HTML 산출 → app
 pnpm check    # 전체 svelte-check 타입 체크 (0 errors/warnings 유지할 것)
 ```
 
-배포: main에 푸시하면 GitHub Actions가 빌드해 **https://cranemont.github.io/local-tools/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`·`/image/`·`/sheet/`·`/drop/`·`/stack/`). 별도 배포 명령 없음.
+배포: main에 푸시하면 GitHub Actions가 빌드해 **https://cranemont.github.io/local-tools/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`·`/image/`·`/sheet/`·`/doc/`·`/drop/`·`/stack/`). 별도 배포 명령 없음.
 
 ## 구조 (경량 pnpm 모노레포)
 
@@ -57,6 +57,15 @@ apps/sheet/          # 시트 (Svelte 5 + TS) — CSV·엑셀 편집기. ★ 이
                      #   FormulaBar·SheetTabs·StatusBar·FindBar·Dropdown
   src/lib/launch.ts  # PWA 파일 연결(launchQueue) + 설치 프롬프트
   pwa.ts             # PWA 빌드 후처리 — 매니페스트·아이콘(PNG 직접 인코딩)·서비스 워커
+apps/doc/            # 문서 (Svelte 5 + TS) — 한글·워드 읽기. ★ 이 앱도 두 벌로 빌드한다(아래 13번)
+  src/lib/doc/       # 엔진: engine(rhwp wasm 자체 호스팅+SHA-384 검증·프리페치)·
+                     #   hwp(열기·페이지 SVG·문단/컨트롤 걷기·찾기·hwpx)·docx(docx-preview 재현
+                     #   + mammoth 시맨틱 HTML 지연 로드)·markdown(turndown + 직접 짠 GFM 표 규칙,
+                     #   그림 떼어내기)·detect(매직바이트 판별)·save(md 한 장 또는 ZIP)
+  src/lib/editor/    # state.svelte.ts(스테이지 머신)·Editor(좌우 분할·스크롤 비율 동기화)·
+                     #   Pages(SVG 쪽 가상 스크롤)·MarkdownPane(저장될 원문 그대로)·
+                     #   Toolbar·FindBar·PasswordDialog·Dropzone
+  rhwp-wasm.ts       # ★ 빌드 플러그인 — wasm을 rhwp-<버전>.wasm으로 내보내고 SHA-384를 코드에 주입
 apps/drop/           # 드롭 (Svelte 5 + TS) — 서버 없는 P2P 파일 전송, 단일 플로 뷰
   src/lib/rtc/       # 엔진: signal(SDP deflate-raw+base64url)·peer(non-trickle RTCPeerConnection)·
                      #        transfer(64KB 청크+백프레셔 file/eof/text 프로토콜)·save·
@@ -87,7 +96,9 @@ packages/theme/tokens.css  # 공용 디자인 토큰 — 색(OKLCH, 라이트/�
                            #    + 범주형 팔레트 --cat-1..5(-ink) — 갈래가 다른 것들을 나란히 놓을 때
 packages/theme/base.css    # ★ 공용 리셋 + UI 프리미티브(.btn 8상태·.icon-btn·.spinner·
                            #    reduced-motion·.sr-only). main.ts에서 tokens 다음에 로드.
-packages/wasm-loader/      # 공용 CDN wasm 로더(SRI+SHA-384 fail-closed) — image·pdf 암호 탭 사용
+packages/wasm-loader/      # 공용 wasm 로더(SRI+SHA-384 fail-closed, 후보 URL 폴백) — image·pdf·doc 사용
+packages/pwa-kit/          # 공용 PWA 자산 도구 — OKLCH→sRGB·PNG 인코더·아이콘 캔버스·서비스 워커
+                           #    소스. 시트와 문서 두 앱이 쓴다(글리프·매니페스트만 앱에 남김).
 packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플러그인 (모든 앱 공용)
 site/                # Pages 정적 파일 — 랜딩·404·sitemap.xml·og/(OG 이미지)
 .github/workflows/deploy.yml  # main 푸시마다 check+build → GitHub Pages 배포
@@ -102,7 +113,7 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
 
 - **크로미엄 전용**(Chrome/Edge 최신). File System Access·DecompressionStream 등 사용, FF/Safari 미검증.
 - Vite 8 + `vite-plugin-singlefile` + **Svelte 5(runes)** + TypeScript.
-- 라이브러리: `pdf-lib`(병합/회전/이미지임베드), `pdfjs-dist` v6(썸네일·래스터), `fflate`(ZIP), `@neslinesli93/qpdf-wasm`(암호, CDN 지연로드), `gifenc`(GIF 인코딩), `mediabunny`(순수 TS — 동영상 디먹싱·MP4 muxing), `exceljs`+`@formulajs/formulajs`(시트), 개발자 유틸은 `js-yaml`·`fast-xml-parser`·`diff`·`cronstrue`(ko)·`croner`·`culori`·`uqr` — 전부 순수 JS, wasm 없음.
+- 라이브러리: `pdf-lib`(병합/회전/이미지임베드), `pdfjs-dist` v6(썸네일·래스터), `fflate`(ZIP), `@neslinesli93/qpdf-wasm`(암호, CDN 지연로드), `gifenc`(GIF 인코딩), `mediabunny`(순수 TS — 동영상 디먹싱·MP4 muxing), `exceljs`+`@formulajs/formulajs`(시트), `@rhwp/core`(한글 렌더러 — 유일한 wasm 자체 호스팅)+`docx-preview`+`mammoth`+`turndown`+`hwp-convert`(문서), 개발자 유틸은 `js-yaml`·`fast-xml-parser`·`diff`·`cronstrue`(ko)·`croner`·`culori`·`uqr` — 전부 순수 JS, wasm 없음.
 - apps/dev 주의: `@tsconfig/svelte`가 target을 es2017로 낮춰 최신 API(matchAll 등) 타입 에러가 남 — 앱 tsconfig에 `"target"/"lib": ES2022` 명시로 해결(다른 앱도 동일 증상 시 같은 처리).
 
 ## ⚠️ 주의사항 (놓치기 쉬움 — 꼭 읽기)
@@ -169,9 +180,11 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
    - 크롭 오버레이는 **그려진 그림 위에만** 깔린다(`measurePaint()` — `object-fit:contain` 여백을 뺀 상자, stagebox 테두리만큼 `clientLeft/Top` 보정). 여백에서는 드래그가 시작되지 않고, 손잡이를 밖으로 끌어도 그림 경계에서 멈춘다. 레이어를 다시 `inset:0`으로 되돌리면 여백이 이미지처럼 잡힌다.
    - 되돌리기(Ctrl+Z / Shift+Ctrl+Z·Ctrl+Y)는 **장 목록과 장별 편집만** 다룬다(`EditorState`의 스냅샷 스택, 최대 30). 형식·품질·리사이즈는 패널에 그대로 보이니 제외한 것이고, 입력란 안에서는 브라우저 기본 되돌리기에 양보한다(`Editor.svelte`의 `typingIn`).
 
-13. **apps/sheet만 두 벌로 빌드한다.** `pnpm build`가 `vite build`(→`dist/index.html`, 자가해제 단일
+13. **apps/sheet·apps/doc은 두 벌로 빌드한다.** `pnpm build`가 `vite build`(→`dist/index.html`, 자가해제 단일
    HTML 440kB)와 `vite build --mode pwa`(→`dist-pwa/`)를 잇달아 돌린다. 배포는 `/sheet/`에
    **PWA를 얹고** 단일 HTML은 그 옆에 `local-tools-sheet.html`로 내려받기용으로 둔다.
+   - apps/doc도 같은 구조다(`dist/index.html` 495kB + `dist-pwa/`). 배포는 `/doc/`에 PWA를
+     얹고 단일 HTML은 `local-tools-doc.html`로 옆에 둔다 — 다만 문서 쪽은 이유가 하나 더 있다(16번).
    - PWA가 따로 있는 이유는 **파일 연결 하나**다. 매니페스트의 `file_handlers` + `launchQueue`로
      설치된 앱이 `.csv`·`.xlsx`의 열기 대상이 된다(Chromium 데스크톱 전용) — 맥에서 CSV
      더블클릭이 Numbers로 가는 걸 브라우저 안에서 바꿀 수 있는 유일한 수단이고, 매니페스트와
@@ -210,6 +223,36 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
      `rowY`까지 딸려 들어가서, 셀 하나만 고쳐도 보던 위치가 커서 쪽으로 홱 끌려갔다.
    - 싱글턴 이름은 `editor`다 — `state`로 두면 `$state` 룬과 충돌해 Svelte가 스토어 접근으로
      파싱한다(에러 37개가 이것 하나였다).
+
+16. **apps/doc의 한글 렌더러(rhwp)는 이 저장소에서 유일하게 "우리가 호스팅하는 wasm"이다.**
+   8MB(전송 시 brotli 2.1MB)라 단일 HTML에 못 넣는다. `rhwp-wasm.ts`(빌드 플러그인)가
+   `rhwp-<버전>.wasm`으로 따로 내보내고, **SHA-384를 빌드 시점에 계산해 코드에 주입**한다 —
+   qpdf와 달리 버전을 올려도 해시를 손으로 다시 계산할 일이 없다. 대신 지켜야 할 것들:
+   - 글루 JS 안의 `new URL('rhwp_bg.wasm', import.meta.url)`을 플러그인이 **끊는다**. 안 끊으면
+     Vite가 wasm을 자산으로 물고 들어가 단일 HTML이 10MB가 된다.
+   - 주소는 상대경로 → 배포 주소(`cranemont.github.io/local-tools/doc/`) 순으로 시도한다.
+     내려받은 단일 HTML을 `file://`로 열면 후자를 탄다. **해시 불일치는 폴백 없이 즉시 거부**다.
+   - 프리페치는 앱이 뜨자마자 idle에 시작하되 `saveData`가 켜져 있으면 미룬다.
+   - PWA 빌드의 서비스 워커는 wasm을 **프리캐시하지 않는다**(설치 순간 8MB를 받게 된다).
+     처음 hwp를 열 때 받아서 런타임 캐시에 남고, 그 뒤로는 오프라인에서도 열린다.
+
+17. **rhwp는 0.8.x이고 실제로 패닉한다.** 제목·문단·표가 섞인 HTML을 `pasteHtml`에 넣으면
+   `rendering.rs`에서 패닉하고(`insertion index (is 3) should be <= len (is 1)`), **한 번 패닉하면
+   wasm 인스턴스 전체가 죽어** 이후 모든 호출이 `unreachable`로 실패한다. 그래서:
+   - `engine.ts`의 `isEnginePanic()`으로 그 말들을 알아보고 상태를 `broken`으로 굳힌 뒤
+     새로고침을 권한다. 되살리는 방법은 새로고침뿐이다(다시 받아도 안 된다).
+   - hwp.ts의 조용한 catch들은 **패닉만은 삼키지 않는다**. 삼키면 화면이 "빈 문서"처럼 보인다.
+   - `finally`에서 `free()`를 맨몸으로 부르지 말 것 — 패닉 뒤에는 그 호출도 실패해서
+     ("...while it was borrowed") 진짜 원인을 덮어쓴다. `closeHwp()`가 삼키게 되어 있다.
+   - 그래서 **docx→hwpx는 rhwp가 아니라 `hwp-convert`(순수 TS)로 간다.** 원래는 rhwp 하나로
+     닫으려 했으나 위 패닉으로 갈랐다. hwp-convert가 만든 파일은 rhwp가 정상으로 읽는다(교차 검증).
+
+18. **한글 문서에서 표는 문단 텍스트가 아니라 "문단에 앵커된 컨트롤"이다.**
+   `exportSelectionHtml`만 부르면 표가 통째로 사라진다(실제로 표만 든 문서가 빈 마크다운이 됐다).
+   `documentHtml()`은 문단을 걸으며 텍스트와 컨트롤을 번갈아 모은다 —
+   컨트롤 개수는 `getControlTextPositions()`가 돌려주는 배열의 길이이고, 내용은
+   `exportControlHtml()`이 준다(구역·단 정의는 "내용 생략됨" 주석만 오므로 건너뛴다).
+   여기를 단순화하려다 표를 잃지 말 것.
 
 ## 핵심 설계 결정 (그릴링 합의 요약)
 
