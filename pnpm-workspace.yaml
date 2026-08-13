@@ -1,5 +1,13 @@
 packages:
   - "apps/*"
   - "packages/*"
+# @huggingface/transformers(apps/lab)가 딸고 오는 Node 전용 의존성들.
+# 브라우저에서는 패키지의 exports 맵이 dist/transformers.web.js를 고르므로 이것들에
+# 닿지 않는다 — 네이티브 바이너리를 빌드할 이유가 없다. false로 못 박아 두지 않으면
+# pnpm이 "승인 안 됨"으로 install을 실패시켜 CI가 통째로 멈춘다.
+allowBuilds:
+  onnxruntime-node: false
+  protobufjs: false
+  sharp: false
 minimumReleaseAgeExclude:
   - '@rhwp/core@0.8.4'

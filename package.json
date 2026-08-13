@@ -25,6 +25,8 @@
     "preview:sheet": "pnpm --filter @local-tools/sheet preview",
     "dev:doc": "pnpm --filter @local-tools/doc dev",
     "preview:doc": "pnpm --filter @local-tools/doc preview",
+    "dev:lab": "pnpm --filter @local-tools/lab dev",
+    "preview:lab": "pnpm --filter @local-tools/lab preview",
     "build": "pnpm -r build",
     "check": "pnpm -r check"
   }

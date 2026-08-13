@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Cg fill='white'%3E%3Ccircle cx='6.4' cy='7' r='1.6'/%3E%3Ccircle cx='11.4' cy='5.8' r='1.1' opacity='0.65'/%3E%3Ccircle cx='11.8' cy='11.6' r='1.7'/%3E%3C/g%3E%3C/svg%3E"
+    />
+    <title>실험장 — 한국어 임베딩 모델을 브라우저에서 바꿔 끼우며 비교 — local-tools</title>
+    <meta
+      name="description"
+      content="브라우저 안에서 도는 임베딩 실험장 — 같은 문장을 EmbeddingGemma·multilingual-e5·BGE-M3·Qwen3로 임베딩해 이웃이 어떻게 달라지는지 봅니다. Matryoshka 절단·양자화·프리픽스를 바꿔 가며 이웃 겹침과 순위 상관으로 비교하고, 존댓말·띄어쓰기·오타 같은 한국어 프로브로 짝짓기 정확도를 잽니다. 문장은 전송되지 않습니다."
+    />
+    <link rel="canonical" href="https://cranemont.github.io/local-tools/lab/" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(1 0 0)" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="oklch(0.212 0.01 250)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="local-tools" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="실험장 — 한국어 임베딩 모델을 바꿔 끼우며 비교" />
+    <meta
+      property="og:description"
+      content="모델·정밀도·차원을 갈아 끼우며 이웃이 어떻게 달라지는지 봅니다. 문장은 전송되지 않습니다."
+    />
+    <meta property="og:url" content="https://cranemont.github.io/local-tools/lab/" />
+    <meta property="og:image" content="https://cranemont.github.io/local-tools/og/lab.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="local-tools 실험장 — 임베딩 모델 비교" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "local-tools 실험장",
+        "url": "https://cranemont.github.io/local-tools/lab/",
+        "description": "브라우저 안에서 도는 임베딩 실험장. 같은 문장을 여러 모델·정밀도·차원으로 임베딩해 이웃 목록이 어떻게 달라지는지 유사도 행렬·순위 이동·이웃 목록으로 비교합니다. 존댓말과 반말, 띄어쓰기, 한자어와 고유어, 오타, 영어 혼용을 다루는 한국어 프로브로 짝짓기 정확도를 잽니다. 모델은 실행 시점에 내려받고, 문장과 계산 결과는 전송되지 않습니다.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge), WebGPU 권장",
+        "inLanguage": "ko",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
+        "featureList": [
+          "임베딩 모델 4종 비교 — EmbeddingGemma 300M·multilingual-e5-small·BGE-M3·Qwen3-Embedding 0.6B",
+          "Matryoshka 절단 비용 측정 — 768에서 128까지 잘라 이웃이 언제 무너지는지",
+          "양자화 비교 — 같은 모델의 q4·q8·fp32",
+          "프리픽스 A/B — 모델 카드가 요구하는 접두어가 실제로 필요한지",
+          "한국어 프로브 — 존댓말·띄어쓰기·한자어·오타·영어 혼용 짝짓기 정확도",
+          "유사도 행렬·순위 이동·이웃 목록",
+          "이웃 겹침(overlap@k)과 순위 상관(Spearman)으로 두 설정 비교",
+          "받아 둔 모델 저장소 관리"
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>
+      실험장은 JavaScript가 필요합니다 —
+      <a href="https://cranemont.github.io/local-tools/">local-tools</a>
+    </noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
