@@ -29,6 +29,6 @@
     "dev:lab": "pnpm --filter @local-tools/lab dev",
     "preview:lab": "pnpm --filter @local-tools/lab preview",
     "build": "pnpm -r build",
-    "check": "pnpm -r check"
+    "check": "node scripts/check-site-assets.mjs && pnpm -r check"
   }
 }

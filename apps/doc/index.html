@@ -7,11 +7,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Cg stroke='white' stroke-width='1.1' fill='none'%3E%3Cpath d='M6 3.6h4.4L14 7v7.4H6Z'/%3E%3Cpath d='M10.4 3.6V7H14'/%3E%3Cpath d='M7.6 9.6h4.2M7.6 11.8h2.8'/%3E%3C/g%3E%3C/svg%3E"
     />
-    <title>문서 — 한글(hwp)·워드(docx)를 브라우저에서 열고 마크다운으로 — local-tools</title>
-    <meta
-      name="description"
-      content="브라우저 안에서만 동작하는 문서 뷰어 — 한글 .hwp·.hwpx와 워드 .docx를 원본 그대로 보고, 같은 화면에서 마크다운으로 바꿉니다. .hwpx 저장·인쇄(PDF)·암호 문서 열기 지원. 파일은 서버로 전송되지 않습니다."
-    />
+    <title>hwp 뷰어 — 한글 없이 hwp 열고 편집하고 PDF로 | local-tools</title>
+    <meta name="description" content="한글 프로그램이 없어도 .hwp·.hwpx를 원본 모양 그대로 엽니다. 본문을 그 자리에서 고쳐 원래 형식으로 저장하고, 인쇄로 PDF를 만들고, 마크다운으로 바꿉니다. 워드 .docx도 열립니다." />
     <link rel="canonical" href="https://tools.cranemont.com/doc/" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(1 0 0)" />
@@ -19,11 +16,8 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="local-tools" />
     <meta property="og:locale" content="ko_KR" />
-    <meta property="og:title" content="문서 — 한글·워드를 브라우저에서 열고 마크다운으로" />
-    <meta
-      property="og:description"
-      content="한글이 없어도 .hwp를 열어 봅니다. 파일은 서버로 전송되지 않습니다."
-    />
+    <meta property="og:title" content="hwp 뷰어 — 한글 없이 hwp 열고 편집하고 PDF로" />
+    <meta property="og:description" content="한글 프로그램 없이 hwp를 원본 그대로 열고, 고치고, PDF·마크다운으로 저장합니다. 업로드가 없습니다." />
     <meta property="og:url" content="https://tools.cranemont.com/doc/" />
     <meta property="og:image" content="https://tools.cranemont.com/og/doc.png" />
     <meta property="og:image:width" content="1200" />
@@ -33,24 +27,62 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "local-tools 문서",
-        "url": "https://tools.cranemont.com/doc/",
-        "description": "브라우저 안에서만 동작하는 문서 뷰어. 한글(.hwp·.hwpx)과 워드(.docx)를 원본 레이아웃 그대로 보고, 같은 화면에서 마크다운으로 바꿉니다. 개방형 .hwpx로 저장, 인쇄로 PDF 저장, 비밀번호가 걸린 한글 문서 열기를 지원합니다. 설치하면 .hwp 더블클릭으로 바로 열립니다. 파일은 서버로 전송되지 않습니다.",
-        "applicationCategory": "UtilitiesApplication",
-        "operatingSystem": "Any",
-        "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
-        "inLanguage": "ko",
-        "isAccessibleForFree": true,
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
-        "featureList": [
-          "한글 문서(.hwp·.hwpx) 원본 레이아웃 보기 — 표·수식·도형·머리말",
-          "워드 문서(.docx) 원본 레이아웃 보기",
-          "같은 화면에서 마크다운으로 변환 — 그림은 images/와 함께 ZIP",
-          "개방형 .hwpx로 저장(워드 문서도 한글에서 열리게)",
-          "인쇄 대화상자로 PDF 저장",
-          "비밀번호가 걸린 한글 문서 열기",
-          "설치하면 .hwp 더블클릭으로 열기(파일 연결)"
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "@id": "https://tools.cranemont.com/doc/#app",
+            "name": "local-tools 문서",
+            "url": "https://tools.cranemont.com/doc/",
+            "description": "한글 프로그램이 없어도 .hwp·.hwpx를 원본 모양 그대로 엽니다. 본문을 그 자리에서 고쳐 원래 형식으로 저장하고, 인쇄로 PDF를 만들고, 마크다운으로 바꿉니다. 워드 .docx도 열립니다.",
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
+            "inLanguage": "ko",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "KRW"
+            },
+            "image": "https://tools.cranemont.com/og/doc.png",
+            "license": "https://github.com/cranemont/local-tools/blob/main/LICENSE",
+            "isPartOf": {
+              "@id": "https://tools.cranemont.com/#website"
+            },
+            "author": {
+              "@id": "https://tools.cranemont.com/#person"
+            },
+            "featureList": [
+              "한글(.hwp·.hwpx)을 원본 레이아웃 그대로 보기",
+              "설치·확장 프로그램 없이 브라우저에서 바로",
+              "본문 편집 — 원본 위에서 글자·표 셀 고치기",
+              "고친 문서를 원래 형식(.hwp·.hwpx)으로 저장",
+              "인쇄 대화상자로 PDF 저장",
+              "마크다운으로 변환 — 표·그림 포함",
+              "워드(.docx) 열기와 마크다운 변환",
+              "워드를 한글(.hwpx)로 변환",
+              "문서 전체에서 찾기",
+              "암호가 걸린 한글 문서 열기",
+              "원본과 마크다운 나란히 보기(스크롤 동기)",
+              "설치하면 인터넷 없이도 hwp 열기(PWA)"
+            ]
+          },
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "local-tools",
+                "item": "https://tools.cranemont.com/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "문서"
+              }
+            ]
+          }
         ]
       }
     </script>

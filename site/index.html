@@ -10,11 +10,8 @@
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <title>local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상·이미지·파일 전송·개발자 도구</title>
-    <meta
-      name="description"
-      content="설치 없이 브라우저에서 쓰는 도구 모음 — PDF 병합·정리·암호, GIF 프레임 편집, 동영상 자르기·압축·변환, 이미지 변환·압축·리사이즈, 서버 없는 기기 간 파일 전송(드롭), JSON·diff·QR 개발자 유틸. 파일은 서버로 전송되지 않습니다."
-    />
+    <title>local-tools — PDF·hwp·엑셀·이미지·동영상 도구, 업로드 없이</title>
+    <meta name="description" content="파일을 서버에 올리지 않고 브라우저에서 바로 처리하는 도구 모음입니다. PDF 합치기, 한글(hwp)·엑셀 열기, 이미지·동영상 용량 줄이기, 폰↔PC 파일 전송, 개발자 유틸 16종. 무료이고 회원가입·광고가 없습니다." />
     <link rel="canonical" href="https://tools.cranemont.com/" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(0.978 0.003 240)" />
@@ -22,11 +19,8 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="local-tools" />
     <meta property="og:locale" content="ko_KR" />
-    <meta property="og:title" content="local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상·이미지·파일 전송·개발자 도구" />
-    <meta
-      property="og:description"
-      content="설치 없이 브라우저에서 쓰는 PDF·GIF·동영상·이미지·파일 전송·개발자 도구. 파일은 서버로 전송되지 않습니다."
-    />
+    <meta property="og:title" content="local-tools — PDF·hwp·엑셀·이미지·동영상 도구, 업로드 없이" />
+    <meta property="og:description" content="파일을 올리지 않고 브라우저에서 처리하는 도구 모음. PDF·hwp·엑셀·이미지·동영상·파일 전송. 무료, 광고 없음." />
     <meta property="og:url" content="https://tools.cranemont.com/" />
     <meta property="og:image" content="https://tools.cranemont.com/og/home.png" />
     <meta property="og:image:width" content="1200" />
@@ -36,65 +30,99 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "local-tools",
-        "url": "https://tools.cranemont.com/",
-        "description": "설치 없이 브라우저에서 쓰는 도구 모음. 모든 처리는 브라우저 안에서 이뤄지고 파일은 서버로 전송되지 않습니다.",
-        "inLanguage": "ko",
-        "hasPart": [
+        "@graph": [
           {
-            "@type": "WebApplication",
-            "name": "local-tools PDF",
-            "url": "https://tools.cranemont.com/pdf/",
-            "description": "PDF 병합·페이지 정리·회전, 이미지→PDF, PDF→PNG 변환, 암호 설정·해제"
+            "@type": "WebSite",
+            "@id": "https://tools.cranemont.com/#website",
+            "name": "local-tools",
+            "url": "https://tools.cranemont.com/",
+            "description": "파일을 서버에 올리지 않고 브라우저에서 바로 처리하는 도구 모음입니다. PDF 합치기, 한글(hwp)·엑셀 열기, 이미지·동영상 용량 줄이기, 폰↔PC 파일 전송, 개발자 유틸 16종. 무료이고 회원가입·광고가 없습니다.",
+            "inLanguage": "ko",
+            "publisher": {
+              "@id": "https://tools.cranemont.com/#person"
+            },
+            "hasPart": [
+              {
+                "@type": "WebApplication",
+                "@id": "https://tools.cranemont.com/pdf/#app",
+                "name": "local-tools PDF",
+                "url": "https://tools.cranemont.com/pdf/",
+                "description": "PDF를 서버에 올리지 않고 합치고 나누고 암호를 풉니다. 회원가입·워터마크·용량 제한 없이 무료입니다."
+              },
+              {
+                "@type": "WebApplication",
+                "@id": "https://tools.cranemont.com/gif/#app",
+                "name": "local-tools GIF",
+                "url": "https://tools.cranemont.com/gif/",
+                "description": "동영상이나 사진으로 움짤을 만들고 프레임 단위로 편집합니다. 업로드·워터마크 없이 GIF·WebP·MP4로 저장합니다."
+              },
+              {
+                "@type": "WebApplication",
+                "@id": "https://tools.cranemont.com/video/#app",
+                "name": "local-tools 동영상",
+                "url": "https://tools.cranemont.com/video/",
+                "description": "동영상 구간을 잘라내고 원하는 용량으로 줄입니다. 무손실 컷은 화질 그대로 빠르게 자릅니다."
+              },
+              {
+                "@type": "WebApplication",
+                "@id": "https://tools.cranemont.com/image/#app",
+                "name": "local-tools 이미지",
+                "url": "https://tools.cranemont.com/image/",
+                "description": "사진을 올리지 않고 형식을 바꾸고 용량을 줄입니다. 아이폰 HEIC 변환과 촬영 위치(EXIF) 제거도 됩니다."
+              },
+              {
+                "@type": "WebApplication",
+                "@id": "https://tools.cranemont.com/sheet/#app",
+                "name": "local-tools 시트",
+                "url": "https://tools.cranemont.com/sheet/",
+                "description": "엑셀 없이 .xlsx·CSV를 열어 고칩니다. 한글 깨짐을 자동으로 잡고 수식과 서식을 그대로 유지합니다."
+              },
+              {
+                "@type": "WebApplication",
+                "@id": "https://tools.cranemont.com/doc/#app",
+                "name": "local-tools 문서",
+                "url": "https://tools.cranemont.com/doc/",
+                "description": "한글 프로그램 없이 hwp를 원본 그대로 열고, 고치고, PDF·마크다운으로 저장합니다. 업로드가 없습니다."
+              },
+              {
+                "@type": "WebApplication",
+                "@id": "https://tools.cranemont.com/drop/#app",
+                "name": "local-tools 드롭",
+                "url": "https://tools.cranemont.com/drop/",
+                "description": "코드 여섯 자리로 두 기기를 직접 연결해 파일을 보냅니다. 서버를 거치지 않아 용량 제한이 없습니다."
+              },
+              {
+                "@type": "WebApplication",
+                "@id": "https://tools.cranemont.com/dev/#app",
+                "name": "local-tools 개발자 도구",
+                "url": "https://tools.cranemont.com/dev/",
+                "description": "JSON 정리, JWT 디코드, diff, 해시, UUID, 정규식, cron, QR 등 16종. 입력값이 브라우저 밖으로 나가지 않습니다."
+              },
+              {
+                "@type": "WebApplication",
+                "@id": "https://tools.cranemont.com/lab/#app",
+                "name": "local-tools 실험장",
+                "url": "https://tools.cranemont.com/lab/",
+                "description": "한국어 문장으로 임베딩 모델을 직접 재봅니다. 모델이 브라우저 안에서 돌고 문장은 전송되지 않습니다."
+              },
+              {
+                "@type": "WebApplication",
+                "@id": "https://tools.cranemont.com/stack/#app",
+                "name": "local-tools 기술 지도",
+                "url": "https://tools.cranemont.com/stack/",
+                "description": "도구 열 개가 어떤 기술 위에 서 있는지 3D 도시로 봅니다. 무엇이 네트워크를 타는지도 표시합니다."
+              }
+            ]
           },
           {
-            "@type": "WebApplication",
-            "name": "local-tools GIF",
-            "url": "https://tools.cranemont.com/gif/",
-            "description": "GIF 프레임 편집, 이미지·동영상을 GIF·WebP·MP4로 변환"
-          },
-          {
-            "@type": "WebApplication",
-            "name": "local-tools 동영상",
-            "url": "https://tools.cranemont.com/video/",
-            "description": "동영상 구간 자르기(트림)·용량 압축·MP4·WebM 변환·소리 추출"
-          },
-          {
-            "@type": "WebApplication",
-            "name": "local-tools 이미지",
-            "url": "https://tools.cranemont.com/image/",
-            "description": "JPEG·PNG·WebP·AVIF 변환·압축, 리사이즈·크롭, EXIF 보기·제거, HEIC 입력"
-          },
-          {
-            "@type": "WebApplication",
-            "name": "local-tools 시트",
-            "url": "https://tools.cranemont.com/sheet/",
-            "description": "CSV·엑셀(.xlsx) 열기·편집·저장, 수식 300여 개, 서식·정렬·찾기, 형식 변환"
-          },
-          {
-            "@type": "WebApplication",
-            "name": "local-tools 문서",
-            "url": "https://tools.cranemont.com/doc/",
-            "description": "한글(.hwp·.hwpx)·워드(.docx) 원본 그대로 보기, 마크다운 변환, .hwpx 저장, 인쇄로 PDF"
-          },
-          {
-            "@type": "WebApplication",
-            "name": "local-tools 드롭",
-            "url": "https://tools.cranemont.com/drop/",
-            "description": "서버 없는 기기 간 직접 파일 전송 — WebRTC P2P, QR로 연결"
-          },
-          {
-            "@type": "WebApplication",
-            "name": "local-tools 개발자 도구",
-            "url": "https://tools.cranemont.com/dev/",
-            "description": "JSON·YAML·XML 변환, 텍스트 비교(diff), QR 생성·스캔, 해시·JWT·타임스탬프"
-          },
-          {
-            "@type": "WebApplication",
-            "name": "local-tools 기술 지도",
-            "url": "https://tools.cranemont.com/stack/",
-            "description": "각 기능이 어떤 브라우저 API·라이브러리 위에 서 있는지, 무엇이 네트워크를 타는지 보여주는 인터랙티브 지도"
+            "@type": "Person",
+            "@id": "https://tools.cranemont.com/#person",
+            "name": "cranemont",
+            "url": "https://github.com/cranemont",
+            "sameAs": [
+              "https://github.com/cranemont",
+              "https://github.com/cranemont/local-tools"
+            ]
           }
         ]
       }

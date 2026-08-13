@@ -7,11 +7,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
     />
-    <title>동영상 자르기·압축·변환 — local-tools</title>
-    <meta
-      name="description"
-      content="브라우저 안에서만 동작하는 동영상 도구 — 구간 자르기(트림), 용량 압축, MP4·WebM 변환, 소리 추출. 파일은 서버로 전송되지 않습니다."
-    />
+    <title>동영상 자르기·용량 줄이기 — 설치 없이 브라우저에서 | local-tools</title>
+    <meta name="description" content="동영상에서 필요한 구간만 잘라내고 용량을 줄입니다. 원하는 MB에 맞춰 압축하거나, 다시 인코딩하지 않는 무손실 컷으로 화질 그대로 자릅니다. 아이폰 MOV도 열리고 MP4·WebM으로 저장합니다." />
     <link rel="canonical" href="https://tools.cranemont.com/video/" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(1 0 0)" />
@@ -19,11 +16,8 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="local-tools" />
     <meta property="og:locale" content="ko_KR" />
-    <meta property="og:title" content="동영상 자르기·압축·변환" />
-    <meta
-      property="og:description"
-      content="브라우저 안에서만 동작하는 동영상 도구. 파일은 서버로 전송되지 않습니다."
-    />
+    <meta property="og:title" content="동영상 자르기·용량 줄이기 — 설치 없이 브라우저에서" />
+    <meta property="og:description" content="동영상 구간을 잘라내고 원하는 용량으로 줄입니다. 무손실 컷은 화질 그대로 빠르게 자릅니다." />
     <meta property="og:url" content="https://tools.cranemont.com/video/" />
     <meta property="og:image" content="https://tools.cranemont.com/og/video.png" />
     <meta property="og:image:width" content="1200" />
@@ -33,21 +27,60 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "local-tools 동영상",
-        "url": "https://tools.cranemont.com/video/",
-        "description": "브라우저 안에서만 동작하는 동영상 도구. 구간 자르기(트림), 용량 압축, MP4·WebM 변환, 소리 추출. 파일은 서버로 전송되지 않습니다.",
-        "applicationCategory": "MultimediaApplication",
-        "operatingSystem": "Any",
-        "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
-        "inLanguage": "ko",
-        "isAccessibleForFree": true,
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
-        "featureList": [
-          "동영상 구간 자르기(트림)",
-          "용량 압축·해상도 변경",
-          "MP4·WebM 변환",
-          "소리 추출·음소거"
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "@id": "https://tools.cranemont.com/video/#app",
+            "name": "local-tools 동영상",
+            "url": "https://tools.cranemont.com/video/",
+            "description": "동영상에서 필요한 구간만 잘라내고 용량을 줄입니다. 원하는 MB에 맞춰 압축하거나, 다시 인코딩하지 않는 무손실 컷으로 화질 그대로 자릅니다. 아이폰 MOV도 열리고 MP4·WebM으로 저장합니다.",
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
+            "inLanguage": "ko",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "KRW"
+            },
+            "image": "https://tools.cranemont.com/og/video.png",
+            "license": "https://github.com/cranemont/local-tools/blob/main/LICENSE",
+            "isPartOf": {
+              "@id": "https://tools.cranemont.com/#website"
+            },
+            "author": {
+              "@id": "https://tools.cranemont.com/#person"
+            },
+            "featureList": [
+              "구간 자르기(트림) — 타임라인 핸들로 지정",
+              "무손실 컷 — 재인코딩 없이 화질 그대로 빠르게",
+              "용량 줄이기(압축) — 화질·해상도 조절",
+              "타깃 용량(MB)에 맞춰 압축",
+              "MP4·MOV·WebM·MKV 열기",
+              "MP4·WebM으로 내보내기",
+              "소리만 저장 — 원본 코덱 그대로(m4a·mp3·ogg·flac·wav)",
+              "4K를 1080p·720p로 해상도 낮추기",
+              "타임라인 썸네일과 구간 미리듣기·미리보기",
+              "저장 파일 이름 지정, 진행률 표시와 중간 취소"
+            ]
+          },
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "local-tools",
+                "item": "https://tools.cranemont.com/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "동영상"
+              }
+            ]
+          }
         ]
       }
     </script>

@@ -7,11 +7,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
     />
-    <title>드롭 — 서버 없는 기기 간 파일 전송, 코드 6자리·QR로 연결 — local-tools</title>
-    <meta
-      name="description"
-      content="서버 없는 기기 간 파일 전송 — 숫자 6자리 코드나 QR로 두 브라우저를 직접 연결(WebRTC P2P)해 파일·텍스트를 주고받습니다. 파일은 서버를 거치지 않습니다."
-    />
+    <title>폰↔PC 파일 전송 — 서버·케이블 없이 코드 6자리로 | local-tools</title>
+    <meta name="description" content="두 기기의 브라우저를 직접 연결해 파일을 옮깁니다. 코드 여섯 자리나 QR만 있으면 되고, 아이폰과 윈도우처럼 섞인 조합도 됩니다. 파일이 서버를 거치지 않아 용량 제한이 없습니다." />
     <link rel="canonical" href="https://tools.cranemont.com/drop/" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(1 0 0)" />
@@ -19,11 +16,8 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="local-tools" />
     <meta property="og:locale" content="ko_KR" />
-    <meta property="og:title" content="드롭 — 서버 없는 기기 간 파일 전송, 코드 6자리·QR로 연결" />
-    <meta
-      property="og:description"
-      content="숫자 6자리 코드나 QR로 두 브라우저를 직접 연결해 파일을 주고받아요. 파일은 서버를 거치지 않습니다."
-    />
+    <meta property="og:title" content="폰↔PC 파일 전송 — 서버·케이블 없이 코드 6자리로" />
+    <meta property="og:description" content="코드 여섯 자리로 두 기기를 직접 연결해 파일을 보냅니다. 서버를 거치지 않아 용량 제한이 없습니다." />
     <meta property="og:url" content="https://tools.cranemont.com/drop/" />
     <meta property="og:image" content="https://tools.cranemont.com/og/drop.png" />
     <meta property="og:image:width" content="1200" />
@@ -33,23 +27,60 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "local-tools 드롭",
-        "url": "https://tools.cranemont.com/drop/",
-        "description": "서버 없는 기기 간 파일 전송. QR나 코드로 두 브라우저를 직접 연결(WebRTC P2P)해 파일·텍스트를 주고받습니다. 파일은 서버를 거치지 않습니다.",
-        "applicationCategory": "UtilitiesApplication",
-        "operatingSystem": "Any",
-        "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
-        "inLanguage": "ko",
-        "isAccessibleForFree": true,
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
-        "featureList": [
-          "서버 없는 P2P 직접 전송(WebRTC DataChannel, DTLS 암호화)",
-          "숫자 6자리 코드 입력만으로 연결(연결 정보는 종단간 암호화)",
-          "QR 스캔·링크·코드 복사 연결도 지원",
-          "폰 기본 카메라로 QR를 찍으면 바로 진입",
-          "파일 여러 개 양방향 전송·진행률 표시",
-          "텍스트·링크 주고받기"
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "@id": "https://tools.cranemont.com/drop/#app",
+            "name": "local-tools 드롭",
+            "url": "https://tools.cranemont.com/drop/",
+            "description": "두 기기의 브라우저를 직접 연결해 파일을 옮깁니다. 코드 여섯 자리나 QR만 있으면 되고, 아이폰과 윈도우처럼 섞인 조합도 됩니다. 파일이 서버를 거치지 않아 용량 제한이 없습니다.",
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
+            "inLanguage": "ko",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "KRW"
+            },
+            "image": "https://tools.cranemont.com/og/drop.png",
+            "license": "https://github.com/cranemont/local-tools/blob/main/LICENSE",
+            "isPartOf": {
+              "@id": "https://tools.cranemont.com/#website"
+            },
+            "author": {
+              "@id": "https://tools.cranemont.com/#person"
+            },
+            "featureList": [
+              "폰에서 PC로, PC에서 폰으로 파일 보내기",
+              "아이폰↔윈도우, 안드로이드↔맥처럼 섞인 조합도",
+              "코드 여섯 자리 입력만으로 연결",
+              "QR 스캔·링크·코드 복사로도 연결",
+              "케이블·클라우드·계정·앱 설치 없이",
+              "파일 용량 제한 없음 — 서버를 거치지 않음",
+              "파일 여러 개 양방향 전송·진행률 표시",
+              "텍스트·링크 주고받기",
+              "서버 없는 P2P 직접 전송(WebRTC, DTLS 암호화)",
+              "코드는 SPAKE2로 검증 — 릴레이가 코드를 알아도 대신 접속 불가"
+            ]
+          },
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "local-tools",
+                "item": "https://tools.cranemont.com/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "드롭"
+              }
+            ]
+          }
         ]
       }
     </script>

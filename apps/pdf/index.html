@@ -7,11 +7,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
     />
-    <title>PDF 병합·정리·이미지 변환·암호 — local-tools</title>
-    <meta
-      name="description"
-      content="브라우저 안에서만 동작하는 PDF 도구 — 병합, 페이지 정리·회전, 이미지→PDF, PDF→PNG 변환, 암호 설정·해제. 파일은 서버로 전송되지 않습니다."
-    />
+    <title>PDF 합치기·분할·암호 해제 — 업로드 없이 무료로 | local-tools</title>
+    <meta name="description" content="PDF를 서버에 올리지 않고 브라우저에서 합치고 나눕니다. 쪽 순서 바꾸기·삭제·회전, 이미지를 PDF로, PDF를 PNG로, 비밀번호 걸기와 풀기까지. 회원가입·워터마크·용량 제한이 없습니다." />
     <link rel="canonical" href="https://tools.cranemont.com/pdf/" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(1 0 0)" />
@@ -19,11 +16,8 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="local-tools" />
     <meta property="og:locale" content="ko_KR" />
-    <meta property="og:title" content="PDF 병합·정리·이미지 변환·암호" />
-    <meta
-      property="og:description"
-      content="브라우저 안에서만 동작하는 PDF 도구. 파일은 서버로 전송되지 않습니다."
-    />
+    <meta property="og:title" content="PDF 합치기·분할·암호 해제 — 업로드 없이 무료로" />
+    <meta property="og:description" content="PDF를 서버에 올리지 않고 합치고 나누고 암호를 풉니다. 회원가입·워터마크·용량 제한 없이 무료입니다." />
     <meta property="og:url" content="https://tools.cranemont.com/pdf/" />
     <meta property="og:image" content="https://tools.cranemont.com/og/pdf.png" />
     <meta property="og:image:width" content="1200" />
@@ -33,21 +27,60 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "local-tools PDF",
-        "url": "https://tools.cranemont.com/pdf/",
-        "description": "브라우저 안에서만 동작하는 PDF 도구. 병합·페이지 정리·회전, 이미지→PDF, PDF→PNG 변환, 암호 설정·해제. 파일은 서버로 전송되지 않습니다.",
-        "applicationCategory": "UtilitiesApplication",
-        "operatingSystem": "Any",
-        "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
-        "inLanguage": "ko",
-        "isAccessibleForFree": true,
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
-        "featureList": [
-          "PDF 병합·페이지 정리·회전",
-          "이미지(JPG·PNG)→PDF",
-          "PDF→PNG 이미지(ZIP)",
-          "PDF 암호 설정·해제"
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "@id": "https://tools.cranemont.com/pdf/#app",
+            "name": "local-tools PDF",
+            "url": "https://tools.cranemont.com/pdf/",
+            "description": "PDF를 서버에 올리지 않고 브라우저에서 합치고 나눕니다. 쪽 순서 바꾸기·삭제·회전, 이미지를 PDF로, PDF를 PNG로, 비밀번호 걸기와 풀기까지. 회원가입·워터마크·용량 제한이 없습니다.",
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
+            "inLanguage": "ko",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "KRW"
+            },
+            "image": "https://tools.cranemont.com/og/pdf.png",
+            "license": "https://github.com/cranemont/local-tools/blob/main/LICENSE",
+            "isPartOf": {
+              "@id": "https://tools.cranemont.com/#website"
+            },
+            "author": {
+              "@id": "https://tools.cranemont.com/#person"
+            },
+            "featureList": [
+              "PDF 여러 개를 하나로 합치기(병합)",
+              "고른 쪽만 새 PDF로 뽑기 — 분할·페이지 추출",
+              "쪽 순서 바꾸기·삭제·90° 회전",
+              "여러 PDF의 쪽을 섞어 재배치",
+              "이미지(JPG·PNG)를 PDF로 묶기",
+              "PDF를 쪽마다 PNG로 — 화질 3단계, 여러 장은 ZIP",
+              "PDF 비밀번호 걸기",
+              "PDF 비밀번호 풀기(잠금 해제)",
+              "저장 파일 이름 직접 지정",
+              "여러 PDF를 한 번에 이미지로 변환"
+            ]
+          },
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "local-tools",
+                "item": "https://tools.cranemont.com/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "PDF"
+              }
+            ]
+          }
         ]
       }
     </script>

@@ -24,6 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # sitemap의 lastmod를 git 이력에서 뽑으므로 얕게 받으면 안 된다.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4 # 버전은 package.json의 packageManager를 따른다
       - uses: actions/setup-node@v4
         with:
@@ -58,6 +61,9 @@ jobs:
             kb=$(( $(stat -c%s "apps/$app/dist/index.html") / 1024 ))
             sed -i "s|data-size=\"$app\">[^<]*<|data-size=\"$app\">${kb} KB<|" _site/index.html
           done
+          # sitemap의 lastmod를 실제 마지막 변경일로. 손으로 적으면 반드시 낡고,
+          # 낡은 lastmod는 재크롤 우선순위를 반대로 낮춘다.
+          node scripts/stamp-sitemap.mjs _site/sitemap.xml
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
@@ -71,3 +77,20 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+      # 배포가 끝난 뒤에 알린다 — 크롤러가 곧바로 와도 새 내용이 서 있어야 한다.
+      # IndexNow는 Bing과 **네이버**가 함께 받는다(네이버는 2023-07부터 공식 지원).
+      # 키는 비밀이 아니다 — site/<키>.txt로 공개 제공하는 것이 규격이다.
+      # 실패해도 배포를 되돌리지 않는다(색인 힌트일 뿐이다).
+      - name: IndexNow ping
+        continue-on-error: true
+        run: |
+          KEY=95230c9d8dfc47b845257ce99be41f5a
+          HOST=tools.cranemont.com
+          URLS="\"https://$HOST/\""
+          for p in pdf gif video image sheet doc drop dev lab stack; do
+            URLS="$URLS,\"https://$HOST/$p/\""
+          done
+          curl -sS -X POST "https://api.indexnow.org/indexnow" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "{\"host\":\"$HOST\",\"key\":\"$KEY\",\"keyLocation\":\"https://$HOST/$KEY.txt\",\"urlList\":[$URLS]}" \
+            -w '\nIndexNow HTTP %{http_code}\n'

@@ -7,11 +7,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
     />
-    <title>GIF 편집기 — 프레임 편집·동영상 변환 — local-tools</title>
-    <meta
-      name="description"
-      content="브라우저 안에서만 동작하는 GIF 에디터 — 프레임 편집·속도·크롭, 이미지·동영상을 GIF·WebP·MP4로 변환. 파일은 서버로 전송되지 않습니다."
-    />
+    <title>움짤 만들기 — 동영상·사진으로 GIF 만들고 편집 | local-tools</title>
+    <meta name="description" content="동영상 구간이나 사진 여러 장을 움짤로 만듭니다. 프레임 단위로 지우고 순서를 바꾸고 속도를 조절하며 GIF·WebP·MP4로 내보냅니다. 업로드가 없고 워터마크도 붙지 않습니다." />
     <link rel="canonical" href="https://tools.cranemont.com/gif/" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(1 0 0)" />
@@ -19,11 +16,8 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="local-tools" />
     <meta property="og:locale" content="ko_KR" />
-    <meta property="og:title" content="GIF 편집기 — 프레임 편집·동영상 변환" />
-    <meta
-      property="og:description"
-      content="브라우저 안에서만 동작하는 GIF 에디터. 파일은 서버로 전송되지 않습니다."
-    />
+    <meta property="og:title" content="움짤 만들기 — 동영상·사진으로 GIF 만들고 편집" />
+    <meta property="og:description" content="동영상이나 사진으로 움짤을 만들고 프레임 단위로 편집합니다. 업로드·워터마크 없이 GIF·WebP·MP4로 저장합니다." />
     <meta property="og:url" content="https://tools.cranemont.com/gif/" />
     <meta property="og:image" content="https://tools.cranemont.com/og/gif.png" />
     <meta property="og:image:width" content="1200" />
@@ -33,22 +27,60 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "local-tools GIF",
-        "url": "https://tools.cranemont.com/gif/",
-        "description": "브라우저 안에서만 동작하는 GIF 에디터. 프레임 편집·속도·크롭·반복, 이미지와 동영상을 GIF·WebP·MP4로 변환. 파일은 서버로 전송되지 않습니다.",
-        "applicationCategory": "MultimediaApplication",
-        "operatingSystem": "Any",
-        "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
-        "inLanguage": "ko",
-        "isAccessibleForFree": true,
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
-        "featureList": [
-          "GIF 프레임 편집(순서·삭제·복제·속도)",
-          "이미지 여러 장→GIF",
-          "동영상(MP4·WebM)→GIF",
-          "GIF→WebP·MP4 변환",
-          "프레임 PNG 추출(ZIP)"
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "@id": "https://tools.cranemont.com/gif/#app",
+            "name": "local-tools GIF",
+            "url": "https://tools.cranemont.com/gif/",
+            "description": "동영상 구간이나 사진 여러 장을 움짤로 만듭니다. 프레임 단위로 지우고 순서를 바꾸고 속도를 조절하며 GIF·WebP·MP4로 내보냅니다. 업로드가 없고 워터마크도 붙지 않습니다.",
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Chromium 기반 최신 브라우저(Chrome·Edge)",
+            "inLanguage": "ko",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "KRW"
+            },
+            "image": "https://tools.cranemont.com/og/gif.png",
+            "license": "https://github.com/cranemont/local-tools/blob/main/LICENSE",
+            "isPartOf": {
+              "@id": "https://tools.cranemont.com/#website"
+            },
+            "author": {
+              "@id": "https://tools.cranemont.com/#person"
+            },
+            "featureList": [
+              "동영상에서 움짤 만들기 — 구간·fps·해상도 지정",
+              "사진 여러 장을 이어 붙여 GIF 만들기",
+              "MP4·WebM·MOV·MKV 동영상 가져오기",
+              "애니메이션 GIF·WebP를 프레임 단위로 편집",
+              "프레임 삭제·복제·순서 바꾸기·선택만 남기기",
+              "역재생(순서 뒤집기), 90° 회전·좌우·상하 뒤집기",
+              "프레임별 딜레이(ms)와 반복 횟수 조절",
+              "크기 조절 25/50/75/100%·가로 픽셀 직접 입력, 크롭",
+              "GIF 색상 수·디더링, WebP 품질로 용량 줄이기",
+              "GIF·WebP·MP4로 내보내기, 프레임을 PNG(ZIP)로 추출"
+            ]
+          },
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "local-tools",
+                "item": "https://tools.cranemont.com/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "GIF"
+              }
+            ]
+          }
         ]
       }
     </script>
