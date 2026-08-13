@@ -16,7 +16,7 @@ pnpm build    # 전체 앱 빌드 — 자가해제형 단일 HTML 산출 → app
 pnpm check    # 전체 svelte-check 타입 체크 (0 errors/warnings 유지할 것)
 ```
 
-배포: main에 푸시하면 GitHub Actions가 빌드해 **https://cranemont.github.io/local-tools/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`·`/image/`·`/sheet/`·`/doc/`·`/drop/`·`/stack/`). 별도 배포 명령 없음.
+배포: main에 푸시하면 GitHub Actions가 빌드해 **https://cranemont.github.io/local-tools/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`·`/image/`·`/sheet/`·`/doc/`·`/drop/`·`/lab/`·`/stack/`). 별도 배포 명령 없음.
 
 ## 구조 (경량 pnpm 모노레포)
 
@@ -79,6 +79,20 @@ apps/dev/            # 개발자 유틸 (Svelte 5 + TS) — 사이드바+검색 
                      #   Regex·CronTool·Color(culori)·Qr(uqr+BarcodeDetector)·Chars·
                      #   Cookie(Set-Cookie 진단)·OAuthTool(URL 분석+PKCE)·
                      #   Saml(디코드+요약, DecompressionStream)·Xpath(네이티브 evaluate)
+apps/lab/            # 실험장 (Svelte 5 + TS) — 임베딩 모델 비교. ★ 도구가 아니라 실험장이고,
+                     #   ★ 유일하게 오프라인이 아니다(아래 20번)
+  src/lib/embed/     # 엔진: registry(모델 5종의 용량·차원·프리픽스·풀링 위치·MRL 여부)·
+                     #   runtime(transformers.js 래퍼 — 장치 협상·한 문장씩 임베딩)·
+                     #   bm25(문자 2-gram 기준선, 0 MB)·
+                     #   vector(코사인·MRL 절단·overlap@k·Spearman·PCA)·score(짝짓기 채점)·
+                     #   stats(Wilson·McNemar 정확검정·평균 신뢰구간)·
+                     #   judge(판정 풀링 + Recall·NDCG·MRR, localStorage)·
+                     #   results(파레토 점 누적, localStorage)·cache(Cache API 저장소)
+  src/lib/corpus/    # samples.ts — 한국어 프로브(존댓말·띄어쓰기·한자어·오타·영어 혼용 짝)
+  src/lib/editor/    # state.svelte.ts(실행 목록 + A/B 슬롯 + 판정)·Panel·Matrix(캔버스 히트맵)·
+                     #   Bump(순위 이동)·Neighbors·Judge(판정)·Pareto(비용–품질)·
+                     #   ScoreCard·Storage·paint(토큰→sRGB)
+  ort-wasm.ts        # ★ 빌드 플러그인 — ort의 wasm 자기참조를 끊는다. 빼면 산출물이 63MB
 apps/stack/          # 기술 지도 (Svelte 5 + TS) — ★ 이 앱만 단일 HTML이 아니다(아래 11번)
   src/lib/data/      # ★ 페이지 내용물: stack.ts(앱·기능·기술·연결, 각 항목에 소스 경로·
                      #    서드파티 pkg·네트워크 상대)·pipelines.ts(단계별 흐름 + 단계마다
@@ -111,9 +125,9 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
 
 ## 스택 / 대상
 
-- **크로미엄 전용**(Chrome/Edge 최신). File System Access·DecompressionStream 등 사용, FF/Safari 미검증.
+- **크로미엄 전용**(Chrome/Edge 최신). File System Access·DecompressionStream·WebGPU 등 사용, FF/Safari 미검증.
 - Vite 8 + `vite-plugin-singlefile` + **Svelte 5(runes)** + TypeScript.
-- 라이브러리: `pdf-lib`(병합/회전/이미지임베드), `pdfjs-dist` v6(썸네일·래스터), `fflate`(ZIP), `@neslinesli93/qpdf-wasm`(암호, CDN 지연로드), `gifenc`(GIF 인코딩), `mediabunny`(순수 TS — 동영상 디먹싱·MP4 muxing), `exceljs`+`@formulajs/formulajs`(시트), `@rhwp/core`(한글 렌더러 — 유일한 wasm 자체 호스팅)+`docx-preview`+`mammoth`+`turndown`+`hwp-convert`(문서), 개발자 유틸은 `js-yaml`·`fast-xml-parser`·`diff`·`cronstrue`(ko)·`croner`·`culori`·`uqr` — 전부 순수 JS, wasm 없음.
+- 라이브러리: `pdf-lib`(병합/회전/이미지임베드), `pdfjs-dist` v6(썸네일·래스터), `fflate`(ZIP), `@neslinesli93/qpdf-wasm`(암호, CDN 지연로드), `gifenc`(GIF 인코딩), `mediabunny`(순수 TS — 동영상 디먹싱·MP4 muxing), `exceljs`+`@formulajs/formulajs`(시트), `@rhwp/core`(한글 렌더러 — 유일한 wasm 자체 호스팅)+`docx-preview`+`mammoth`+`turndown`+`hwp-convert`(문서), 개발자 유틸은 `js-yaml`·`fast-xml-parser`·`diff`·`cronstrue`(ko)·`croner`·`culori`·`uqr` — 전부 순수 JS, wasm 없음. 실험장은 `@huggingface/transformers`(임베딩 — 모델·실행기를 실행 시점에 내려받는다).
 - apps/dev 주의: `@tsconfig/svelte`가 target을 es2017로 낮춰 최신 API(matchAll 등) 타입 에러가 남 — 앱 tsconfig에 `"target"/"lib": ES2022` 명시로 해결(다른 앱도 동일 증상 시 같은 처리).
 
 ## ⚠️ 주의사항 (놓치기 쉬움 — 꼭 읽기)
@@ -265,6 +279,59 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
      안 먹었다 — 마크다운을 굴리면 원본이 맨 위로 튀어 올랐다.
    - 좁은 화면(≤900px)에서는 `view`를 고쳐 쓰지 않고 `effectiveView`로만 한 판을 고른다.
      상태를 덮어쓰면 창을 다시 넓혔을 때 보던 배치가 사라진다.
+
+20. **apps/lab은 도구가 아니라 실험장이고, 저장소에서 유일하게 오프라인이 아니다.**
+   "파일이 네트워크로 나가지 않는다"는 여전히 참이지만 — 문장은 이 탭 안에서만 벡터가 된다 —
+   **모델은 실행 시점에 받는다**(`huggingface.co` 가중치, `cdn.jsdelivr.net` 실행기 wasm).
+   모델을 갈아 끼우는 게 이 앱의 용도라 열두 개를 자체 호스팅할 방법이 없어서다. 그래서
+   rhwp·qpdf와 달리 **해시 검증이 없다** — 우리가 호스팅하는 자산이 아니다. 두 호스트는
+   `runtime.ts`의 `NETWORK_HOSTS`에 있고 화면 하단에 그대로 띄운다(각주로 숨기지 말 것).
+   - **`ort-wasm.ts`를 빼면 산출물이 273kB → 63MB가 된다.** onnxruntime-web 번들 안에
+     `new URL("ort-wasm-simd-threaded.asyncify.wasm", import.meta.url)`이 있고 Vite가 이걸
+     정적으로 알아봐 23.5MB짜리 wasm을 자산으로 끌어온다(단일 HTML이라 통째로 인라인된다).
+     rhwp와 같은 부류의 함정이다. 빌드 로그의 자가해제 줄이 **1MB 근처인지** 꼭 볼 것.
+   - **`pnpm-workspace.yaml`의 `allowBuilds`를 지우지 말 것.** transformers.js가 딸고 오는
+     `onnxruntime-node`·`sharp`·`protobufjs`는 브라우저 경로에서 안 쓰이는데, false로 못 박지
+     않으면 pnpm이 "승인 안 됨"으로 **install 자체를 실패시켜** CI가 통째로 멈춘다.
+   - **임베딩은 한 번에 한 문장씩** 돌린다(`runtime.ts`). 배치로 묶으면 패딩이 섞여 평균
+     풀링이 빈칸을 세거나 `last_token`이 패딩을 집는다. 여기 숫자가 틀리면 화면의 모든
+     주장이 무너지므로 속도를 포기했다 — 배치로 되돌리려면 어텐션 마스크를 직접 다룰 것.
+   - **문장 벡터가 나오는 자리는 모델마다 다르다**(`registry.ts`의 `head`). EmbeddingGemma는
+     ONNX 그래프가 풀링·정규화까지 해서 `sentence_embedding`으로 주고, BGE는 첫 토큰,
+     e5는 평균, Qwen3는 마지막 토큰이다. 모델을 추가하면 이걸 먼저 확인할 것.
+   - **레지스트리의 dtype 목록은 실물 파일 크기다**(HF 저장소에서 잰 값). EmbeddingGemma에서
+     `fp16`·`q4f16`을 뺀 건 실수가 아니다 — 이 모델은 활성값이 fp16을 지원하지 않는다.
+     q4f16이 175MB로 제일 작아 솔깃하지만 결과가 깨진다. BGE-M3의 `fp16`도 저장소에 2바이트로
+     올라와 있어(내보내기 실패) 뺐다.
+   - **절단은 다시 계산하지 않는다.** 실행은 원본 차원 벡터만 저장하고(`Run.vectors`),
+     차원은 볼 때 잘라 쓴다(`state.svelte.ts`의 `#slotView`). 그래서 모델을 한 번만 받아도
+     "768을 256으로 자르면 이웃이 얼마나 바뀌나"가 즉시 나온다 — 이 앱의 첫 실험이 이것이다.
+   - 캔버스 색은 `paint.ts`가 **토큰 값을 실행 시점에 읽어** 쓴다(1×1 캔버스에 칠해 픽셀을
+     읽는다). 히트맵에 hex를 새로 심지 말 것 — 그 색만 테마를 안 따라간다.
+   - 파이프라인이 `common-save`로 나가지 않는 **유일한 흐름**이다. 이 앱이 만드는 건 파일이
+     아니라 화면이라서다(9번의 "마지막은 출입구" 규칙에 대한 의도적 예외).
+
+21. **실험장이 재는 것은 "다름"이 아니라 "나음"이다.** 겹침(overlap@k)·순위 상관은 무엇이
+   바뀌었는지만 말한다. 어느 쪽이 맞는지는 정답이 있어야 나오고, 정답은 두 군데서 온다 —
+   프로브 짝(자동)과 사용자가 매긴 판정(`judge.ts`). 새 지표를 붙일 땐 어느 쪽인지 먼저
+   가를 것.
+   - **BM25 점수판은 대칭이 아니다.** 질의 쪽 용어로만 훑고 문서 쪽 길이로 정규화하므로
+     `score(i→j) ≠ score(j→i)`다. 코사인 행렬처럼 위 삼각형만 채우고 거울로 베끼지 말 것
+     (`similarityMatrix`를 재사용하려다 이걸 깨뜨리기 쉽다). 이웃 순위는 행 단위로 읽으니
+     비대칭 그대로가 맞다.
+   - **`meanCI`는 표본분산이 0이면 Wilson으로 물러난다.** 40개 질의가 전부 만점이면 정규구간이
+     [1.00, 1.00]으로 붕괴해 오차막대가 사라지고, 그림에서 확실한 승자처럼 보인다. 값이
+     0..1로 갇혀 있다는 걸 이용한 보수적 대체다 — 이 분기를 지우지 말 것.
+   - **판정은 풀링이라 편향이 있다.** 아무 설정도 데려오지 않은 문장은 판정될 기회가 없어서,
+     나중에 붙인 모델이 아무도 못 찾은 정답을 찾아오면 "무관"으로 세어진다. 화면에 이
+     한계를 적어 두었다(`t.judge.bias`) — 지우지 말 것.
+   - **판정과 파레토 점은 localStorage에 코퍼스별로 남는다**(FNV-1a 해시가 저장소 키).
+     벡터는 저장하지 않는다 — 모델 한 벌이 200MB~2.4GB인데 결과 점은 100바이트도 안 되고,
+     그래서 IndexedDB가 필요 없다. 코퍼스가 바뀌면 점수가 비교 불가라 저장소를 가른 것이다.
+   - `Run.kind`가 `dense`면 벡터를, `lexical`이면 점수판을 들고 있다. 뷰는 전부 `SlotView.matrix`
+     하나만 보므로 BM25도 기존 화면이 그대로 그린다 — 새 모델 종류를 붙일 때도 이 경계를 지킬 것.
+   - 파레토에서 **같은 용량의 점들은 표시상 좌우로 벌려 둔다**(`dodged`). 절단만 다른 조합은
+     x가 완전히 같아(자른다고 다운로드가 줄지 않는다) 그대로 두면 셋 중 하나만 보인다.
 
 ## 핵심 설계 결정 (그릴링 합의 요약)
 
