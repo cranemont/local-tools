@@ -25,7 +25,7 @@
     <meta property="og:image" content="https://tools.cranemont.com/og/home.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상·이미지·파일 전송·개발자 도구" />
+    <meta property="og:image:alt" content="local-tools — 업로드 없이 브라우저에서 쓰는 파일 도구 모음" />
     <meta name="twitter:card" content="summary_large_image" />
     <script type="application/ld+json">
       {
@@ -137,6 +137,9 @@
       :root {
         color-scheme: light dark;
         --accent: light-dark(oklch(0.62 0.158 240), oklch(0.716 0.125 240));
+        /* 글자·아이콘용 accent. --accent는 면(배경·테두리) 전용이다 —
+           라이트에서 흰 배경 위에 --accent 글자를 올리면 대비가 모자란다. */
+        --accent-ink: light-dark(oklch(0.474 0.138 243), oklch(0.78 0.11 240));
         --accent-weak: light-dark(
           oklch(0.62 0.158 240 / 0.09),
           oklch(0.716 0.125 240 / 0.14)
@@ -205,6 +208,15 @@
       }
       h1 .dot {
         fill: var(--accent);
+      }
+      /* 브랜드 아래 한 줄 — h1이 주제를 말하게 하되 시각 위계는 그대로 둔다. */
+      .h1-sub {
+        display: block;
+        margin-top: 3px;
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: 0;
+        color: var(--muted);
       }
       .gh {
         font-size: 13px;
@@ -318,6 +330,36 @@
         margin: 0;
       }
 
+      /* 카드 아래 설명 — 이 사이트에서 유일하게 본문이 실재하는 자리다. */
+      .about {
+        max-width: 680px;
+        margin: 64px 0 0;
+        padding-top: 40px;
+        border-top: 1px solid var(--border);
+        font-size: 15px;
+        line-height: 1.75;
+      }
+      .about h2 {
+        margin: 34px 0 10px;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .about h2:first-child {
+        margin-top: 0;
+      }
+      .about p {
+        margin: 0 0 12px;
+        color: var(--muted);
+      }
+      .about a {
+        color: var(--accent-ink);
+        text-underline-offset: 2px;
+      }
+      .about a:hover {
+        text-decoration-thickness: 2px;
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .tool {
           transition: none;
@@ -337,13 +379,14 @@
               <rect x="1.6" y="1.6" width="14.8" height="14.8" rx="4.8" fill="none" stroke="currentColor" stroke-width="1.6" />
               <circle class="dot" cx="9" cy="9" r="3.2" />
             </svg>
-            local-tools
+            <span>local-tools<span class="h1-sub">업로드 없이 브라우저에서 쓰는 파일 도구 모음</span></span>
           </h1>
           <a class="gh" href="https://github.com/cranemont/local-tools">GitHub</a>
         </div>
-        <p class="tagline">설치 없이 브라우저에서 쓰는 도구 모음</p>
         <p class="statement">
-          모든 기능은 단일 HTML 파일 위에서 동작하며, 파일은 서버로 전송되지 않습니다.
+          PDF 합치기, 한글(hwp)·엑셀 열기, 이미지·동영상 용량 줄이기, 폰과 PC 사이 파일 전송,
+          개발자 유틸 16종. 파일을 서버에 올리지 않고 브라우저가 그 자리에서 처리합니다.
+          회원가입도 설치도 없고, 광고와 사용량 추적도 없습니다.
         </p>
       </section>
 
@@ -363,7 +406,7 @@
             <circle class="art-accent" cx="12.5" cy="13.5" r="2.4" />
           </svg>
           <h2><a class="tool-link" href="./pdf/">PDF</a></h2>
-          <p class="desc">병합 · 정리 · 이미지 변환 · 암호</p>
+          <p class="desc">여러 PDF를 하나로 합치고, 필요한 쪽만 뽑아 나누고, 순서를 바꾸고, 암호를 걸거나 풉니다</p>
           <span class="meta">
             단일 HTML · <span data-size="pdf">910 KB</span>
           </span>
@@ -382,7 +425,7 @@
             <circle class="art-accent" cx="12" cy="12" r="2.4" />
           </svg>
           <h2><a class="tool-link" href="./gif/">GIF</a></h2>
-          <p class="desc">프레임 편집 · 동영상 변환 · WebP·MP4</p>
+          <p class="desc">동영상 구간이나 사진 여러 장으로 움짤을 만들고 프레임 단위로 손봅니다. WebP·MP4로도 저장</p>
           <span class="meta">
             단일 HTML · <span data-size="gif">174 KB</span>
           </span>
@@ -400,7 +443,7 @@
             <path class="art-accent" d="m10.2 8.8 5.2 3.2-5.2 3.2Z" />
           </svg>
           <h2><a class="tool-link" href="./video/">동영상</a></h2>
-          <p class="desc">자르기 · 압축 · 변환 · 소리 추출</p>
+          <p class="desc">필요한 구간만 잘라내고 용량을 줄입니다. 무손실 컷은 다시 인코딩하지 않아 화질 그대로</p>
           <span class="meta">
             단일 HTML · <span data-size="video">189 KB</span>
           </span>
@@ -419,7 +462,7 @@
             <path d="m21 16-5-5L5 20" />
           </svg>
           <h2><a class="tool-link" href="./image/">이미지</a></h2>
-          <p class="desc">변환 · 압축 · 리사이즈 · EXIF</p>
+          <p class="desc">JPG·PNG·WebP·AVIF 변환과 용량 줄이기. 아이폰 HEIC도 열리고 촬영 위치(EXIF) 제거까지</p>
           <span class="meta">
             단일 HTML · <span data-size="image">110 KB</span>
           </span>
@@ -439,7 +482,7 @@
             <circle class="art-accent" cx="12" cy="12" r="2.2" />
           </svg>
           <h2><a class="tool-link" href="./drop/">드롭</a></h2>
-          <p class="desc">기기 간 직접 전송 · 서버 없음</p>
+          <p class="desc">두 기기의 브라우저를 직접 연결해 파일을 옮깁니다. 코드 여섯 자리, 용량 제한 없음</p>
           <span class="meta">
             단일 HTML · <span data-size="drop">47 KB</span>
           </span>
@@ -458,7 +501,7 @@
             <path class="art-accent" d="M3 9h6v5H3Z" />
           </svg>
           <h2><a class="tool-link" href="./sheet/">시트</a></h2>
-          <p class="desc">CSV · 엑셀 · 수식 · 서식</p>
+          <p class="desc">엑셀 없이 .xlsx와 CSV를 열어 고칩니다. 한글 깨짐을 자동으로 잡고 수식·서식을 그대로</p>
           <span class="meta">
             단일 HTML · <span data-size="sheet">440 KB</span>
           </span>
@@ -477,7 +520,7 @@
             <path class="art-accent" d="M10 12h6M10 16h4" />
           </svg>
           <h2><a class="tool-link" href="./doc/">문서</a></h2>
-          <p class="desc">한글 · 워드 열기 · 마크다운 변환</p>
+          <p class="desc">한글 프로그램 없이 hwp를 원본 그대로 열고, 고쳐 저장하고, PDF·마크다운으로 바꿉니다</p>
           <span class="meta">
             단일 HTML · <span data-size="doc">500 KB</span>
           </span>
@@ -496,7 +539,7 @@
             <circle class="art-accent" cx="12" cy="12" r="2.4" />
           </svg>
           <h2><a class="tool-link" href="./dev/">개발자 도구</a></h2>
-          <p class="desc">JSON 변환 · diff · QR · 해시</p>
+          <p class="desc">JSON 정리, JWT 디코드, 텍스트 비교, 해시, 정규식, cron, QR 등 16종을 한 페이지에</p>
           <span class="meta">
             단일 HTML · <span data-size="dev">154 KB</span>
           </span>
@@ -516,7 +559,7 @@
             <circle cx="8.5" cy="17.5" r="1.2" />
           </svg>
           <h2><a class="tool-link" href="./lab/">실험장</a></h2>
-          <p class="desc">임베딩 모델 비교 · 한국어 프로브</p>
+          <p class="desc">한국어 문장으로 임베딩 모델 다섯 개를 같은 조건에서 재봅니다. 모델은 브라우저 안에서</p>
           <span class="meta">
             단일 HTML · <span data-size="lab">284 KB</span> · 모델은 따로 받아요
           </span>
@@ -529,12 +572,62 @@
             <path class="art-accent" d="M14 20v-8l5 2.5V20" />
           </svg>
           <h2><a class="tool-link" href="./stack/">기술 지도</a></h2>
-          <p class="desc">무엇으로 만들었나 · 기능↔기술 연결 · 3D 도시</p>
+          <p class="desc">도구 열 개가 어떤 기술 위에 서 있는지 3D 도시로. 무엇이 네트워크를 타는지도 표시</p>
           <span class="meta">
             도구가 아닌 메타 페이지
           </span>
         </div>
       </nav>
+
+      <section class="about">
+        <h2>왜 브라우저 안에서만 처리하나</h2>
+        <p>
+          온라인 변환 사이트는 대개 파일을 서버에 올린 뒤 처리해서 돌려줍니다. 편하지만
+          계약서·신분증·이력서처럼 남에게 보이면 곤란한 파일도 남의 컴퓨터를 한 번 거칩니다.
+          여기 있는 도구들은 파일을 올리지 않습니다. 브라우저가 받은 파일을 그 자리에서 열고,
+          고치고, 저장합니다. 서버에는 도구 자체를 내려받는 요청만 남습니다.
+        </p>
+        <p>
+          그래서 처리 속도는 서버가 아니라 쓰는 기기의 성능을 따르고, 파일 용량 제한이나
+          하루 처리 횟수 제한이 없습니다. 워터마크도 붙지 않습니다.
+        </p>
+
+        <h2>인터넷이 필요한 곳</h2>
+        <p>
+          대부분은 페이지를 한 번 연 뒤 인터넷 없이 동작하지만, 정직하게 밝히면 예외가 셋 있습니다.
+          <a href="./pdf/">PDF</a>의 암호 설정·해제는 qpdf 엔진을,
+          <a href="./image/">이미지</a>의 HEIC·AVIF 처리는 해당 코덱을,
+          <a href="./doc/">문서</a>의 한글 렌더러는 rhwp 엔진을 각각 최초 1회 내려받습니다.
+          받아온 것은 해시로 검증한 뒤에만 실행하며, 어느 경우에도 파일 자체는 나가지 않습니다.
+          <a href="./drop/">드롭</a>은 두 기기가 서로를 찾는 순간에만 공개 릴레이와 STUN을 거치고
+          파일은 기기 간에 직접 이동합니다.
+          <a href="./lab/">실험장</a>만은 예외로, 임베딩 모델을 실행할 때 내려받습니다.
+        </p>
+        <p>
+          무엇이 어디에 접속하는지는 <a href="./stack/">기술 지도</a>에서 도구별로 볼 수 있습니다.
+        </p>
+
+        <h2>오프라인으로 쓰려면</h2>
+        <p>
+          각 카드 오른쪽 위의 내려받기 아이콘을 누르면 그 도구가 HTML 파일 한 개로 저장됩니다.
+          이 파일은 그 자체로 완전한 프로그램이라, 인터넷이 없는 곳이나 폐쇄망에서 더블클릭만으로
+          열립니다. <a href="./sheet/">시트</a>와 <a href="./doc/">문서</a>는 설치(PWA)해 두면
+          .csv나 .hwp 파일을 더블클릭했을 때 이 도구로 바로 열 수도 있습니다.
+        </p>
+
+        <h2>무엇을 할 수 있나</h2>
+        <p>
+          <a href="./pdf/">PDF 합치기와 분할, 암호 해제</a>,
+          <a href="./doc/">한글 프로그램 없이 hwp 열고 편집하기</a>,
+          <a href="./sheet/">엑셀·CSV를 한글 안 깨지게 열어 편집하기</a>,
+          <a href="./image/">사진 형식 변환과 용량 줄이기, 아이폰 HEIC 변환</a>,
+          <a href="./video/">동영상 자르기와 용량 줄이기</a>,
+          <a href="./gif/">동영상으로 움짤 만들기</a>,
+          <a href="./drop/">폰과 PC 사이 파일 전송</a>,
+          <a href="./dev/">JSON 포맷터·JWT 디코더 같은 개발자 유틸</a>.
+          전부 무료이고 회원가입이 없습니다.
+        </p>
+      </section>
     </main>
   </body>
 </html>
