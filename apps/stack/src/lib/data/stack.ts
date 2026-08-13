@@ -680,7 +680,7 @@ export const TECHS: Tech[] = [
     pkg: "@rhwp/core",
     network: "우리 서버 최초 1회",
     net: {
-      hosts: ["cranemont.github.io"],
+      hosts: ["tools.cranemont.com"],
       layers: [
         { label: "TCP/IP", note: "https:// 라서 443." },
         { label: "TLS", note: "버전은 브라우저가 협상한다." },

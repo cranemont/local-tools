@@ -16,7 +16,7 @@ pnpm build    # 전체 앱 빌드 — 자가해제형 단일 HTML 산출 → app
 pnpm check    # 전체 svelte-check 타입 체크 (0 errors/warnings 유지할 것)
 ```
 
-배포: main에 푸시하면 GitHub Actions가 빌드해 **https://cranemont.github.io/local-tools/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`·`/image/`·`/sheet/`·`/doc/`·`/drop/`·`/lab/`·`/stack/`). 별도 배포 명령 없음.
+배포: main에 푸시하면 GitHub Actions가 빌드해 **https://tools.cranemont.com/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`·`/image/`·`/sheet/`·`/doc/`·`/drop/`·`/lab/`·`/stack/`). 별도 배포 명령 없음.
 
 ## 구조 (경량 pnpm 모노레포)
 
@@ -244,7 +244,7 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
    qpdf와 달리 버전을 올려도 해시를 손으로 다시 계산할 일이 없다. 대신 지켜야 할 것들:
    - 글루 JS 안의 `new URL('rhwp_bg.wasm', import.meta.url)`을 플러그인이 **끊는다**. 안 끊으면
      Vite가 wasm을 자산으로 물고 들어가 단일 HTML이 10MB가 된다.
-   - 주소는 상대경로 → 배포 주소(`cranemont.github.io/local-tools/doc/`) 순으로 시도한다.
+   - 주소는 상대경로 → 배포 주소(`tools.cranemont.com/doc/`) 순으로 시도한다.
      내려받은 단일 HTML을 `file://`로 열면 후자를 탄다. **해시 불일치는 폴백 없이 즉시 거부**다.
    - 프리페치는 앱이 뜨자마자 idle에 시작하되 `saveData`가 켜져 있으면 미룬다.
    - PWA 빌드의 서비스 워커는 wasm을 **프리캐시하지 않는다**(설치 순간 8MB를 받게 된다).

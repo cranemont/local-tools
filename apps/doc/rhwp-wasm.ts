@@ -24,7 +24,7 @@ import type { Plugin } from "vite";
 const require = createRequire(import.meta.url);
 
 /** 배포된 자리 — 단일 HTML을 내려받아 `file://`로 열었을 때의 폴백 주소. */
-const REMOTE_BASE = "https://cranemont.github.io/local-tools/doc/";
+const REMOTE_BASE = "https://tools.cranemont.com/doc/";
 
 export interface RhwpWasmInfo {
   /** 내보낼 파일 이름 (버전이 박힌다) */
