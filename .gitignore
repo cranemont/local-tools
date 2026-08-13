@@ -11,3 +11,6 @@ dist-pwa/
 
 # 외부에서 가져온 스킬 (npx skills add nutlope/hallmark 또는 수동 클론으로 재설치)
 .claude/skills/hallmark/
+
+# 작업용 문서 — 공개 저장소에 올리지 않는다 (SEO 감사 보고서 등)
+docs/local/

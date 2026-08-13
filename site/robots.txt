@@ -1,0 +1,17 @@
+# https://tools.cranemont.com/robots.txt
+#
+# 모든 처리가 브라우저 안에서 끝나는 개인 도구 모음이다. 광고도 추적도 없고
+# 감출 것도 없으므로 검색·AI 크롤러 전부에게 전면 허용한다.
+# (GPTBot·ClaudeBot·PerplexityBot·Google-Extended 등도 아래 `*` 규칙을 따른다.
+#  크롤러는 자기 이름의 그룹이 있으면 `*` 그룹을 통째로 무시하므로,
+#  일부러 개별 그룹을 만들지 않는다 — 만들면 아래 Disallow가 그들에게만 풀린다.)
+
+User-agent: *
+Allow: /
+
+# 내려받기용 사본 — /sheet/·/doc/ 본체와 같은 앱이라 크롤 예산만 쓴다.
+# (앱 본체는 위 Allow로 계속 크롤된다.)
+Disallow: /sheet/local-tools-sheet.html
+Disallow: /doc/local-tools-doc.html
+
+Sitemap: https://tools.cranemont.com/sitemap.xml
