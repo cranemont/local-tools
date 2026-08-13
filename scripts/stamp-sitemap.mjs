@@ -49,9 +49,13 @@ const stamped = [];
 let missed = 0;
 
 xml = xml.replace(
-  /<loc>https:\/\/tools\.cranemont\.com\/([\w-]*)\/?<\/loc>(\s*)<lastmod>[^<]*<\/lastmod>/g,
-  (whole, slug, gap) => {
-    const paths = SOURCES[slug];
+  /<loc>https:\/\/tools\.cranemont\.com\/([\w/-]*)<\/loc>(\s*)<lastmod>[^<]*<\/lastmod>/g,
+  (whole, raw) => {
+    const slug = raw.replace(/\/$/, "");
+    // 가이드는 손으로 쓴 파일이라 그 파일 하나의 이력이 곧 그 페이지의 이력이다.
+    const paths = slug.startsWith("guide")
+      ? [`site/${slug}`]
+      : SOURCES[slug];
     const date = paths && lastCommitDate(paths);
     if (!date) {
       // 알 수 없으면 원래 값을 둔다 — 지어낸 날짜보다 낡은 날짜가 낫다.

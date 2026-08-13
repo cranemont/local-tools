@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>폰과 PC 파일 옮기기 — 케이블·클라우드 없이 하는 법 | local-tools</title>
+    <meta name="description" content="폰과 PC 사이 파일은 케이블 없이도 옮깁니다. 에어드롭·퀵쉐어·휴대폰 연결·카톡·클라우드·전송 서비스를 기기 조합별로 비교하고, 브라우저끼리 직접 보내는 방법과 사진 위치정보 지우는 순서까지 정리했습니다." />
+    <link rel="canonical" href="https://tools.cranemont.com/guide/phone-to-pc/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(0.978 0.003 240)" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="oklch(0.172 0.008 250)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="local-tools" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="폰과 PC 파일 옮기기 — 케이블·클라우드 없이 하는 법" />
+    <meta property="og:description" content="폰과 PC 사이 파일은 케이블 없이도 옮깁니다. 에어드롭·퀵쉐어·휴대폰 연결·카톡·클라우드·전송 서비스를 기기 조합별로 비교하고, 브라우저끼리 직접 보내는 방법과 사진 위치정보 지우는 순서까지 정리했습니다." />
+    <meta property="og:url" content="https://tools.cranemont.com/guide/phone-to-pc/" />
+    <meta property="og:image" content="https://tools.cranemont.com/og/home.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://tools.cranemont.com/guide/phone-to-pc/#page",
+            "name": "폰과 PC 파일 옮기기 — 케이블·클라우드 없이 하는 법",
+            "url": "https://tools.cranemont.com/guide/phone-to-pc/",
+            "description": "폰과 PC 사이 파일은 케이블 없이도 옮깁니다. 에어드롭·퀵쉐어·휴대폰 연결·카톡·클라우드·전송 서비스를 기기 조합별로 비교하고, 브라우저끼리 직접 보내는 방법과 사진 위치정보 지우는 순서까지 정리했습니다.",
+            "inLanguage": "ko",
+            "isPartOf": {
+              "@id": "https://tools.cranemont.com/#website"
+            },
+            "author": {
+              "@id": "https://tools.cranemont.com/#person"
+            }
+          },
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "local-tools",
+                "item": "https://tools.cranemont.com/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "가이드",
+                "item": "https://tools.cranemont.com/guide/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 3,
+                "name": "폰과 PC 사이에서 파일 옮기기"
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <script>
+      // 도구들과 같은 키의 테마 설정을 따른다 (없으면 시스템).
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "light" || savedTheme === "dark")
+        document.documentElement.dataset.theme = savedTheme;
+    </script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --accent-ink: light-dark(oklch(0.474 0.138 243), oklch(0.78 0.11 240));
+        --bg: light-dark(oklch(0.978 0.003 240), oklch(0.172 0.008 250));
+        --surface: light-dark(oklch(1 0 0), oklch(0.212 0.01 250));
+        --text: light-dark(oklch(0.235 0.015 250), oklch(0.93 0.006 240));
+        --muted: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
+        --border: light-dark(oklch(0.917 0.008 240), oklch(0.31 0.014 248));
+      }
+      :root[data-theme="light"] { color-scheme: light; }
+      :root[data-theme="dark"] { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+          "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+        font-size: 16px;
+        line-height: 1.78;
+        word-break: keep-all;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+      .crumb { padding: 28px 0 0; font-size: 13px; color: var(--muted); }
+      .crumb a { color: var(--muted); }
+      article { padding: 24px 0 72px; }
+      h1 { margin: 0 0 18px; font-size: 30px; line-height: 1.32; letter-spacing: -0.025em; text-wrap: balance; }
+      h2 { margin: 42px 0 12px; font-size: 19px; letter-spacing: -0.015em; text-wrap: balance; }
+      p { margin: 0 0 14px; }
+      .lede { color: var(--muted); font-size: 17px; }
+      ul, ol { margin: 0 0 14px; padding-left: 22px; }
+      li { margin: 0 0 7px; }
+      li::marker { color: var(--muted); }
+      a { color: var(--accent-ink); text-underline-offset: 2px; }
+      a:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; border-radius: 3px; }
+      code {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.86em;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 1px 5px;
+      }
+      .note {
+        margin: 0 0 14px;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent-ink);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 15px;
+      }
+      dl { margin: 0; }
+      dt { margin-top: 20px; font-weight: 700; }
+      dd { margin: 4px 0 0; color: var(--muted); }
+      footer {
+        margin-top: 48px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+      .cards li { margin: 0; }
+      .cards a { display: block; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); text-decoration: none; color: var(--text); }
+      .cards a:hover { border-color: var(--accent-ink); }
+      .cards strong { display: block; font-size: 16.5px; margin-bottom: 3px; }
+      .cards span { font-size: 14px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <nav class="crumb wrap"><a href="/">local-tools</a> · <a href="/guide/">가이드</a></nav>
+    <article class="wrap">
+      <h1>폰과 PC 사이에서 파일 옮기기</h1>
+      <p class="lede">아이폰으로 찍은 사진을 윈도우 노트북에 넣거나, 안드로이드로 찍은 영상을 맥으로 빼내는 일은 의외로 매번 방법이 달라집니다. 같은 회사 기기끼리는 버튼 하나면 끝나는데, 조합이 엇갈리면 케이블을 찾거나 메신저로 우회하게 됩니다.</p>
+      <p>이 글은 쓸 수 있는 방법을 전부 늘어놓고, 어떤 상황에서 어느 쪽이 맞는지 정리합니다. 케이블·클라우드·메신저·전송 서비스, 그리고 두 브라우저를 직접 잇는 방식까지 다룹니다. 메뉴 이름과 조작 순서는 운영체제·기기·브라우저 버전마다 다르므로 여기서는 흐름만 적습니다. 세부 문구는 화면에 뜨는 대로 따라가시면 됩니다.</p>
+      <h2>먼저 조합과 크기를 정하면 답이 좁아집니다</h2>
+      <p>방법을 고르기 전에 두 가지만 확인하면 선택지가 줄어듭니다. 두 기기가 같은 생태계인가, 그리고 옮길 것이 사진 몇 장인가 몇 기가바이트짜리 영상인가입니다.</p>
+      <ul>
+        <li><strong>아이폰 → 맥, 아이패드</strong>: 에어드롭이 가장 빠릅니다. 다른 방법을 찾을 이유가 거의 없습니다.</li>
+        <li><strong>안드로이드 → 윈도우</strong>: 케이블이 잘 통하고, 무선으로도 방법이 여러 개입니다.</li>
+        <li><strong>아이폰 → 윈도우, 안드로이드 → 맥</strong>: 여기가 실제로 막히는 조합입니다. 이 글의 대부분은 이 경우를 위한 것입니다.</li>
+        <li><strong>남의 컴퓨터, 회사 PC</strong>: 프로그램 설치나 계정 로그인이 부담스러운 상황입니다. 브라우저만으로 끝나는 방법이 유리합니다.</li>
+      </ul>
+      <h2>케이블 — 확실하지만 조합에 따라 번거롭습니다</h2>
+      <p>USB 케이블은 인터넷이 아예 없어도 되고, 전송 서비스처럼 서비스 쪽 용량 한도에 걸리지도 않습니다. 대용량 영상을 통째로 옮길 때는 여전히 가장 빠른 축입니다. 다만 파일 하나의 크기는 저장 매체의 형식에 따라 제한될 수 있습니다. 예를 들어 FAT32로 포맷된 USB 메모리에는 4GB가 넘는 파일이 들어가지 않습니다.</p>
+      <p>아이폰을 윈도우에 꽂는 경우가 유독 번거롭습니다. 연결하면 폰에 이 컴퓨터를 신뢰할지 묻는 알림이 뜨고, 거기서 허용해야 사진 폴더가 보입니다. 알림 문구와 순서는 iOS 버전에 따라 다릅니다. 사진은 DCIM 아래 여러 폴더로 흩어져 있어 원하는 것만 골라내기 어렵고, HEIC 형식이면 윈도우에서 바로 안 열릴 수도 있습니다.</p>
+      <p>안드로이드를 맥에 붙이는 경우도 예전만큼 매끄럽지 않습니다. 운영체제 버전과 제조사 전용 프로그램에 따라 상황이 자주 바뀌므로, 케이블부터 꽂아 보고 인식이 안 되면 다른 방법으로 넘어가는 편이 시간을 아낍니다.</p>
+      <h2>같은 생태계라면 무선 기능이 이미 있습니다</h2>
+      <ul>
+        <li><strong>에어드롭</strong>: 애플 기기끼리만 됩니다. 아이폰에서 맥으로 원본 화질 그대로 넘어갑니다. 인터넷 연결은 필요 없지만 양쪽 와이파이와 블루투스가 켜져 있어야 하고, 수신 설정이 연락처만으로 되어 있으면 상대 목록에 안 보일 수 있습니다. 윈도우 PC로는 보낼 수 없습니다.</li>
+        <li><strong>퀵 셰어(근처 공유)</strong>: 안드로이드 기기끼리 쓰는 기능이고, 윈도우용 프로그램도 나와 있습니다. 지원 기기와 운영체제 범위는 시기에 따라 달라져 왔으니 쓰기 전에 확인해 보십시오.</li>
+        <li><strong>윈도우 휴대폰 연결</strong>: 윈도우에 기본으로 들어 있는 경우가 많고, 없으면 스토어에서 받을 수 있습니다. 안드로이드와 짝을 지으면 최근 사진을 PC에서 바로 끌어올 수 있습니다. 아이폰도 연결은 되지만 어디까지 되는지는 버전마다 다르므로 직접 확인해 보십시오.</li>
+      </ul>
+      <p class="note">이 방법들은 한 번 설정해 두면 가장 편합니다. 자기 기기 두 대를 자주 오간다면 먼저 설정해 두는 쪽을 권합니다.</p>
+      <h2>카카오톡 나에게 보내기 — 급할 때 좋지만 원본은 아닙니다</h2>
+      <p>가장 많이 쓰이는 방법입니다. 폰에서 나에게 보내고 PC 카카오톡에서 저장하면 끝입니다. 기기 조합을 전혀 가리지 않는다는 점이 강력합니다. 대신 PC에 카카오톡을 설치하고 같은 계정으로 로그인해 두어야 하므로, 설치가 막힌 회사 PC에서는 쓰기 어렵습니다.</p>
+      <p>사진은 화질 옵션에 따라 압축될 수 있고, 파일 한 개의 용량 상한과 보관 기간도 있습니다. 값과 정책은 바뀌므로 앱 안내를 확인해 보십시오. 결론적으로 <strong>확인용으로는 충분하고, 인화하거나 편집할 원본을 옮기는 데는 맞지 않습니다</strong>. 사진을 보낼 때 원본 화질 옵션이 있으면 그것부터 켜십시오.</p>
+      <h2>클라우드 — 여러 기기에 계속 두고 볼 때</h2>
+      <p>구글 포토, 아이클라우드, 구글 드라이브, 원드라이브 같은 클라우드는 한 번 올려 두면 어느 기기에서든 열립니다. 폰이 고장 나도 사진이 남는다는 점이 가장 큰 값어치입니다.</p>
+      <p>단점은 세 가지입니다. 양쪽 모두 같은 계정으로 로그인해야 하고, 무료 저장 용량에 한도가 있으며, 올렸다가 다시 받는 왕복이라 시간이 두 배로 듭니다. 무료 용량과 화질 정책은 서비스마다 다르고 바뀌기도 하니 쓰기 전에 각 서비스에서 확인해 보십시오. <strong>한 번 옮기고 말 파일</strong>이라면 클라우드는 과한 선택입니다.</p>
+      <h2>전송 서비스와, 브라우저끼리 직접 잇는 방법</h2>
+      <p>센드애니웨어처럼 숫자 코드를 주고받아 전송하는 서비스도 오래 쓰여 왔습니다. 계정 없이 기기 조합을 가리지 않는다는 점이 편합니다. 다만 서비스에 따라 파일이 중계 서버를 거칠 수 있으므로, 회사 자료나 신분증 사진처럼 남의 서버에 잠시라도 올리기 꺼려지는 파일이라면 해당 서비스의 안내를 확인해 보십시오.</p>
+      <p>파일이 서버를 거치지 않는 쪽을 원한다면 <a href="/drop/">드롭</a>이 그 자리를 맡습니다. 양쪽 브라우저에서 같은 주소를 엽니다. 한쪽이 연결 만들기로 <strong>6자리 코드를 만들어 보여주고, 다른 쪽이 그 여섯 자리를 입력하면</strong> 연결됩니다. 코드는 5분간 유효합니다. QR이나 링크로 잇는 길도 있는데 이쪽은 왕복이 한 번 더 있습니다. 상대가 QR을 찍으면 응답 QR과 코드가 만들어지고, 그것을 처음 쪽이 다시 스캔하거나 붙여넣어야 연결이 맺어집니다.</p>
+      <p>네트워크를 타는 범위는 어느 길로 잇느냐에 따라 다릅니다. <strong>6자리 코드로 만날 때만</strong> 공개 릴레이가 두 기기의 만남을 주선하고, QR·링크로 이을 때는 릴레이를 쓰지 않습니다. 두 기기가 서로 다른 망에 있으면 자기 주소를 알아내려고 구글 STUN 서버 한 곳에 IP만 전달합니다. 같은 와이파이에서 QR로 이으면 그마저도 필요 없습니다. 어느 경우든 파일 자체는 두 기기 사이로만 흐르고, 6자리 코드는 SPAKE2 방식으로 검증해 코드만 주워듣고 끼어들 수 없게 했습니다.</p>
+      <ul>
+        <li><strong>맞는 경우</strong>: 아이폰과 윈도우처럼 조합이 엇갈릴 때, 회사 PC라 설치와 로그인이 부담일 때, 파일을 남의 서버에 두고 싶지 않을 때.</li>
+        <li><strong>맞지 않는 경우</strong>: 상대가 지금 접속해 있지 않을 때. 두 창이 동시에 열려 있는 동안 흐르는 방식이라, 보내 두고 나중에 받게 하는 용도가 아닙니다.</li>
+        <li><strong>아주 큰 파일</strong>: 받는 쪽이 조각을 메모리에 모았다가 마지막에 한 파일로 저장하는 구조라, 몇 기가바이트짜리 영상은 무겁거나 실패할 수 있습니다. 그런 파일은 케이블이 낫습니다.</li>
+        <li><strong>전제</strong>: 크롬·엣지 같은 크로미엄 계열 브라우저를 기준으로 만들었습니다. 다른 브라우저는 검증하지 않았습니다.</li>
+      </ul>
+      <h2>사진을 넘기기 전에, 위치 정보를 지울지 정하세요</h2>
+      <p>폰으로 찍은 사진에는 촬영 시각, 기기 모델, 그리고 대개 <strong>촬영 위치 좌표</strong>가 함께 저장됩니다. 이것을 EXIF라고 합니다. 케이블·에어드롭·드롭처럼 원본을 그대로 옮기는 방법일수록 이 정보가 고스란히 따라갑니다.</p>
+      <p>내 PC로 옮겨 보관만 한다면 오히려 남겨 두는 편이 낫습니다. 촬영일 기준으로 정리하기 좋기 때문입니다. 반대로 옮긴 사진을 <strong>중고 거래 글, 블로그, 커뮤니티에 올릴 예정</strong>이라면 집 좌표가 딸려 나갈 수 있으니 먼저 지우는 편이 안전합니다.</p>
+      <p><a href="/image/">이미지 도구</a>에 사진을 올리면 촬영일·기기·GPS 좌표를 확인하고 EXIF를 지운 채 저장할 수 있습니다. 크기를 줄이거나 형식을 바꾸는 일도 같은 자리에서 되므로, 아이폰의 HEIC 사진을 JPG로 바꿔 두면 윈도우에서 열리지 않는 문제도 함께 해결됩니다. 처리는 브라우저 안에서 일어나고 사진 자체는 어디로도 올라가지 않습니다. 다만 HEIC·AVIF는 디코딩 엔진을 최초 한 번 내려받아야 하므로 그때만 인터넷이 필요합니다.</p>
+      <h2>자주 묻는 것</h2>
+      <dl>
+        <dt>아이폰 사진을 윈도우로 원본 화질 그대로 옮기려면 어떻게 하나요</dt>
+        <dd>케이블로 연결해 DCIM 폴더에서 직접 복사하는 방법이 가장 확실합니다. 케이블이 없거나 인식이 안 되면 <a href="/drop/">드롭</a>처럼 원본을 그대로 실어 보내는 방법을 쓰십시오. 메신저로 보내면 화질 옵션에 따라 압축될 수 있습니다.</dd>
+        <dt>몇 기가바이트짜리 영상은 어떤 방법이 낫나요</dt>
+        <dd>케이블이 있으면 케이블이 가장 빠릅니다. 드롭은 받는 쪽이 조각을 메모리에 모았다가 저장하므로 아주 큰 영상에는 불리합니다. 무선으로 보내야 한다면 같은 와이파이에 두 기기를 올려 두는 편이 속도에 유리합니다. 옮긴 뒤 용량이 부담이면 <a href="/video/">동영상 도구</a>에서 필요한 구간만 잘라 두는 방법도 있습니다.</dd>
+        <dt>드롭은 인터넷 없이도 되나요</dt>
+        <dd>페이지를 여는 데는 인터넷이 필요합니다. 그다음은 어느 길로 잇느냐에 따라 다릅니다. 6자리 코드로 만나면 공개 릴레이를 거치고, 두 기기가 서로 다른 망에 있으면 주소 확인용 구글 STUN 서버에 IP가 전달됩니다. 같은 네트워크에서 QR이나 링크로 이으면 그런 외부 접속 없이 붙습니다. 어느 경우든 파일은 기기 사이로 직접 흐르고 서버에 저장되지 않습니다. 무엇이 네트워크를 타는지는 <a href="/stack/">기술 지도</a>에서 확인할 수 있습니다.</dd>
+        <dt>회사 PC라 프로그램을 설치할 수 없습니다</dt>
+        <dd>브라우저만으로 끝나는 방법을 고르십시오. <a href="/drop/">드롭</a>은 주소를 열고 코드를 주고받으면 되고 설치나 로그인이 없습니다. 웹 브라우저에서 쓰는 클라우드나 메신저도 설치는 필요 없지만, 그쪽은 파일이 서버를 거칩니다.</dd>
+        <dt>사진에 위치 정보가 들어 있는지 어떻게 확인하나요</dt>
+        <dd>PC에서 사진 파일 속성을 열면 위치 항목이 보이는 경우가 많습니다. 확인과 삭제를 한 번에 하려면 <a href="/image/">이미지 도구</a>에 올려 촬영일·기기·좌표를 본 뒤 EXIF를 지우고 저장하면 됩니다.</dd>
+      </dl>
+      <footer>
+        <p>옮긴 파일을 이어서 다뤄야 한다면 같은 자리에서 처리할 수 있습니다. 사진의 형식 변환·용량 줄이기·EXIF 삭제는 <a href="/image/">이미지 도구</a>, 영상 자르기와 압축은 <a href="/video/">동영상 도구</a>, 문서를 합치거나 암호를 걸 때는 <a href="/pdf/">PDF 도구</a>를 쓰면 됩니다. 폰으로 받은 hwp·hwpx·docx 파일을 PC에서 열어 볼 때는 <a href="/doc/">문서 도구</a>, 엑셀·CSV는 <a href="/sheet/">시트 도구</a>가 있습니다. 전송 자체는 <a href="/drop/">드롭</a>이 담당합니다. 이 도구들은 파일을 브라우저 안에서 처리하지만 일부는 엔진을 최초 한 번 내려받습니다. PDF 암호, 이미지의 HEIC·AVIF, 문서 도구의 한글 렌더러가 그렇고, 무엇이 네트워크를 타는지는 <a href="/stack/">기술 지도</a>에 정리해 두었습니다.</p>
+        <p><a href="/">local-tools의 도구 전체 보기</a> · 모든 처리는 브라우저 안에서 끝나고 파일은 서버로 전송되지 않습니다.</p>
+      </footer>
+    </article>
+  </body>
+</html>

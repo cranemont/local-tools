@@ -16,7 +16,7 @@
 | | 무엇을 |
 |---|---|
 | [PDF](https://tools.cranemont.com/pdf/) | 합치기 · 필요한 쪽만 뽑아 나누기 · 순서·회전 · 이미지→PDF · PDF→PNG · 암호 걸기와 풀기 |
-| [문서](https://tools.cranemont.com/doc/) | 한글 프로그램 없이 .hwp·.hwpx 열기 · 본문 편집 후 원래 형식으로 저장 · 마크다운 변환 · 워드(.docx) |
+| [문서](https://tools.cranemont.com/doc/) | 한글 프로그램 없이 .hwp·.hwpx 열고 편집해 원래 형식으로 저장 · 마크다운 변환 · 워드(.docx)는 보기와 변환까지 |
 | [시트](https://tools.cranemont.com/sheet/) | 엑셀(.xlsx)·CSV 열어 편집 · 수식 300여 개 · 서식 유지 · cp949 한글 깨짐 자동 인식 |
 | [이미지](https://tools.cranemont.com/image/) | JPG·PNG·WebP·AVIF 변환 · 용량 줄이기 · 크기 조절·자르기 · HEIC 입력 · EXIF 제거 |
 | [동영상](https://tools.cranemont.com/video/) | 구간 자르기 · 용량 줄이기(타깃 MB) · 무손실 컷 · MP4·WebM · 소리 추출 |

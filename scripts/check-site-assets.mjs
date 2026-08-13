@@ -21,6 +21,9 @@ const BASE = "https://tools.cranemont.com";
 /** 배포되는 도구 페이지. .github/workflows/deploy.yml의 조립 목록과 같아야 한다. */
 const APPS = ["pdf", "gif", "video", "image", "sheet", "doc", "drop", "dev", "lab", "stack"];
 
+/** 손으로 쓴 정적 가이드. site/guide/<slug>/index.html — 빌드를 안 탄다. */
+const GUIDES = ["hwp-mac", "hwp-to-pdf", "hwp-to-markdown", "phone-to-pc", "no-upload"];
+
 /** 크롤 가능한 본문의 최소 어절 수. 국내 경쟁 도구 사이트가 650~790단어다. */
 const MIN_WORDS = 200;
 
@@ -39,7 +42,10 @@ for (const name of [...ogRefs].sort()) {
 }
 
 // ── ② 배포 목록 · sitemap · hasPart 세 목록이 같은가 ──────
-const expected = new Set([`${BASE}/`, ...APPS.map((a) => `${BASE}/${a}/`)]);
+const appUrls = new Set([`${BASE}/`, ...APPS.map((a) => `${BASE}/${a}/`)]);
+const guideUrls = new Set([`${BASE}/guide/`, ...GUIDES.map((g) => `${BASE}/guide/${g}/`)]);
+// sitemap은 도구와 가이드를 다 담고, hasPart는 도구만 담는다(가이드는 앱이 아니다).
+const allUrls = new Set([...appUrls, ...guideUrls]);
 
 const sitemap = readFileSync(join(root, "site/sitemap.xml"), "utf8");
 const inSitemap = new Set([...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]));
@@ -51,12 +57,18 @@ const ld = JSON.parse(
 const website = ld["@graph"].find((n) => n["@type"] === "WebSite");
 const inHasPart = new Set([`${BASE}/`, ...website.hasPart.map((p) => p.url)]);
 
-const diff = (label, got) => {
-  for (const url of expected) if (!got.has(url)) fail.push(`${label}에 빠짐: ${url}`);
-  for (const url of got) if (!expected.has(url)) fail.push(`${label}에 군더더기: ${url}`);
+const diff = (label, want, got) => {
+  for (const url of want) if (!got.has(url)) fail.push(`${label}에 빠짐: ${url}`);
+  for (const url of got) if (!want.has(url)) fail.push(`${label}에 군더더기: ${url}`);
 };
-diff("sitemap.xml", inSitemap);
-diff("랜딩 JSON-LD hasPart", inHasPart);
+diff("sitemap.xml", allUrls, inSitemap);
+diff("랜딩 JSON-LD hasPart", appUrls, inHasPart);
+
+// 가이드는 손으로 쓴 파일이라 실재 여부를 따로 본다.
+for (const g of ["", ...GUIDES]) {
+  const rel = `site/guide/${g ? g + "/" : ""}index.html`;
+  if (!existsSync(join(root, rel))) fail.push(`가이드 없음: ${rel} — sitemap에는 적혀 있어요`);
+}
 
 // ── ③④⑤ 앱 페이지의 정적 본문 ────────────────────────────
 const wordCounts = [];
@@ -105,6 +117,6 @@ if (fail.length > 0) {
 const min = Math.min(...wordCounts);
 const max = Math.max(...wordCounts);
 console.log(
-  `[site] og 이미지 ${ogRefs.size}장 실재 · 페이지 ${expected.size}개가 sitemap·hasPart와 일치 · ` +
-    `앱 ${APPS.length}개 정적 본문 ${min}~${max}어절 · h1 각 1개`,
+  `[site] og 이미지 ${ogRefs.size}장 실재 · 페이지 ${allUrls.size}개(도구 ${appUrls.size} + 가이드 ${guideUrls.size})가 ` +
+    `sitemap과 일치 · 앱 정적 본문 ${min}~${max}어절 · h1 각 1개`,
 );

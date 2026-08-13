@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>맥·PC에서 한글 프로그램 없이 hwp 파일 여는 법 정리 | local-tools</title>
+    <meta name="description" content="한컴이 무료로 배포하는 뷰어는 윈도우용입니다. 맥에서 hwp·hwpx를 여는 길을 브라우저 뷰어부터 한컴오피스·클라우드 오피스·변환 사이트까지 장단점과 함께 정리했습니다." />
+    <link rel="canonical" href="https://tools.cranemont.com/guide/hwp-mac/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(0.978 0.003 240)" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="oklch(0.172 0.008 250)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="local-tools" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="맥·PC에서 한글 프로그램 없이 hwp 파일 여는 법 정리" />
+    <meta property="og:description" content="한컴이 무료로 배포하는 뷰어는 윈도우용입니다. 맥에서 hwp·hwpx를 여는 길을 브라우저 뷰어부터 한컴오피스·클라우드 오피스·변환 사이트까지 장단점과 함께 정리했습니다." />
+    <meta property="og:url" content="https://tools.cranemont.com/guide/hwp-mac/" />
+    <meta property="og:image" content="https://tools.cranemont.com/og/home.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://tools.cranemont.com/guide/hwp-mac/#page",
+            "name": "맥·PC에서 한글 프로그램 없이 hwp 파일 여는 법 정리",
+            "url": "https://tools.cranemont.com/guide/hwp-mac/",
+            "description": "한컴이 무료로 배포하는 뷰어는 윈도우용입니다. 맥에서 hwp·hwpx를 여는 길을 브라우저 뷰어부터 한컴오피스·클라우드 오피스·변환 사이트까지 장단점과 함께 정리했습니다.",
+            "inLanguage": "ko",
+            "isPartOf": {
+              "@id": "https://tools.cranemont.com/#website"
+            },
+            "author": {
+              "@id": "https://tools.cranemont.com/#person"
+            }
+          },
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "local-tools",
+                "item": "https://tools.cranemont.com/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "가이드",
+                "item": "https://tools.cranemont.com/guide/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 3,
+                "name": "한글 프로그램 없이 hwp 파일 여는 법 (맥·윈도우)"
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <script>
+      // 도구들과 같은 키의 테마 설정을 따른다 (없으면 시스템).
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "light" || savedTheme === "dark")
+        document.documentElement.dataset.theme = savedTheme;
+    </script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --accent-ink: light-dark(oklch(0.474 0.138 243), oklch(0.78 0.11 240));
+        --bg: light-dark(oklch(0.978 0.003 240), oklch(0.172 0.008 250));
+        --surface: light-dark(oklch(1 0 0), oklch(0.212 0.01 250));
+        --text: light-dark(oklch(0.235 0.015 250), oklch(0.93 0.006 240));
+        --muted: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
+        --border: light-dark(oklch(0.917 0.008 240), oklch(0.31 0.014 248));
+      }
+      :root[data-theme="light"] { color-scheme: light; }
+      :root[data-theme="dark"] { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+          "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+        font-size: 16px;
+        line-height: 1.78;
+        word-break: keep-all;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+      .crumb { padding: 28px 0 0; font-size: 13px; color: var(--muted); }
+      .crumb a { color: var(--muted); }
+      article { padding: 24px 0 72px; }
+      h1 { margin: 0 0 18px; font-size: 30px; line-height: 1.32; letter-spacing: -0.025em; text-wrap: balance; }
+      h2 { margin: 42px 0 12px; font-size: 19px; letter-spacing: -0.015em; text-wrap: balance; }
+      p { margin: 0 0 14px; }
+      .lede { color: var(--muted); font-size: 17px; }
+      ul, ol { margin: 0 0 14px; padding-left: 22px; }
+      li { margin: 0 0 7px; }
+      li::marker { color: var(--muted); }
+      a { color: var(--accent-ink); text-underline-offset: 2px; }
+      a:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; border-radius: 3px; }
+      code {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.86em;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 1px 5px;
+      }
+      .note {
+        margin: 0 0 14px;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent-ink);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 15px;
+      }
+      dl { margin: 0; }
+      dt { margin-top: 20px; font-weight: 700; }
+      dd { margin: 4px 0 0; color: var(--muted); }
+      footer {
+        margin-top: 48px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+      .cards li { margin: 0; }
+      .cards a { display: block; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); text-decoration: none; color: var(--text); }
+      .cards a:hover { border-color: var(--accent-ink); }
+      .cards strong { display: block; font-size: 16.5px; margin-bottom: 3px; }
+      .cards span { font-size: 14px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <nav class="crumb wrap"><a href="/">local-tools</a> · <a href="/guide/">가이드</a></nav>
+    <article class="wrap">
+      <h1>한글 프로그램 없이 hwp 파일 여는 법 (맥·윈도우)</h1>
+      <p class="lede">공고문, 과제 양식, 이력서 서식은 아직도 hwp로 옵니다. 그런데 한글 프로그램은 기본적으로 유료이고, 한컴이 무료로 배포하는 뷰어는 윈도우용입니다. 이 글은 hwp를 여는 방법을 설치형·웹·변환 사이트까지 한 번에 훑고, 각각 어떤 상황에 맞는지 정리합니다.</p>
+      <p>먼저 결론만 적으면 이렇습니다. 윈도우 PC가 손에 있으면 한컴오피스 뷰어가 원본에 가장 가깝고, 맥뿐이라면 유료 구매·클라우드 서비스·브라우저 뷰어 중에서 고르게 됩니다. 파일 내용이 민감한지 아닌지가 선택을 가릅니다.</p>
+      <h2>1. 확장자부터 확인합니다</h2>
+      <p>hwp라고 다 같은 파일이 아닙니다. 받은 파일의 확장자를 먼저 보십시오. 여기서 여는 방법이 갈립니다.</p>
+      <ul>
+        <li><strong>.hwp</strong> — 지금 쓰이는 한글의 바이너리 형식입니다. 공문서·공고문 대부분이 여기 해당합니다.</li>
+        <li><strong>.hwpx</strong> — 나중에 추가된 개방형 형식으로, 속은 XML을 압축한 묶음입니다. 표준 문서 규격을 따르기 때문에 한컴이 아닌 프로그램에서도 상대적으로 잘 열립니다.</li>
+        <li><strong>아주 오래된 .hwp</strong> — 한글 3.0 이하에서 만든 파일은 형식 자체가 다릅니다. 요즘 뷰어나 변환 도구가 지원하지 않는 경우가 많습니다. 보낸 사람에게 최신 형식으로 다시 저장해 달라고 하는 편이 빠릅니다.</li>
+      </ul>
+      <p class="note">확장자가 <code>.doc</code>이면 hwp가 아니라 옛 워드 파일입니다. hwp용 방법으로는 열리지 않으니 워드 계열 도구를 찾아야 합니다.</p>
+      <h2>2. 윈도우 PC가 있다면 — 한컴오피스 뷰어</h2>
+      <p>한컴이 무료로 배포해 온 읽기 전용 프로그램입니다. 편집은 못 하지만 원본 그대로 보이고 인쇄도 됩니다. 표·글맵시·수식이 많은 서식도 원본과 가깝게 나옵니다. 다만 배포 정책은 바뀝니다. 현재도 받을 수 있는지, 지원 버전과 OS는 어디까지인지는 한컴 공식 안내에서 확인해 보십시오.</p>
+      <p>문제는 이 뷰어가 현재 윈도우용으로만 안내되고 있다는 점입니다. 맥용 무료 뷰어를 찾는 검색이 끊이지 않는 이유가 이것입니다. 회사나 학교에 윈도우 PC가 하나라도 있다면, 거기서 열어 PDF로 저장해 두는 것이 가장 확실한 해결일 때가 많습니다.</p>
+      <h2>3. 맥에서 쓸 수 있는 선택지</h2>
+      <p>맥에는 한컴이 무료로 주는 뷰어가 없습니다. 그래서 남는 길은 대체로 넷입니다.</p>
+      <ul>
+        <li><strong>한컴오피스 맥 버전</strong> — 유료 제품입니다. 레이아웃 재현이 정확하고 편집까지 됩니다. hwp를 자주 다루고 직접 만들어야 한다면 값어치를 합니다. 가격·구독 조건은 판매처에서 직접 확인하십시오.</li>
+        <li><strong>폴라리스 오피스</strong> — hwp 열람을 지원하며, 가입을 요구하는 것으로 알려져 있습니다. 파일을 서버로 올려 처리하는지는 제품·버전마다 다를 수 있으니, 개인정보가 든 문서라면 쓰기 전에 확인하십시오. 무료로 되는 범위나 용량 조건도 바뀔 수 있는 항목입니다.</li>
+        <li><strong>한컴의 웹 서비스</strong> — 브라우저에서 hwp를 다루는 서비스입니다. 계정이 필요하고 파일을 올려 쓰는 방식으로 안내되니, 현재 조건은 직접 확인해 보십시오. 편집까지 필요하고 공개해도 무방한 문서라면 무난한 선택입니다.</li>
+        <li><strong>구글 드라이브·네이버</strong> — 드라이브는 지원 형식에 hwp가 없어 미리보기가 되지 않는 것으로 보입니다. 보관은 되지만 여는 문제는 그대로 남습니다. 네이버 오피스는 종료됐고, 다른 네이버 서비스의 hwp 지원 여부는 직접 확인하십시오.</li>
+      </ul>
+      <p class="note">카카오톡 “나에게 보내기”는 파일을 옮기는 수단이지 여는 수단이 아닙니다. 안드로이드에서는 뷰어 앱으로 연결되기도 하지만, 맥에서는 결국 열 프로그램이 따로 필요합니다. 메신저는 파일 용량·보관 기간에 제한이 있을 수 있으니 확인해 보십시오. 폰과 PC 사이로 파일만 옮기는 것이 목적이라면 <a href="/drop/">드롭</a>도 방법입니다. 두 기기를 서로 만나게 할 때만 공개 중계 서버(릴레이·STUN)를 거치고, 파일 자체는 두 브라우저 사이로 직접 갑니다.</p>
+      <h2>4. 온라인 변환 사이트 — 편한 대신 파일이 올라갑니다</h2>
+      <p>“hwp pdf 변환”으로 검색하면 나오는 무료 사이트들입니다. 설치가 없고 결과도 나쁘지 않습니다. 급할 때 쓰기 좋습니다.</p>
+      <p>대신 파일이 남의 서버로 올라갑니다. 변환 후 삭제한다고 적혀 있어도 이용자가 확인할 방법은 없습니다. 이력서처럼 주민등록번호·주소·연락처가 든 문서, 계약서, 사내 문서라면 이 방식은 피하는 편이 맞습니다. 반대로 이미 웹에 공개된 공고문이라면 크게 문제 될 것이 없습니다.</p>
+      <h2>5. 올리지 않고 브라우저에서 바로 여는 방법</h2>
+      <p>설치도 계정도 없이 여는 길도 있습니다. <a href="/doc/">문서 도구</a>는 hwp·hwpx·docx를 브라우저 안에서 직접 해석해 화면에 그립니다. <strong>문서 파일 자체는 어디로도 업로드되지 않습니다.</strong> 다만 한글 문서를 그리는 렌더러(wasm, 약 2.1MB)는 최초 한 번 내려받아 SHA-384로 검증한 뒤 실행합니다 — 내려오는 것은 프로그램이고, 올라가는 문서는 없습니다.</p>
+      <ul>
+        <li><strong>한글 문서(.hwp·.hwpx)</strong> — 본문을 고친 뒤 원래 형식 그대로 저장</li>
+        <li><strong>워드 문서(.docx)</strong> — 지금은 보기까지입니다. 편집은 안 되고, 마크다운이나 한글(.hwpx)로 저장하는 길만 있습니다</li>
+        <li>마크다운으로 변환 — 서식은 버리고 내용만 다른 곳에 옮길 때</li>
+        <li>문서 전체에서 단어 찾기</li>
+        <li>인쇄 화면에서 대상(프린터)을 PDF 저장 항목으로 바꿔 hwp를 PDF로 남기기</li>
+        <li>암호가 걸린 hwp도 암호를 알고 있으면 열립니다. 입력한 암호는 브라우저 밖으로 나가지 않습니다</li>
+      </ul>
+      <p class="note">렌더러를 한 번 받은 뒤 설치(PWA)해 두면 인터넷 없이도 hwp가 열립니다. 크롬·엣지 같은 크로미엄 계열 최신 브라우저 전용이고, 화면이 한글 프로그램과 픽셀 단위로 같지는 않습니다. 제출용 최종 인쇄본은 가능하면 한글이나 공식 뷰어로 한 번 더 확인하십시오.</p>
+      <h2>6. 그래도 안 열릴 때 · 상황별 정리</h2>
+      <ul>
+        <li><strong>한글 3.0 이하 옛 파일</strong> — 형식이 달라 지원하는 도구를 찾기 어렵습니다. 최신 형식으로 다시 받는 편이 빠릅니다.</li>
+        <li><strong>파일이 손상됐거나 다운로드가 끊긴 경우</strong> — 용량이 유난히 작으면 받다 만 파일입니다. 다시 내려받아 보십시오.</li>
+        <li><strong>암호를 모르는 문서</strong> — 정상적인 방법으로는 열 수 없습니다. 보낸 사람에게 물어야 합니다.</li>
+        <li><strong>수식·글맵시·매크로가 많은 서식</strong> — 뷰어마다 배치가 어긋날 수 있습니다. 양식을 채워 제출해야 한다면 한글이 설치된 PC를 빌리는 편이 안전합니다.</li>
+      </ul>
+      <ol>
+        <li>윈도우가 있다 → 한컴오피스 뷰어로 열고, 필요하면 인쇄 화면에서 PDF로 저장해 둡니다.</li>
+        <li>맥이고 내용이 민감하다 → <a href="/doc/">문서 도구</a>처럼 문서를 업로드하지 않는 방법을 씁니다.</li>
+        <li>맥이고 공개 문서다 → 변환 사이트나 클라우드 오피스가 가장 손이 덜 갑니다.</li>
+        <li>hwp를 자주 만들고 편집한다 → 결국 한글 정품이 답입니다.</li>
+      </ol>
+      <h2>자주 묻는 것</h2>
+      <dl>
+        <dt>맥용 무료 한글 뷰어는 정말 없나요?</dt>
+        <dd>한컴이 무료로 배포하는 뷰어는 윈도우용으로 안내되고 있습니다. 맥에서는 유료 한컴오피스를 사거나, 클라우드 오피스에 올려 보거나, <a href="/doc/">브라우저에서 여는 도구</a>를 쓰는 쪽으로 갈립니다. 배포 상황은 바뀔 수 있으니 한컴 공식 안내도 함께 확인해 보십시오.</dd>
+        <dt>.hwp와 .hwpx는 뭐가 다른가요?</dt>
+        <dd>.hwp는 한글의 바이너리 형식이고, .hwpx는 XML을 압축한 개방형 형식입니다. .hwpx가 표준 규격을 따르기 때문에 한컴이 아닌 프로그램에서 더 잘 열리는 편입니다. 보낸 사람이 고를 수 있다면 .hwpx로 받는 것이 유리합니다.</dd>
+        <dt>이력서 hwp를 변환 사이트에 올려도 되나요?</dt>
+        <dd>권하지 않습니다. 이력서에는 주민등록번호·주소·연락처가 들어가는 경우가 많은데, 업로드 후 실제로 삭제되는지 확인할 방법이 없습니다. 문서 파일이 기기 밖으로 나가지 않는 방식을 쓰는 편이 낫습니다.</dd>
+        <dt>브라우저에서 여는 도구는 정말 파일을 올리지 않나요?</dt>
+        <dd>문서·사진·PDF 같은 파일 자체는 올라가지 않습니다. 다만 몇 곳은 처리에 필요한 프로그램을 최초 1회 내려받습니다 — <a href="/doc/">문서 도구</a>의 한글 렌더러, <a href="/pdf/">PDF 도구</a>의 암호 기능(qpdf), <a href="/image/">이미지 도구</a>의 HEIC·AVIF 처리가 그렇고, 받은 바이트는 SHA-384로 검증한 뒤 실행합니다. <a href="/drop/">드롭</a>은 두 기기를 만나게 할 때만 공개 릴레이·STUN을 쓰고, <a href="/lab/">실험장</a>은 모델을 실행 시점에 내려받습니다. 어느 도구가 무엇을 받는지는 <a href="/stack/">기술 지도</a>에 정리돼 있습니다.</dd>
+        <dt>hwp를 PDF로 바꾸려면 어떻게 하나요?</dt>
+        <dd>뷰어나 브라우저에서 문서를 연 뒤 인쇄 화면에서 대상(프린터)을 PDF 저장 항목으로 바꾸면 됩니다. 항목 이름은 브라우저·OS마다 조금씩 다릅니다. 별도 변환 프로그램은 필요 없습니다. 만들어진 PDF를 합치거나 나누는 일은 <a href="/pdf/">PDF 도구</a>에서 이어서 할 수 있습니다.</dd>
+        <dt>구글 드라이브에 올리면 hwp가 열리나요?</dt>
+        <dd>지원 형식에 hwp가 없어 미리보기가 되지 않는 것으로 보입니다. 보관 용도로는 쓸 수 있지만 여는 문제는 그대로 남습니다.</dd>
+      </dl>
+      <footer>
+        <p>hwp를 PDF로 남긴 뒤 여러 장을 합치거나 필요한 쪽만 빼내야 한다면 <a href="/pdf/">PDF 도구</a>를, 문서에 넣을 사진의 용량을 줄이거나 형식을 바꿔야 한다면 <a href="/image/">이미지 도구</a>를 이어서 쓰면 됩니다. 파일을 폰과 PC 사이로 옮기는 일만 남았다면 <a href="/drop/">드롭</a>으로 메신저를 거치지 않고 옮길 수 있습니다. 여기 있는 도구들이 각각 무엇을 네트워크로 보내고 무엇을 기기 안에서만 처리하는지는 <a href="/stack/">기술 지도</a>에서 직접 확인할 수 있습니다.</p>
+        <p><a href="/">local-tools의 도구 전체 보기</a> · 모든 처리는 브라우저 안에서 끝나고 파일은 서버로 전송되지 않습니다.</p>
+      </footer>
+    </article>
+  </body>
+</html>

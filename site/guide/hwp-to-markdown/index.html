@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>hwp 마크다운 변환 방법 — 워드 문서도 AI에 넣기 좋게 | local-tools</title>
+    <meta name="description" content="hwp·docx를 브라우저에서 마크다운으로 바꾸는 방법. 복사-붙여넣기로 표가 깨지는 이유, pandoc의 입력 형식 제약, 병합 셀·그림이 어떻게 처리되는지 정리했습니다." />
+    <link rel="canonical" href="https://tools.cranemont.com/guide/hwp-to-markdown/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(0.978 0.003 240)" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="oklch(0.172 0.008 250)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="local-tools" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="hwp 마크다운 변환 방법 — 워드 문서도 AI에 넣기 좋게" />
+    <meta property="og:description" content="hwp·docx를 브라우저에서 마크다운으로 바꾸는 방법. 복사-붙여넣기로 표가 깨지는 이유, pandoc의 입력 형식 제약, 병합 셀·그림이 어떻게 처리되는지 정리했습니다." />
+    <meta property="og:url" content="https://tools.cranemont.com/guide/hwp-to-markdown/" />
+    <meta property="og:image" content="https://tools.cranemont.com/og/home.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://tools.cranemont.com/guide/hwp-to-markdown/#page",
+            "name": "hwp 마크다운 변환 방법 — 워드 문서도 AI에 넣기 좋게",
+            "url": "https://tools.cranemont.com/guide/hwp-to-markdown/",
+            "description": "hwp·docx를 브라우저에서 마크다운으로 바꾸는 방법. 복사-붙여넣기로 표가 깨지는 이유, pandoc의 입력 형식 제약, 병합 셀·그림이 어떻게 처리되는지 정리했습니다.",
+            "inLanguage": "ko",
+            "isPartOf": {
+              "@id": "https://tools.cranemont.com/#website"
+            },
+            "author": {
+              "@id": "https://tools.cranemont.com/#person"
+            }
+          },
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "local-tools",
+                "item": "https://tools.cranemont.com/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "가이드",
+                "item": "https://tools.cranemont.com/guide/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 3,
+                "name": "hwp·워드 문서를 마크다운으로 바꾸기"
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <script>
+      // 도구들과 같은 키의 테마 설정을 따른다 (없으면 시스템).
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "light" || savedTheme === "dark")
+        document.documentElement.dataset.theme = savedTheme;
+    </script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --accent-ink: light-dark(oklch(0.474 0.138 243), oklch(0.78 0.11 240));
+        --bg: light-dark(oklch(0.978 0.003 240), oklch(0.172 0.008 250));
+        --surface: light-dark(oklch(1 0 0), oklch(0.212 0.01 250));
+        --text: light-dark(oklch(0.235 0.015 250), oklch(0.93 0.006 240));
+        --muted: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
+        --border: light-dark(oklch(0.917 0.008 240), oklch(0.31 0.014 248));
+      }
+      :root[data-theme="light"] { color-scheme: light; }
+      :root[data-theme="dark"] { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+          "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+        font-size: 16px;
+        line-height: 1.78;
+        word-break: keep-all;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+      .crumb { padding: 28px 0 0; font-size: 13px; color: var(--muted); }
+      .crumb a { color: var(--muted); }
+      article { padding: 24px 0 72px; }
+      h1 { margin: 0 0 18px; font-size: 30px; line-height: 1.32; letter-spacing: -0.025em; text-wrap: balance; }
+      h2 { margin: 42px 0 12px; font-size: 19px; letter-spacing: -0.015em; text-wrap: balance; }
+      p { margin: 0 0 14px; }
+      .lede { color: var(--muted); font-size: 17px; }
+      ul, ol { margin: 0 0 14px; padding-left: 22px; }
+      li { margin: 0 0 7px; }
+      li::marker { color: var(--muted); }
+      a { color: var(--accent-ink); text-underline-offset: 2px; }
+      a:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; border-radius: 3px; }
+      code {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.86em;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 1px 5px;
+      }
+      .note {
+        margin: 0 0 14px;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent-ink);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 15px;
+      }
+      dl { margin: 0; }
+      dt { margin-top: 20px; font-weight: 700; }
+      dd { margin: 4px 0 0; color: var(--muted); }
+      footer {
+        margin-top: 48px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+      .cards li { margin: 0; }
+      .cards a { display: block; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); text-decoration: none; color: var(--text); }
+      .cards a:hover { border-color: var(--accent-ink); }
+      .cards strong { display: block; font-size: 16.5px; margin-bottom: 3px; }
+      .cards span { font-size: 14px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <nav class="crumb wrap"><a href="/">local-tools</a> · <a href="/guide/">가이드</a></nav>
+    <article class="wrap">
+      <h1>hwp·워드 문서를 마크다운으로 바꾸기</h1>
+      <p class="lede">한글(.hwp·.hwpx)이나 워드(.docx)를 ChatGPT·Claude에 넣으려다 보면 파일을 읽지 못하거나 표가 뒤엉킨 채 들어가는 일이 생깁니다. 노션·깃허브로 옮길 때도 비슷합니다. 사이에 두면 좋은 형식이 마크다운입니다.</p>
+      <p>설치가 필요한 방법부터 브라우저에서 끝나는 방법까지 정리하고, 어떤 도구를 쓰든 달라지는 부분을 함께 적었습니다.</p>
+      <h2>왜 하필 마크다운인가</h2>
+      <p>마크다운은 제목·목록·표를 몇 개 안 되는 기호로 표시하는 플레인 텍스트입니다. 글꼴·색 같은 겉모양 서식은 담지 않는 대신 <strong>문서 구조</strong>를 살립니다.</p>
+      <ul>
+        <li><strong>LLM 입력</strong>: 제목 계층이 <code>#</code>으로 남아 "3장만 요약해 줘" 같은 지시를 하기 쉬워지고, 무엇이 입력됐는지 눈으로 확인됩니다.</li>
+        <li><strong>버전 관리</strong>: git에서 한 줄 단위로 차이가 보입니다. hwpx·docx는 XML을 압축해 묶은 파일이라 그대로는 줄 단위 비교가 안 됩니다.</li>
+        <li><strong>이식성</strong>: 노션·깃허브·옵시디언·정적 사이트 생성기가 대부분 그대로 받고 메모장으로도 열립니다.</li>
+      </ul>
+      <h2>복사-붙여넣기로 안 되는 이유</h2>
+      <p>가장 먼저 해보는 방법은 전체 선택 후 붙여넣기입니다. 한 장짜리 안내문이면 충분하지만, 결과는 <strong>어디에 붙여넣느냐</strong>에 따라 갈립니다.</p>
+      <ul>
+        <li><strong>표</strong>: 대개 셀 경계가 탭·줄바꿈으로 뭉개져 어느 값이 어느 열이었는지 알기 어려워집니다.</li>
+        <li><strong>제목</strong>: 큰 글씨·굵게는 스타일 정보라 대개 한 줄 텍스트가 되고 <code>##</code>이 붙지 않는 곳이 많습니다.</li>
+        <li><strong>각주·머리말·쪽번호</strong>: 본문 중간에 끼어들거나 빠지곤 합니다.</li>
+        <li><strong>그림·수식·도형</strong>: 넘어오지 않는 경우가 많습니다. 다만 노션·옵시디언처럼 HTML 클립보드를 해석하는 편집기는 표나 그림을 살려 받기도 합니다.</li>
+      </ul>
+      <p class="note">표가 없고 제목 계층도 단순하면 복붙이 제일 빠릅니다.</p>
+      <h2>쓸 수 있는 방법들</h2>
+      <ul>
+        <li><strong>한컴 오피스</strong>: 다른 형식으로 저장하는 메뉴에서 docx로 내보낸 뒤 아래 docx 경로를 타는 방법이 안정적인 편입니다. 메뉴 이름과 지원 형식은 버전마다 다르니 확인해 보십시오.</li>
+        <li><strong>pandoc</strong>: 널리 쓰이는 명령줄 변환 도구로, docx에서 마크다운으로는 표·각주·제목 계층이 대체로 잘 살아남는 편입니다. 다만 현재 입력 형식 목록에 hwp·hwpx는 없으니(바뀔 수 있어 공식 문서를 확인해 보십시오) 한글 문서는 docx로 한 번 바꿔야 합니다.</li>
+        <li><strong>오픈소스 변환기(파이썬·npm)</strong>: hwp·hwpx를 직접 파싱하는 도구가 몇 가지 있습니다. 수백 개를 한 번에 돌려야 한다면 이쪽이 맞고, 표본으로 결과를 먼저 확인해 보십시오.</li>
+        <li><strong>온라인 변환 사이트</strong>: 손은 덜 가지만 파일이 남의 서버로 올라갑니다. 용량 제한·보관 정책·요금은 사이트마다 다르니 확인하고, 대외비 문서라면 피하십시오.</li>
+        <li><strong>AI에 그대로 첨부</strong>: docx·pdf는 읽는 서비스가 많지만 hwp 지원 여부는 서비스마다 다르니 확인해 보십시오. 표가 어떻게 해석됐는지 알기 어려워, 숫자가 중요하면 변환해 넣는 편이 낫습니다.</li>
+      </ul>
+      <h2>브라우저에서 바로 바꾸기</h2>
+      <p>설치도 업로드도 하지 않으려면 <a href="/doc/">문서 도구</a>에서 hwp·hwpx·docx를 열고 마크다운으로 내보낼 수 있습니다. 문서는 브라우저 안에서 처리되고 서버로 올라가지 않습니다. 예외는 한글 문서를 여는 렌더러(wasm)로, 같은 사이트에서 최초 1회 내려받아 SHA-384로 검증한 뒤 실행합니다.</p>
+      <ul>
+        <li><strong>편집과 문서 전체 찾기는 한글 문서(.hwp·.hwpx) 전용</strong>입니다. 워드(.docx)는 열람과 마크다운 변환까지이고, 저장하면 .hwpx로 나갑니다 — 원래 형식으로 되저장하는 기능은 없습니다.</li>
+        <li>찾기는 원본 화면에서 동작하니, 마크다운 화면만 보고 있다면 원본으로 되돌린 뒤 쓰십시오.</li>
+        <li>그림이 든 문서는 md 한 장이 아니라 md와 <code>images/</code> 폴더를 담은 ZIP으로 저장됩니다. 병합된 셀 몇 개가 펴졌는지, 그림 몇 개를 함께 담았는지도 화면에 뜹니다.</li>
+        <li>설치(PWA)해 두고 한글 문서를 한 번 연 뒤에는 렌더러가 캐시에 남아 인터넷 없이도 열립니다. 설치하지 않았다면 캐시 상태나 엔진 버전에 따라 다시 받을 수 있습니다.</li>
+        <li>암호가 걸린 hwp도 암호를 알면 열립니다(암호를 푸는 도구는 아닙니다). 인쇄 대화상자에서 PDF로 저장할 수도 있는데, 그 위치는 OS·브라우저마다 다릅니다.</li>
+      </ul>
+      <p class="note">크로미엄 계열(크롬·엣지) 최신 버전 기준입니다. 무료이고 회원가입·추적·광고가 없습니다.</p>
+      <h2>변환하면 달라지는 것</h2>
+      <p>어떤 도구를 쓰든 마크다운은 hwp·docx보다 표현할 수 있는 것이 적습니다. 특정 도구의 결함이 아니라 변환에서 공통으로 겪는 부분입니다.</p>
+      <ul>
+        <li><strong>병합된 셀</strong>: 마크다운 표 문법에는 셀 병합이 없습니다. 가로로 합친 셀은 펴지며 빈칸이 생기고, 세로로 합친 셀의 값은 첫 행에만 남습니다. 머리글이 겹친 관공서 서식은 변환 뒤 반드시 확인하십시오.</li>
+        <li><strong>그림</strong>: 마크다운은 이미지를 파일 경로로 가리키는 방식이 일반적이라 그림이 본문과 따로 담기는 경우가 많습니다. 도표가 핵심인 문서라면 그림을 따로 챙겨야 합니다.</li>
+        <li><strong>글꼴·색·자간·쪽 나눔·머리말/꼬리말</strong>: 대응 표기가 없어 사라집니다. 수식·도형·차트도 그대로 옮겨지지 않습니다.</li>
+        <li><strong>각주·미주, 여러 단 편집</strong>: 도구마다 처리가 달라 결과를 확인하는 게 좋습니다.</li>
+      </ul>
+      <h2>AI에 넣을 때</h2>
+      <ul>
+        <li>긴 문서는 제목 단위로 잘라 넣으면 답이 정확해지는 경우가 많습니다.</li>
+        <li>변환 결과를 먼저 훑어보십시오. 표가 어긋난 채로 들어가면 AI가 문서에 없는 숫자를 말하는 일이 더 잘 생깁니다.</li>
+        <li>개인정보나 대외비가 든 문서라면 변환 단계에서부터 파일이 서버에 올라가지 않는 방법을 고르십시오.</li>
+      </ul>
+      <h2>자주 묻는 것</h2>
+      <dl>
+        <dt>pandoc으로 hwp를 바로 마크다운으로 바꿀 수 있나요?</dt>
+        <dd>현재 pandoc 문서의 입력 형식 목록에 hwp·hwpx는 없습니다. 지원 형식은 바뀔 수 있으니 공식 문서를 확인해 보시고, 그전까지는 docx로 먼저 바꾸거나 hwp를 직접 읽는 도구를 쓰셔야 합니다.</dd>
+        <dt>표가 있는 문서도 표 형태로 나오나요?</dt>
+        <dd>행과 열이 반듯한 표는 마크다운 표로 나오고 첫 행이 머리글이 됩니다. 병합된 셀은 펴져 빈칸이 생기고, 셀 안 줄바꿈이나 표 안의 표는 그대로 옮기기 어렵습니다.</dd>
+        <dt>파일이 서버로 올라가나요?</dt>
+        <dd><a href="/doc/">문서 도구</a>는 문서를 브라우저 안에서 처리하고 문서 자체를 네트워크로 보내지 않습니다. 예외는 한글 렌더러(wasm)로, 같은 사이트에서 최초 1회 내려받아 SHA-384로 검증한 뒤 실행합니다. 온라인 변환 사이트는 파일 자체가 업로드됩니다.</dd>
+        <dt>워드(.docx) 문서도 고쳐서 저장할 수 있나요?</dt>
+        <dd>아닙니다. 편집과 문서 전체 찾기는 한글 문서(.hwp·.hwpx)에서만 됩니다. 워드는 열람과 마크다운 변환까지이고, 저장하면 .hwpx로 나갑니다. docx를 그대로 편집하려면 워드나 다른 편집기를 쓰십시오.</dd>
+      </dl>
+      <footer>
+        <p>PDF로 남길 일이 있다면 <a href="/doc/">문서 도구</a>의 인쇄 대화상자로 저장할 수 있고, PDF를 합치거나 나누고 암호를 걸어야 한다면 <a href="/pdf/">PDF 도구</a>가 따로 있습니다(암호 기능만 엔진을 최초 1회 내려받아 검증한 뒤 씁니다). 엑셀·CSV 파일은 <a href="/sheet/">시트 도구</a>가 cp949로 저장된 것까지 그대로 읽습니다. 폰과 PC 사이에서 파일을 옮길 때는 <a href="/drop/">드롭</a>이 연결을 맺는 동안에만 공개 릴레이·STUN 서버를 거치고 파일 자체는 두 기기 사이로 직접 갑니다. 어떤 기능이 네트워크를 타는지는 <a href="/stack/">기술 지도</a>에 있습니다.</p>
+        <p><a href="/">local-tools의 도구 전체 보기</a> · 모든 처리는 브라우저 안에서 끝나고 파일은 서버로 전송되지 않습니다.</p>
+      </footer>
+    </article>
+  </body>
+</html>

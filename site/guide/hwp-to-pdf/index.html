@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>hwp를 PDF로 변환하는 법 — 파일 업로드 없이 브라우저에서 | local-tools</title>
+    <meta name="description" content="한글 프로그램이 없어도 브라우저에서 hwp를 열고 인쇄 대화상자에서 "PDF로 저장"을 고르면 됩니다. 파일을 올리지 않는 방법과 온라인 변환·오피스 앱 경로를 한계와 함께 정리했습니다." />
+    <link rel="canonical" href="https://tools.cranemont.com/guide/hwp-to-pdf/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(0.978 0.003 240)" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="oklch(0.172 0.008 250)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="local-tools" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="hwp를 PDF로 변환하는 법 — 파일 업로드 없이 브라우저에서" />
+    <meta property="og:description" content="한글 프로그램이 없어도 브라우저에서 hwp를 열고 인쇄 대화상자에서 "PDF로 저장"을 고르면 됩니다. 파일을 올리지 않는 방법과 온라인 변환·오피스 앱 경로를 한계와 함께 정리했습니다." />
+    <meta property="og:url" content="https://tools.cranemont.com/guide/hwp-to-pdf/" />
+    <meta property="og:image" content="https://tools.cranemont.com/og/home.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://tools.cranemont.com/guide/hwp-to-pdf/#page",
+            "name": "hwp를 PDF로 변환하는 법 — 파일 업로드 없이 브라우저에서",
+            "url": "https://tools.cranemont.com/guide/hwp-to-pdf/",
+            "description": "한글 프로그램이 없어도 브라우저에서 hwp를 열고 인쇄 대화상자에서 \"PDF로 저장\"을 고르면 됩니다. 파일을 올리지 않는 방법과 온라인 변환·오피스 앱 경로를 한계와 함께 정리했습니다.",
+            "inLanguage": "ko",
+            "isPartOf": {
+              "@id": "https://tools.cranemont.com/#website"
+            },
+            "author": {
+              "@id": "https://tools.cranemont.com/#person"
+            }
+          },
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "local-tools",
+                "item": "https://tools.cranemont.com/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "가이드",
+                "item": "https://tools.cranemont.com/guide/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 3,
+                "name": "hwp를 PDF로 바꾸는 법 — 파일을 올리지 않고"
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <script>
+      // 도구들과 같은 키의 테마 설정을 따른다 (없으면 시스템).
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "light" || savedTheme === "dark")
+        document.documentElement.dataset.theme = savedTheme;
+    </script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --accent-ink: light-dark(oklch(0.474 0.138 243), oklch(0.78 0.11 240));
+        --bg: light-dark(oklch(0.978 0.003 240), oklch(0.172 0.008 250));
+        --surface: light-dark(oklch(1 0 0), oklch(0.212 0.01 250));
+        --text: light-dark(oklch(0.235 0.015 250), oklch(0.93 0.006 240));
+        --muted: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
+        --border: light-dark(oklch(0.917 0.008 240), oklch(0.31 0.014 248));
+      }
+      :root[data-theme="light"] { color-scheme: light; }
+      :root[data-theme="dark"] { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+          "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+        font-size: 16px;
+        line-height: 1.78;
+        word-break: keep-all;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+      .crumb { padding: 28px 0 0; font-size: 13px; color: var(--muted); }
+      .crumb a { color: var(--muted); }
+      article { padding: 24px 0 72px; }
+      h1 { margin: 0 0 18px; font-size: 30px; line-height: 1.32; letter-spacing: -0.025em; text-wrap: balance; }
+      h2 { margin: 42px 0 12px; font-size: 19px; letter-spacing: -0.015em; text-wrap: balance; }
+      p { margin: 0 0 14px; }
+      .lede { color: var(--muted); font-size: 17px; }
+      ul, ol { margin: 0 0 14px; padding-left: 22px; }
+      li { margin: 0 0 7px; }
+      li::marker { color: var(--muted); }
+      a { color: var(--accent-ink); text-underline-offset: 2px; }
+      a:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; border-radius: 3px; }
+      code {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.86em;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 1px 5px;
+      }
+      .note {
+        margin: 0 0 14px;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent-ink);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 15px;
+      }
+      dl { margin: 0; }
+      dt { margin-top: 20px; font-weight: 700; }
+      dd { margin: 4px 0 0; color: var(--muted); }
+      footer {
+        margin-top: 48px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+      .cards li { margin: 0; }
+      .cards a { display: block; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); text-decoration: none; color: var(--text); }
+      .cards a:hover { border-color: var(--accent-ink); }
+      .cards strong { display: block; font-size: 16.5px; margin-bottom: 3px; }
+      .cards span { font-size: 14px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <nav class="crumb wrap"><a href="/">local-tools</a> · <a href="/guide/">가이드</a></nav>
+    <article class="wrap">
+      <h1>hwp를 PDF로 바꾸는 법 — 파일을 올리지 않고</h1>
+      <p class="lede">제출용 서류를 hwp로 받았는데 PDF로 내라고 합니다. 집 컴퓨터에는 한글이 없고, 계약서나 이력서를 처음 보는 변환 사이트에 올리기는 꺼려집니다. 그 상황에서 쓸 수 있는 방법을 정리합니다.</p>
+      <p>결론부터 적으면, 한글이 설치돼 있다면 한글에서 바로 내보내는 것이 가장 정확합니다. 없다면 브라우저에서 문서를 연 뒤 인쇄 대화상자의 "PDF로 저장"을 쓰면 됩니다. 설치도 가입도 없이 파일을 올리지 않고 끝내는 경로입니다. 한계도 같이 적었습니다.</p>
+      <h2>한글이 깔려 있다면 그게 가장 정확합니다</h2>
+      <p>문서를 만든 프로그램이 직접 내보내는 PDF가 배치 재현이 가장 정확합니다. 학교나 회사 PC에 한글이 있다면 거기서 처리하십시오. 메뉴 이름과 위치는 버전마다 다릅니다.</p>
+      <ol>
+        <li><strong>파일</strong> 메뉴에서 <strong>PDF로 저장하기</strong> 항목을 먼저 찾습니다.</li>
+        <li>그 항목이 안 보이면 <strong>파일 → 인쇄</strong>에서 프린터 목록의 PDF 출력 항목을 고르고 인쇄를 누릅니다. <strong>다른 이름으로 저장하기</strong>의 형식 목록에 PDF가 있는 버전도 있습니다.</li>
+        <li>저장된 PDF를 열어 페이지 수와 표·도장 이미지가 원본과 같은지 확인합니다.</li>
+      </ol>
+      <p class="note">한글 뷰어(무료 열람 전용)로도 인쇄를 거쳐 PDF를 뽑을 수 있다고 알려져 있습니다. 배포 버전마다 기능이 다르니 설치 전에 확인해 보십시오.</p>
+      <h2>한글이 없을 때 흔히 쓰이는 방법들</h2>
+      <ul>
+        <li><strong>한컴 계열 웹 서비스·모바일 앱</strong> — 만든 회사가 직접 제공하니 재현이 좋은 편이라고 알려져 있습니다. 계정 요건과 무료 범위, 용량 제한은 시기에 따라 달라지니 직접 확인해 보십시오.</li>
+        <li><strong>폴라리스 오피스 같은 종합 오피스 앱</strong> — hwp 열기를 지원한다고 안내합니다. 설치와 계정이 필요한지는 제품 안내를 확인하십시오.</li>
+        <li><strong>hwp→pdf 온라인 변환 사이트</strong> — 손이 적게 가는 편입니다. 대개 서버에서 변환하므로 파일이 올라가는 것이 보통입니다. 보관 기간과 삭제 정책은 서비스마다 다르니 올리기 전에 약관을 보십시오.</li>
+        <li><strong>구글 드라이브</strong> — hwp를 구글 문서로 바로 열어 주는지는 지원 형식 안내를 확인해 보십시오. 열리지 않는다면 한글이 있는 곳에서 <code>.docx</code>로 먼저 저장해야 하니 한 단계 더 거치고, 역시 업로드가 전제입니다.</li>
+        <li><strong>카카오톡 나에게 보내기 · 메일 첨부 미리보기</strong> — 첨부를 미리보기로 연 뒤 공유 메뉴의 인쇄에서 PDF로 저장되기도 합니다. 앱과 기기마다 다르고, 파일은 이미 메신저·메일 서버를 지나간 뒤입니다.</li>
+      </ul>
+      <p>이 방법들의 공통점은 <strong>파일이 남의 서버를 한 번 지나간다</strong>는 것입니다. 공개된 공고문이나 양식지라면 별 문제가 아니지만, 계약서·이력서나 주민등록번호·계좌번호가 적힌 서류라면 한 번 더 생각할 만합니다.</p>
+      <h2>파일을 올리지 않고 — 브라우저 인쇄로 PDF 저장</h2>
+      <p>설치도 업로드도 없이 처리하려면 <a href="/doc/">문서 도구</a>에서 hwp를 연 다음 브라우저의 인쇄 대화상자로 PDF를 만들면 됩니다. 문서 파일 자체는 브라우저 안에서만 읽히고 네트워크로 나가지 않습니다. 다만 한글 문서를 그리는 렌더러(약 2.1MB)만은 처음 한 번 내려받아, SHA-384로 검증한 뒤에 실행합니다.</p>
+      <ol>
+        <li><a href="/doc/">문서 도구</a>를 크롬 계열 브라우저에서 엽니다.</li>
+        <li><code>.hwp</code> 또는 <code>.hwpx</code> 파일을 화면에 끌어다 놓습니다. 비밀번호가 걸린 문서면 비밀번호를 물어봅니다.</li>
+        <li>페이지가 다 그려지면 화면 위쪽 <strong>인쇄 · PDF로 저장</strong> 버튼을 누릅니다. 이 버튼은 아직 화면에 안 그려진 쪽까지 모두 그린 뒤 인쇄를 부릅니다. <code>Ctrl+P</code>로 직접 부르면 그 준비가 걸리지 않아, 스크롤해서 보지 않은 쪽이 빈 종이로 나갈 수 있습니다.</li>
+        <li>인쇄 대화상자에서 <strong>PDF로 저장</strong>을 고릅니다. 항목 이름과 위치는 브라우저 버전·OS마다 다릅니다.</li>
+        <li>나머지 옵션은 기본값 그대로 두십시오. 용지와 여백은 도구 쪽 인쇄 규칙에 지정돼 있어 손대면 오히려 어긋납니다.</li>
+        <li>미리보기를 넘겨 보며 빈 쪽이나 잘린 쪽이 없는지 본 뒤 저장하고 이름을 정합니다.</li>
+      </ol>
+      <p class="note">이 방식은 화면을 찍은 이미지가 아니라 페이지를 벡터 그림 그대로 PDF에 넘겨 확대해도 뭉개지지 않습니다. 다만 저장한 PDF에서 글자 선택·검색까지 되는지는 확인된 바가 없으니, 필요하면 <code>Ctrl+F</code>로 직접 눌러 보십시오.</p>
+      <p>자주 쓸 것 같다면 화면 위쪽 <strong>설치</strong> 버튼으로 앱처럼 설치해 둘 수 있습니다. 설치한 뒤 <strong>인터넷이 되는 곳에서 hwp를 한 번 열어 렌더러를 받아 두면</strong> 그다음부터는 오프라인에서도 열립니다. 설치만 하고 한 번도 열지 않았다면 렌더러가 아직 없습니다. 한글 문서는 본문을 고쳐 원래 형식으로 다시 저장하거나 마크다운으로 뽑는 것도 같은 화면에서 되지만, 워드(<code>.docx</code>)는 편집이 안 되고 보기와 변환만 됩니다.</p>
+      <h2>서식이 조금 달라질 수 있습니다</h2>
+      <p>한글이 아닌 도구로 hwp를 그리면 어느 방법이든 완전히 같지는 않습니다. 다음이 어긋날 수 있습니다.</p>
+      <ul>
+        <li>문서가 지정한 글꼴이 내 컴퓨터에 없으면 비슷한 글꼴로 대체되고, 글자 폭이 달라지며 줄바꿈 위치가 밀립니다.</li>
+        <li>줄이 밀리면 페이지 수가 원본과 달라질 수 있습니다.</li>
+        <li>복잡한 표, 글상자, 수식, 차트, 도형 겹침은 위치가 조금씩 어긋나기도 합니다.</li>
+        <li>브라우저 인쇄는 A4 세로를 전제로 하므로 B5·레터나 가로 문서는 여백이 남거나 잘릴 수 있습니다. 미리보기에서 먼저 확인하십시오.</li>
+      </ul>
+      <p>그래서 <strong>저장한 PDF는 처음부터 끝까지 넘겨 보고 내십시오</strong>. 서명·도장이 제자리인지, 표 안 숫자가 잘리지 않았는지 봅니다. 한 칸만 틀려도 반려되는 관공서 제출물이라면 한글이 있는 컴퓨터를 찾는 편이 안전합니다.</p>
+      <h2>상황별로 고르면</h2>
+      <ul>
+        <li><strong>한글이 있는 PC에 접근 가능</strong> — 한글에서 바로 PDF로 저장합니다.</li>
+        <li><strong>공개된 공고문·양식지, 급함</strong> — 온라인 변환 사이트가 손이 적게 갑니다. 올려도 곤란하지 않은 문서인지만 확인합니다.</li>
+        <li><strong>계약서·이력서·개인정보가 든 서류</strong> — <a href="/doc/">문서 도구</a>에서 열고 인쇄로 저장합니다. 문서 파일은 기기 밖으로 나가지 않고 렌더러만 처음 한 번 내려받습니다.</li>
+        <li><strong>인터넷이 없거나 폐쇄망</strong> — 망 밖에서 미리 설치하고 hwp를 한 번 열어 렌더러까지 받아 둔 기기라면 그대로 씁니다. 폐쇄망 안에서 처음 설치하는 것으로는 안 됩니다.</li>
+      </ul>
+      <p class="note">무엇이 실제로 네트워크를 지나가는지 궁금하다면 <a href="/stack/">기술 지도</a>에서 도구별로 확인할 수 있습니다.</p>
+      <h2>PDF로 만든 다음</h2>
+      <p>여러 장을 한 파일로 묶거나, 필요한 쪽만 떼거나, 회전·암호 설정이 필요하면 <a href="/pdf/">PDF 도구</a>에서 이어서 하면 됩니다. 스캔 사진을 PDF로 붙이는 것도 같은 곳입니다(암호 기능만은 엔진을 처음 한 번 내려받습니다). 폰으로 옮길 때는 <a href="/drop/">드롭</a>이 있습니다. 두 기기를 맺어 줄 때만 공개 중계 서버를 거치고 파일은 기기 사이로 직접 갑니다.</p>
+      <h2>자주 묻는 것</h2>
+      <dl>
+        <dt>한글 프로그램 없이도 hwp를 PDF로 만들 수 있나요?</dt>
+        <dd>됩니다. <a href="/doc/">문서 도구</a>에서 파일을 열고 인쇄 대화상자에서 "PDF로 저장"을 고르면 됩니다. 설치나 가입은 필요 없고 문서 파일도 올라가지 않습니다. 다만 한글 문서를 그리는 렌더러는 처음 한 번 내려받습니다. 글꼴 대체 때문에 줄바꿈이 원본과 달라질 수 있어 저장 후 확인이 필요합니다.</dd>
+        <dt>hwpx 파일도 되나요?</dt>
+        <dd><code>.hwp</code>와 <code>.hwpx</code> 모두 열립니다. 최근 한글에서 저장한 hwpx도 같은 방식으로 인쇄해 PDF로 만들 수 있습니다.</dd>
+        <dt>비밀번호가 걸린 hwp도 되나요?</dt>
+        <dd>문서를 열 비밀번호를 알고 있다면 됩니다. <code>.hwp</code> 파일을 놓으면 비밀번호를 묻고, 맞으면 평소처럼 열려 인쇄도 가능합니다. 비밀번호 없이는 열 수 없습니다.</dd>
+        <dt>온라인 변환 사이트에 올린 파일은 어떻게 되나요?</dt>
+        <dd>서비스마다 보관 기간과 삭제 정책이 다르므로 한 가지로 말하기 어렵습니다. 이용 약관과 개인정보 처리방침을 직접 보십시오. 판단이 애매하면 올리지 않는 방법을 먼저 쓰는 편이 간단합니다.</dd>
+        <dt>인쇄로 만든 PDF는 글자를 복사할 수 있나요?</dt>
+        <dd>화면을 캡처하는 방식이 아니라 페이지를 벡터로 그린 뒤 PDF로 넘기므로 확대해도 깨지지 않습니다. 다만 저장된 PDF에서 글자 선택·검색이 되는지는 확인해 두지 않았습니다. 복사가 꼭 필요하다면 한 장 저장해 직접 눌러 보고 판단하십시오. 원본에 들어 있던 사진이나 스캔 이미지는 어느 쪽이든 그대로 이미지입니다.</dd>
+        <dt>폰에서도 되나요?</dt>
+        <dd>안드로이드 크롬에서 시도해 볼 수 있으나 검증하지는 않았습니다. iOS의 크롬은 내부 엔진이 달라 더 장담하기 어렵습니다. 처음 열 때 렌더러 약 2.1MB를 내려받는 점, 화면이 좁아 페이지 확인이 어려운 점도 있어 제출용이라면 PC에서 하는 편을 권합니다.</dd>
+      </dl>
+      <footer>
+        <p>이어서 볼 만한 것들입니다. 만든 PDF를 합치거나 나누고 암호를 걸려면 <a href="/pdf/">PDF 도구</a>, 제출 규격에 맞춰 사진 용량을 줄이거나 크기를 바꿔야 하면 <a href="/image/">이미지 도구</a>, 첨부할 표를 손봐야 하면 <a href="/sheet/">시트 도구</a>를 쓰면 됩니다. 폰과 PC 사이에서 파일을 옮길 때는 <a href="/drop/">드롭</a>이 있습니다. 연결을 맺을 때만 공개 중계 서버를 쓰고 파일은 기기 사이로 직접 갑니다. 각 도구가 무엇을 네트워크로 보내는지는 <a href="/stack/">기술 지도</a>에 그려 두었습니다.</p>
+        <p><a href="/">local-tools의 도구 전체 보기</a> · 모든 처리는 브라우저 안에서 끝나고 파일은 서버로 전송되지 않습니다.</p>
+      </footer>
+    </article>
+  </body>
+</html>

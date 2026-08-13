@@ -87,7 +87,9 @@ jobs:
           KEY=95230c9d8dfc47b845257ce99be41f5a
           HOST=tools.cranemont.com
           URLS="\"https://$HOST/\""
-          for p in pdf gif video image sheet doc drop dev lab stack; do
+          for p in pdf gif video image sheet doc drop dev lab stack \
+                   guide guide/hwp-mac guide/hwp-to-pdf guide/hwp-to-markdown \
+                   guide/phone-to-pc guide/no-upload; do
             URLS="$URLS,\"https://$HOST/$p/\""
           done
           curl -sS -X POST "https://api.indexnow.org/indexnow" \
