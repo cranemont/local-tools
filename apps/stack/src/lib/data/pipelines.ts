@@ -725,6 +725,122 @@ export const PIPELINES: Pipeline[] = [
       },
     ],
   },
+
+  // ── 실험장 ───────────────────────────────────────────────────
+  // 유일하게 출입구(common-save)로 나가지 않는 흐름이다 — 이 앱이 만드는 건
+  // 파일이 아니라 화면이다. 도구가 아니라 실험장이라 그렇다.
+  {
+    id: "lab-embed",
+    label: "문장 → 벡터 → 이웃",
+    input: "문장 여러 개",
+    output: "유사도 행렬 · 이웃 순위 · 짝짓기 점수",
+    steps: [
+      {
+        label: "모델 내려받기",
+        tech: "transformers",
+        note: "가중치는 huggingface.co, 실행기 wasm은 jsDelivr에서 받는다. 이 앱만 단일 HTML 안에 엔진이 없다 — 모델을 갈아 끼우는 게 용도라 열두 개를 넣어 둘 수가 없다. 받은 것은 Cache API에 남아 다음부터는 오프라인이다.",
+        src: "apps/lab/src/lib/embed/runtime.ts",
+        feat: "lab-embed",
+        cargo: { count: 1, scale: 1, form: "모델 가중치" },
+      },
+      {
+        label: "문장 모으기",
+        note: "내장 한국어 프로브는 같은 뜻의 짝을 현상별로 묶어 둔 것이다 — 존댓말·띄어쓰기·한자어·오타·영어 혼용. 직접 넣은 문장은 정답 짝이 없어 채점에서 빠진다.",
+        src: "apps/lab/src/lib/corpus/samples.ts",
+        feat: "lab-probe",
+        cargo: { count: 6, scale: 0.3, form: "문장" },
+      },
+      {
+        label: "프리픽스 · 토큰화",
+        tech: "transformers",
+        note: "모델 카드가 요구하는 접두어를 붙인다(EmbeddingGemma는 `task: search result | query:`). 정말 필요한지 토글로 껐다 켤 수 있다 — 문서에만 적혀 있고 눈으로 본 사람이 없는 것 중 하나다.",
+        src: "apps/lab/src/lib/embed/runtime.ts",
+        feat: "lab-embed",
+        cargo: { count: 6, scale: 0.3, form: "토큰 열" },
+      },
+      {
+        label: "모델 실행",
+        tech: "webgpu",
+        note: "한 번에 한 문장씩 돌린다. 배치로 묶으면 패딩이 들어가 평균 풀링이 빈칸까지 세거나 마지막 토큰으로 패딩을 집는다 — 마스크를 손으로 다루느니 배치를 포기했다.",
+        src: "apps/lab/src/lib/embed/runtime.ts",
+        feat: "lab-embed",
+        cargo: { count: 6, scale: 0.5, form: "은닉 상태" },
+      },
+      {
+        label: "풀링 · 정규화",
+        note: "모델마다 문장 벡터가 나오는 자리가 다르다 — EmbeddingGemma는 그래프가 이미 풀링까지 해서 `sentence_embedding`으로 주고, BGE는 첫 토큰, e5는 평균, Qwen3는 마지막 토큰이다. 레지스트리가 그 차이를 안다.",
+        src: "apps/lab/src/lib/embed/registry.ts",
+        feat: "lab-embed",
+        cargo: { count: 6, scale: 0.2, form: "단위 벡터" },
+      },
+      {
+        label: "차원 절단",
+        tech: "embedmath",
+        note: "앞에서 N개만 남기고 다시 정규화한다(Matryoshka). 재정규화가 핵심 — 자르기만 하면 길이가 1이 아니게 돼 코사인이 내적과 어긋난다. 이미 만든 벡터를 자르는 것이라 다시 계산하지 않는다.",
+        src: "apps/lab/src/lib/embed/vector.ts",
+        feat: "lab-compare",
+        cargo: { count: 6, scale: 0.1, form: "잘린 벡터" },
+      },
+      {
+        label: "유사도 · 이웃 순위",
+        tech: "embedmath",
+        note: "n×n 코사인 행렬을 만들고 행마다 이웃을 줄 세운다. 두 설정을 겹쳐 보는 숫자가 여기서 나온다 — 이웃 겹침 overlap@k와 순위 상관 Spearman ρ.",
+        src: "apps/lab/src/lib/embed/vector.ts",
+        feat: "lab-compare",
+        cargo: { count: 1, scale: 0.4, form: "유사도 행렬" },
+      },
+      {
+        label: "짝짓기 채점",
+        tech: "embedmath",
+        note: "각 문장의 1순위 이웃이 제 짝인지 세어 현상별로 가른다. 존댓말은 다 맞히는데 오타에서 무너지는 식으로 갈리는 지점이, 그 모델이 한국어에서 못 하는 것이다.",
+        src: "apps/lab/src/lib/embed/score.ts",
+        feat: "lab-probe",
+        cargo: { count: 1, scale: 0.2, form: "현상별 정확도" },
+      },
+      {
+        label: "차이가 진짜인지 검정",
+        tech: "irstats",
+        note: "두 설정의 총점을 빼지 않고 엇갈린 문장만 센다(McNemar 정확검정). 실제로 39/40과 40/40은 엇갈린 문장이 하나뿐이라 p = 1.0 — 큰 숫자 두 개가 나란히 있어도 구별이 안 되는 경우가 흔하다.",
+        src: "apps/lab/src/lib/embed/stats.ts",
+        feat: "lab-compare",
+        cargo: { count: 1, scale: 0.15, form: "판정" },
+      },
+    ],
+  },
+
+  // 성벽을 한 번도 넘지 않는 유일한 흐름 — 내려받을 것이 없다.
+  {
+    id: "lab-bm25",
+    label: "문장 → 색인 → 이웃 (0 MB)",
+    input: "문장 여러 개",
+    output: "이웃 순위 · 기준선 점수",
+    steps: [
+      {
+        label: "문자 2-gram 색인",
+        tech: "bm25",
+        note: "한글 덩어리는 두 글자씩 겹쳐 자르고(사과나무 → 사과·과나·나무), 라틴·숫자는 낱말 그대로 둔다. 형태소 분석기 없이 한국어를 색인하는 흔한 방법이고, 사전을 내려받지 않아도 된다.",
+        src: "apps/lab/src/lib/embed/bm25.ts",
+        feat: "lab-baseline",
+        cargo: { count: 6, scale: 0.25, form: "용어 목록" },
+      },
+      {
+        label: "역색인 · 점수판",
+        tech: "bm25",
+        note: "문서 하나하나를 질의로 삼아 n×n 점수판을 만든다. 질의 용어를 가진 문서만 역색인으로 훑으므로 전수 대조가 아니다. 질의 쪽 용어로만 세니 결과는 비대칭이다.",
+        src: "apps/lab/src/lib/embed/bm25.ts",
+        feat: "lab-baseline",
+        cargo: { count: 1, scale: 0.4, form: "점수판" },
+      },
+      {
+        label: "같은 잣대로 채점",
+        tech: "irstats",
+        note: "임베딩과 똑같은 채점을 받는다 — 짝짓기 정확도, 그리고 판정을 매겼다면 NDCG까지. 그래야 비용–품질 그림에서 x=0 자리에 점을 찍을 수 있다.",
+        src: "apps/lab/src/lib/embed/judge.ts",
+        feat: "lab-judge",
+        cargo: { count: 1, scale: 0.2, form: "기준선 점수" },
+      },
+    ],
+  },
 ];
 
 export const PIPELINE_BY_ID = new Map(PIPELINES.map((pipe) => [pipe.id, pipe]));

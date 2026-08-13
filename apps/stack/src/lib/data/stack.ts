@@ -26,6 +26,7 @@ export type AppId =
   | "doc"
   | "drop"
   | "dev"
+  | "lab"
   | "stack"
   | "common";
 
@@ -117,6 +118,7 @@ export const APPS: AppMeta[] = [
   { id: "doc", label: "문서", blurb: "한글 · 워드 열기 · 마크다운 변환", path: "../doc/" },
   { id: "drop", label: "드롭", blurb: "기기 간 직접 전송 · 서버 없음", path: "../drop/" },
   { id: "dev", label: "개발자 도구", blurb: "JSON 변환 · diff · QR · 해시", path: "../dev/" },
+  { id: "lab", label: "실험장", blurb: "임베딩 모델 비교 · 한국어 프로브", path: "../lab/" },
   {
     id: "stack",
     label: "기술 지도",
@@ -506,6 +508,66 @@ export const TECHS: Tech[] = [
     kind: "own",
     note: "숫자 6자리로 키를 합의한다. 릴레이가 본 기록만으로는 코드를 오프라인 대입할 수 없고 공격자는 세션당 한 번만 추측할 수 있다. RFC 시험 벡터로 검증됨.",
     src: ["apps/drop/src/lib/rtc/spake2.ts"],
+  },
+  {
+    id: "webgpu",
+    label: "WebGPU",
+    kind: "native",
+    note: "임베딩 모델의 행렬 연산이 도는 곳. 어댑터를 실제로 받아 보고 없으면 WASM으로 물러난다 — 되긴 하지만 열 배 넘게 느려서 화면에 그 사실을 적는다.",
+    src: ["apps/lab/src/lib/embed/runtime.ts"],
+  },
+  {
+    id: "cacheapi",
+    label: "Cache API",
+    kind: "native",
+    note: "받아 둔 모델이 남는 곳. 한 벌이 200MB~2GB라 목록·용량·삭제를 직접 보여 준다 — 실험장은 모델을 갈아 끼우는 게 용도라 안 그러면 디스크가 찬다.",
+    src: ["apps/lab/src/lib/embed/cache.ts"],
+  },
+  {
+    id: "transformers",
+    label: "transformers.js",
+    kind: "lib",
+    pkg: "@huggingface/transformers",
+    network: "모델·실행기 최초 1회",
+    net: {
+      hosts: ["huggingface.co", "cdn.jsdelivr.net"],
+      layers: [
+        { label: "TCP/IP", note: "https:// 라서 443." },
+        { label: "TLS", note: "버전은 브라우저가 협상한다." },
+        {
+          label: "HTTPS",
+          note: "가중치(.onnx)는 huggingface.co에서, onnxruntime-web의 .wasm·.mjs는 cdn.jsdelivr.net에서 받는다. 실행기 주소는 버전이 박힌 URL이고, 빌드가 그 URL을 코드에 심는다(apps/lab/ort-wasm.ts).",
+        },
+        {
+          label: "Cache API",
+          note: "받은 것은 transformers-cache에 남아 다음부터는 오프라인으로 열린다. 해시 검증은 없다 — 우리가 호스팅하는 자산이 아니라서 rhwp·qpdf와 다르다.",
+        },
+      ],
+      carries: "모델 가중치와 실행기 — 나가는 것은 GET뿐, 사용자 문장은 올라가지 않는다",
+    },
+    note: "브라우저에서 임베딩 모델을 돌린다. 모델을 실행 시점에 받으므로 이 앱만 단일 HTML 안에 엔진이 없다 — 열두 개를 자체 호스팅할 방법이 없어 실험장에는 이게 맞다.",
+    src: ["apps/lab/src/lib/embed/runtime.ts", "apps/lab/ort-wasm.ts"],
+  },
+  {
+    id: "embedmath",
+    label: "벡터·비교 지표",
+    kind: "own",
+    note: "코사인 행렬, Matryoshka 절단(자른 뒤 재정규화), 이웃 겹침 overlap@k, 순위 상관 Spearman ρ, 설명분산을 같이 내는 PCA. 그림은 거들 뿐이고 결정을 바꾸는 건 이 숫자들이라 직접 짰다.",
+    src: ["apps/lab/src/lib/embed/vector.ts", "apps/lab/src/lib/embed/score.ts"],
+  },
+  {
+    id: "bm25",
+    label: "BM25 (문자 2-gram)",
+    kind: "own",
+    note: "내려받을 것이 없는 기준선. 한글은 형태소 분석기 없이 문자 2-gram으로 색인한다(Lucene의 CJK 방식). 글자가 겹치지 않으면 0점이라 치과↔이빨을 원리상 못 잡는 대신, 200MB짜리 모델이 값을 하는지 재는 잣대가 된다.",
+    src: ["apps/lab/src/lib/embed/bm25.ts"],
+  },
+  {
+    id: "irstats",
+    label: "검정·판정 채점",
+    kind: "own",
+    note: "Wilson 신뢰구간, McNemar 정확검정(엇갈린 문장만 센다), 판정 풀링과 Recall·NDCG·MRR. 40문장에서 100%는 [91%, 100%]라 97.5%와 겹친다 — 이 계산이 없으면 큰 숫자가 없는 차이를 만들어 낸다.",
+    src: ["apps/lab/src/lib/embed/stats.ts", "apps/lab/src/lib/embed/judge.ts"],
   },
   {
     id: "nostrclient",
@@ -1078,6 +1140,58 @@ export const FEATURES: Feature[] = [
     note: "v4·v7·ULID 생성. 전부 브라우저 CSPRNG에서 나온다.",
     techs: ["cryptorandom"],
     src: ["apps/dev/src/lib/tools/Uuid.svelte"],
+  },
+
+  // ── 실험장 ───────────────────────────────────────────────────
+  {
+    id: "lab-embed",
+    app: "lab",
+    label: "문장 → 벡터",
+    note: "모델을 받아 문장을 한 개씩 벡터로 만든다. 배치로 묶으면 패딩이 섞여 풀링이 틀어지므로 일부러 하나씩 돌린다 — 여기 숫자가 틀리면 화면의 모든 주장이 무너진다.",
+    techs: ["transformers", "webgpu"],
+    src: ["apps/lab/src/lib/embed/runtime.ts", "apps/lab/src/lib/embed/registry.ts"],
+    pipeline: "lab-embed",
+  },
+  {
+    id: "lab-baseline",
+    app: "lab",
+    label: "BM25 기준선",
+    note: "아무것도 내려받지 않고 같은 코퍼스를 색인해 점수판을 만든다. 임베딩이 값을 하는지 재려면 0MB짜리가 옆에 있어야 한다 — 검색 논문이 언제나 BM25를 같이 싣는 이유다.",
+    techs: ["bm25"],
+    src: ["apps/lab/src/lib/embed/bm25.ts"],
+    pipeline: "lab-bm25",
+  },
+  {
+    id: "lab-compare",
+    app: "lab",
+    label: "두 설정 비교",
+    note: "차원을 자르거나 정밀도·프리픽스를 바꾼 두 결과를 나란히 놓는다. 절단은 다시 계산하지 않고 이미 만든 벡터를 잘라 쓰므로 공짜다. 총점 차이가 아니라 엇갈린 문장만 세서(McNemar) 그 차이가 진짜인지까지 답한다.",
+    techs: ["embedmath", "irstats"],
+    src: ["apps/lab/src/lib/editor/state.svelte.ts", "apps/lab/src/lib/embed/vector.ts"],
+  },
+  {
+    id: "lab-judge",
+    app: "lab",
+    label: "판정 풀링",
+    note: "돌린 모든 설정의 상위 결과를 합집합으로 모아 한 번만 관련성을 매긴다. 그러면 나중에 붙인 설정까지 같은 정답으로 소급 채점된다 — 리더보드가 하는 계산을 내 문장으로 하는 자리이고, 비용–품질 그림의 y축이 여기서 나온다.",
+    techs: ["irstats"],
+    src: ["apps/lab/src/lib/embed/judge.ts", "apps/lab/src/lib/editor/Judge.svelte"],
+  },
+  {
+    id: "lab-probe",
+    app: "lab",
+    label: "한국어 프로브 채점",
+    note: "존댓말·띄어쓰기·한자어·오타·영어 혼용을 같은 뜻의 짝으로 묶어 두고, 각 문장의 1순위 이웃이 제 짝인지 센다. 영어권 리더보드가 답해 주지 않는 것을 재는 자리다.",
+    techs: ["embedmath"],
+    src: ["apps/lab/src/lib/corpus/samples.ts", "apps/lab/src/lib/embed/score.ts"],
+  },
+  {
+    id: "lab-storage",
+    app: "lab",
+    label: "받아 둔 모델 관리",
+    note: "모델별 용량과 삭제. 한 벌이 200MB~2GB이고 계속 갈아 끼우는 앱이라 목록이 없으면 지운 줄 알고 계속 쌓인다.",
+    techs: ["cacheapi"],
+    src: ["apps/lab/src/lib/embed/cache.ts"],
   },
 
   // ── 기술 지도 (이 페이지) ────────────────────────────────────
