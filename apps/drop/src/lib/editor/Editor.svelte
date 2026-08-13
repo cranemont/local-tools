@@ -75,7 +75,7 @@
 <div class="editor">
   {#if drop.stage === "idle"}
     <div class="intro">
-      <h1>{t.intro.title}</h1>
+      <h2>{t.intro.title}</h2>
       <p class="sub">{t.intro.sub}</p>
       <div class="roles">
         <button class="role" onclick={() => drop.startHost()}>
@@ -344,7 +344,7 @@
     text-align: center;
     margin-top: var(--space-3xl);
   }
-  h1 {
+  h2 {
     margin: 0 0 8px;
     font-size: var(--text-5xl);
     letter-spacing: -0.02em;

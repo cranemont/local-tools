@@ -80,7 +80,7 @@
 
   <main class="content">
     <section class="intro">
-      <h1>{t.intro.title}</h1>
+      <h2>{t.intro.title}</h2>
       <p>{t.intro.sub}</p>
     </section>
 
@@ -184,7 +184,7 @@
     gap: var(--space-xl);
   }
 
-  .intro h1 {
+  .intro h2 {
     margin: 0 0 var(--space-xs);
     font-size: var(--text-6xl);
     font-weight: 700;

@@ -34,7 +34,7 @@
   <main class="stage">
     {#if !primary}
       <div class="blank">
-        <h1>{t.intro.title}</h1>
+        <h2>{t.intro.title}</h2>
         <p>{t.intro.sub}</p>
       </div>
     {:else}
@@ -163,7 +163,7 @@
     max-width: 34ch;
     text-align: center;
   }
-  .blank h1 {
+  .blank h2 {
     margin: 0 0 var(--space-sm);
     font-size: var(--text-4xl);
     font-weight: 600;

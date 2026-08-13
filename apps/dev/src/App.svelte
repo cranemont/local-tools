@@ -117,7 +117,7 @@
 
     <main class="content">
       <div class="tool-head">
-        <h1>{active.title}</h1>
+        <h2>{active.title}</h2>
         <p>{active.desc}</p>
       </div>
       {#key active.id}
@@ -287,7 +287,7 @@
   .tool-head {
     margin-bottom: 14px;
   }
-  .tool-head h1 {
+  .tool-head h2 {
     margin: 0;
     font-size: var(--text-3xl);
     letter-spacing: -0.01em;

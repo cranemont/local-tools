@@ -1,6 +1,7 @@
 {
   "name": "local-tools",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.3.0",
   "engines": {

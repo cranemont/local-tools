@@ -3,16 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='1' width='16' height='16' rx='5' fill='oklch(0.62 0.158 240)'/%3E%3Ccircle cx='9' cy='9' r='3.4' fill='white'/%3E%3C/svg%3E"
-    />
+    <!-- 실파일로 둔다 — 검색엔진은 가져갈 수 있는 URL의 파비콘만 쓴다.
+         Google은 홈페이지 파비콘을 사이트 전체에 적용하므로 여기 한 곳이면 된다.
+         앱들은 오프라인 더블클릭 때문에 data: URI를 유지한다.
+         파일은 scripts/gen-favicon.mjs 가 만든다. -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>local-tools — 브라우저에서만 동작하는 PDF·GIF·동영상·이미지·파일 전송·개발자 도구</title>
     <meta
       name="description"
       content="설치 없이 브라우저에서 쓰는 도구 모음 — PDF 병합·정리·암호, GIF 프레임 편집, 동영상 자르기·압축·변환, 이미지 변환·압축·리사이즈, 서버 없는 기기 간 파일 전송(드롭), JSON·diff·QR 개발자 유틸. 파일은 서버로 전송되지 않습니다."
     />
     <link rel="canonical" href="https://tools.cranemont.com/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(0.978 0.003 240)" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="oklch(0.172 0.008 250)" />
     <meta property="og:type" content="website" />
