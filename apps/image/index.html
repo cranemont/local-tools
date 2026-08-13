@@ -53,13 +53,102 @@
         ]
       }
     </script>
+    <!-- 도구 아래 설명(section#intro) 전용. 앱 CSS는 자가해제 압축을 타서 늦게 오므로
+         여기서 독립적으로 선다. 값은 packages/theme/tokens.css와 같다.
+         자가해제 플러그인은 rel="stylesheet"가 붙은 <style>만 압축하므로 이건 평문으로 남는다. -->
+    <style>
+      :root { color-scheme: light dark; }
+      :root[data-theme="light"] { color-scheme: light; }
+      :root[data-theme="dark"] { color-scheme: dark; }
+      #intro {
+        --i-text: light-dark(oklch(0.235 0.015 250), oklch(0.93 0.006 240));
+        --i-muted: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
+        --i-border: light-dark(oklch(0.917 0.008 240), oklch(0.31 0.014 248));
+        --i-link: light-dark(oklch(0.474 0.138 243), oklch(0.78 0.11 240));
+        background: light-dark(oklch(0.978 0.003 240), oklch(0.172 0.008 250));
+        border-top: 1px solid var(--i-border);
+        color: var(--i-text);
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+          "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+        font-size: 15px;
+        line-height: 1.75;
+        word-break: keep-all;
+      }
+      #intro .intro-wrap { max-width: 720px; margin: 0 auto; padding: 56px 24px 80px; }
+      #intro h1 { margin: 0 0 14px; font-size: 26px; line-height: 1.35; letter-spacing: -0.02em; text-wrap: balance; }
+      #intro h2 { margin: 36px 0 10px; font-size: 17px; letter-spacing: -0.01em; }
+      #intro p { margin: 0 0 12px; }
+      #intro .lead { color: var(--i-muted); }
+      #intro ul, #intro ol { margin: 0 0 12px; padding-left: 20px; }
+      #intro li { margin: 0 0 5px; }
+      #intro li::marker { color: var(--i-muted); }
+      #intro dt { margin-top: 16px; font-weight: 700; }
+      #intro dd { margin: 4px 0 0; color: var(--i-muted); }
+      #intro a { color: var(--i-link); text-underline-offset: 2px; }
+      #intro a:focus-visible { outline: 2px solid var(--i-link); outline-offset: 2px; border-radius: 3px; }
+      #intro .foot { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--i-border); font-size: 13px; color: var(--i-muted); }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- min-height를 인라인으로 박아 앱이 뜨기 전에도 첫 화면 높이를 잡아 둔다.
+         앱 CSS는 늦게 오므로, 이게 없으면 아래 #intro가 위로 올라왔다
+         밀려 내려가며 레이아웃이 튄다. -->
+    <div id="app" style="min-height:100dvh"></div>
     <noscript>
       이미지 도구는 JavaScript가 필요합니다 —
       <a href="https://tools.cranemont.com/">local-tools</a>
     </noscript>
+    <!-- 도구 아래 설명. 자가해제 압축을 타지 않는 평문이라 JS를 실행하지 않는
+         크롤러도 읽는다. 문구를 고치면 i18n.ts의 실제 동작과 어긋나지 않는지 볼 것. -->
+    <section id="intro">
+      <div class="intro-wrap">
+        <h1>이미지 변환·압축·크기 조절 — 업로드 없이 브라우저에서</h1>
+        <p class="lead">JPG·PNG·WebP·AVIF로 형식을 바꾸고, 품질을 조절해 용량을 줄이고, 크기를 조절하거나 잘라내는 도구입니다. 사진을 서버에 올리지 않고 브라우저 안에서 처리하므로 회원가입도 설치도 필요 없습니다. 여러 장을 한 번에 올려 같은 설정으로 변환하고 ZIP 한 개로 받을 수 있습니다.</p>
+
+        <h2>이런 때 씁니다</h2>
+        <ul>
+          <li>아이폰에서 찍은 HEIC 사진을 어디서나 열리는 JPG로 바꿔야 할 때</li>
+          <li>첨부 파일 용량 제한에 걸려 사진 용량을 줄여야 할 때</li>
+          <li>블로그나 쇼핑몰에 올리려고 가로 1280px 같은 규격으로 크기 조절할 때</li>
+          <li>프로필 사진을 1:1로, 썸네일을 16:9로 잘라야 할 때</li>
+          <li>사진을 공개하기 전에 촬영 위치(GPS)와 카메라 정보가 담긴 EXIF를 지우고 싶을 때</li>
+          <li>여러 장을 같은 형식·같은 품질로 한 번에 변환해 ZIP으로 받고 싶을 때</li>
+        </ul>
+
+        <h2>쓰는 방법</h2>
+        <ol>
+          <li>이미지를 끌어다 놓거나 클릭해서 선택합니다. 여러 장을 한꺼번에 올려도 됩니다.</li>
+          <li>형식에서 JPG·PNG·WebP·AVIF 중 하나를 고르고, 품질 슬라이더로 용량을 조절합니다.</li>
+          <li>크기에서 배율·가로·세로 중 하나를 지정하면 비율은 그대로 유지된 채 크기가 바뀝니다.</li>
+          <li>필요하면 영역 선택으로 범위를 잡아 자르기를 누르거나, 90° 회전으로 방향을 맞춥니다.</li>
+          <li>저장 파일 이름을 적고 저장을 누릅니다. 여러 장이면 ZIP 한 개로 받습니다.</li>
+        </ol>
+
+        <h2>자주 묻는 것</h2>
+        <dl>
+          <dt>사진이 서버로 업로드되나요?</dt>
+          <dd>아닙니다. 디코딩·변환·저장이 모두 브라우저 안에서 끝나고 이미지 자체는 어디로도 전송되지 않습니다. 다만 HEIC를 읽거나 AVIF로 내보낼 때는 그 처리를 담당하는 엔진 파일을 외부 CDN에서 최초 한 번 내려받습니다. 이때도 사진은 나가지 않고, 나머지 기능은 인터넷 없이 동작합니다.</dd>
+
+          <dt>어떤 형식을 넣고 뺄 수 있나요?</dt>
+          <dd>입력은 JPG·PNG·WebP·AVIF·HEIC·GIF·BMP·SVG를 지원합니다. 출력은 JPG·PNG·WebP·AVIF 네 가지입니다. GIF는 첫 프레임만 정지 이미지로 읽습니다.</dd>
+
+          <dt>EXIF는 어떻게 처리되나요?</dt>
+          <dd>촬영일·카메라·노출·GPS를 화면에서 확인할 수 있고, 기본값은 내보낼 때 EXIF를 남기지 않는 것입니다. 유지가 필요하면 체크하면 되지만 JPG와 WebP 출력에서만 지원됩니다.</dd>
+
+          <dt>품질을 얼마나 낮춰야 하나요?</dt>
+          <dd>정답은 없어서 미리보기로 확인하며 맞추는 편이 낫습니다. 결과 화면에 원본 대비 용량과 증감 비율이 표시되고 원본과 결과를 바로 번갈아 볼 수 있습니다. PNG는 무손실이라 품질 조절이 없습니다.</dd>
+
+          <dt>무료인가요? 어떤 브라우저에서 되나요?</dt>
+          <dd>무료이고 광고나 추적, 로그인이 없습니다. Chrome·Edge 등 크로미엄 기반 최신 브라우저를 기준으로 만들었습니다.</dd>
+        </dl>
+
+        <h2>함께 쓰는 도구</h2>
+        <p>움짤을 다루려면 <a href="/gif/">GIF 편집</a>이, 동영상 용량을 줄이려면 <a href="/video/">동영상 압축</a>이 따로 있습니다. 사진 여러 장을 문서 한 개로 묶고 싶다면 <a href="/pdf/">PDF 합치기</a>에서 이미지를 PDF로 만들 수 있습니다.</p>
+        <p class="foot">
+          <a href="/">local-tools의 다른 도구 보기</a> · 모든 처리는 브라우저 안에서 끝나고 파일은 서버로 전송되지 않습니다.
+        </p>
+      </div>
+    </section>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

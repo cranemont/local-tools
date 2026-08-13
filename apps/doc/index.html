@@ -54,13 +54,104 @@
         ]
       }
     </script>
+    <!-- 도구 아래 설명(section#intro) 전용. 앱 CSS는 자가해제 압축을 타서 늦게 오므로
+         여기서 독립적으로 선다. 값은 packages/theme/tokens.css와 같다.
+         자가해제 플러그인은 rel="stylesheet"가 붙은 <style>만 압축하므로 이건 평문으로 남는다. -->
+    <style>
+      :root { color-scheme: light dark; }
+      :root[data-theme="light"] { color-scheme: light; }
+      :root[data-theme="dark"] { color-scheme: dark; }
+      #intro {
+        --i-text: light-dark(oklch(0.235 0.015 250), oklch(0.93 0.006 240));
+        --i-muted: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
+        --i-border: light-dark(oklch(0.917 0.008 240), oklch(0.31 0.014 248));
+        --i-link: light-dark(oklch(0.474 0.138 243), oklch(0.78 0.11 240));
+        background: light-dark(oklch(0.978 0.003 240), oklch(0.172 0.008 250));
+        border-top: 1px solid var(--i-border);
+        color: var(--i-text);
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+          "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+        font-size: 15px;
+        line-height: 1.75;
+        word-break: keep-all;
+      }
+      #intro .intro-wrap { max-width: 720px; margin: 0 auto; padding: 56px 24px 80px; }
+      #intro h1 { margin: 0 0 14px; font-size: 26px; line-height: 1.35; letter-spacing: -0.02em; text-wrap: balance; }
+      #intro h2 { margin: 36px 0 10px; font-size: 17px; letter-spacing: -0.01em; }
+      #intro p { margin: 0 0 12px; }
+      #intro .lead { color: var(--i-muted); }
+      #intro ul, #intro ol { margin: 0 0 12px; padding-left: 20px; }
+      #intro li { margin: 0 0 5px; }
+      #intro li::marker { color: var(--i-muted); }
+      #intro dt { margin-top: 16px; font-weight: 700; }
+      #intro dd { margin: 4px 0 0; color: var(--i-muted); }
+      #intro a { color: var(--i-link); text-underline-offset: 2px; }
+      #intro a:focus-visible { outline: 2px solid var(--i-link); outline-offset: 2px; border-radius: 3px; }
+      #intro .foot { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--i-border); font-size: 13px; color: var(--i-muted); }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- min-height를 인라인으로 박아 앱이 뜨기 전에도 첫 화면 높이를 잡아 둔다.
+         앱 CSS는 늦게 오므로, 이게 없으면 아래 #intro가 위로 올라왔다
+         밀려 내려가며 레이아웃이 튄다. -->
+    <div id="app" style="min-height:100dvh"></div>
     <noscript>
       문서는 JavaScript가 필요합니다 —
       <a href="https://tools.cranemont.com/">local-tools</a>
     </noscript>
+    <!-- 도구 아래 설명. 자가해제 압축을 타지 않는 평문이라 JS를 실행하지 않는
+         크롤러도 읽는다. 문구를 고치면 i18n.ts의 실제 동작과 어긋나지 않는지 볼 것. -->
+    <section id="intro">
+      <div class="intro-wrap">
+        <h1>한글 뷰어 없이 hwp 열고 편집하기 — 업로드 없이 브라우저에서</h1>
+        <p class="lead">문서는 한글 프로그램이 없어도 .hwp·.hwpx를 원본 레이아웃 그대로 열어 봅니다. 워드 .docx도 같은 화면에서 열리고, 한글 문서는 본문을 그 자리에서 고쳐 원래 형식으로 다시 저장할 수 있습니다. 문서는 브라우저 안에서만 처리되고 서버로 올라가지 않습니다.</p>
+
+        <h2>이런 때 씁니다</h2>
+        <ul>
+          <li>한글이 깔려 있지 않은 맥이나 회사 PC에서 hwp 파일을 열어 봐야 할 때</li>
+          <li>공문서·민원 서류로 받은 .hwp의 표와 도장까지 원본 모양 그대로 확인할 때</li>
+          <li>hwp 문서를 인쇄 대화상자로 PDF로 저장할 때</li>
+          <li>워드로 받은 .docx를 한글에서 열리는 .hwpx로 바꿀 때</li>
+          <li>보고서의 본문과 표를 마크다운으로 옮겨 다른 문서 도구에 붙일 때</li>
+          <li>오탈자 한두 군데만 고쳐 다시 .hwp로 돌려줘야 할 때</li>
+        </ul>
+
+        <h2>쓰는 방법</h2>
+        <ol>
+          <li>"문서 열기"를 누르거나 .hwp·.hwpx·.docx 파일을 화면에 끌어다 놓습니다.</li>
+          <li>"원본"·"나란히"·"마크다운"으로 보기를 바꾸고, 필요하면 "문서에서 찾기"로 문서 전체를 검색합니다.</li>
+          <li>한글 문서라면 "편집"을 눌러 글자를 고치고, "저장"으로 원래 형식 그대로 내려받습니다.</li>
+          <li>"마크다운 저장"·"hwpx로 저장"·"인쇄 · PDF로 저장" 중 필요한 형식으로 내보냅니다.</li>
+        </ol>
+
+        <h2>자주 묻는 것</h2>
+        <dl>
+          <dt>한글 프로그램이 없어도 hwp 파일이 열리나요?</dt>
+          <dd>열립니다. 브라우저 안에서 한글 문서 렌더러가 돌면서 표·그림·머리말이 있는 원본 레이아웃을 그대로 그립니다. 한글이나 별도 뷰어를 설치하지 않고 크롬·엣지에서 바로 봅니다.</dd>
+
+          <dt>문서가 서버로 올라가나요?</dt>
+          <dd>아닙니다. 파일은 브라우저 안에서만 열리고 어디로도 전송되지 않습니다. 다만 한글 문서를 그리는 렌더러(약 2.1MB)는 이 사이트에서 처음 한 번 내려받습니다 — 파일이 나가는 것이 아니라 프로그램이 들어오는 쪽입니다. 워드 문서는 그것도 없이 열립니다.</dd>
+
+          <dt>hwp를 PDF로 저장할 수 있나요?</dt>
+          <dd>"인쇄 · PDF로 저장"을 누른 뒤 크롬 인쇄 대화상자에서 대상을 "PDF로 저장"으로 고르면 됩니다. 변환 서버를 거치지 않고 브라우저가 그린 화면을 그대로 인쇄합니다.</dd>
+
+          <dt>보기만 되나요, 고칠 수도 있나요?</dt>
+          <dd>한글 문서(.hwp·.hwpx)는 "편집"을 켜면 원본 위에 커서를 놓고 본문과 표 셀의 글자를 고칠 수 있습니다. 되돌리기·다시 실행이 있고, "저장"을 누르면 원래 형식으로 내려받습니다. 워드 문서는 아직 편집할 수 없습니다.</dd>
+
+          <dt>비밀번호가 걸린 한글 문서도 열리나요?</dt>
+          <dd>비밀번호를 알고 있으면 입력해서 열 수 있고, 입력한 비밀번호는 브라우저 밖으로 나가지 않습니다. 비밀번호를 모르는 문서의 잠금을 푸는 기능은 아닙니다.</dd>
+
+          <dt>열리지 않는 파일도 있나요?</dt>
+          <dd>워드 97~2003의 .doc과 한글 3.0 이하 형식은 열지 못합니다. 각 프로그램에서 .docx나 최신 .hwp·.hwpx로 저장한 뒤 다시 열어 주세요. 엑셀·파워포인트 파일은 이 도구가 다루지 않습니다.</dd>
+        </dl>
+
+        <h2>함께 쓰는 도구</h2>
+        <p>인쇄로 만든 PDF를 여러 장 묶거나 순서를 바꾸려면 <a href="/pdf/">PDF 합치기</a>를, 문서에서 떼어 낸 그림의 용량을 줄이려면 <a href="/image/">이미지 압축</a>을 쓰면 됩니다. 표만 따로 다뤄야 하면 <a href="/sheet/">엑셀 편집</a>이 있고, 다 만든 문서를 폰으로 넘길 때는 <a href="/drop/">파일 전송</a>이 케이블 없이 기기끼리 바로 보냅니다.</p>
+        <p class="foot">
+          <a href="/">local-tools의 다른 도구 보기</a> · 모든 처리는 브라우저 안에서 끝나고 파일은 서버로 전송되지 않습니다.
+        </p>
+      </div>
+    </section>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

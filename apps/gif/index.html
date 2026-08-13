@@ -52,13 +52,105 @@
         ]
       }
     </script>
+    <!-- 도구 아래 설명(section#intro) 전용. 앱 CSS는 자가해제 압축을 타서 늦게 오므로
+         여기서 독립적으로 선다. 값은 packages/theme/tokens.css와 같다.
+         자가해제 플러그인은 rel="stylesheet"가 붙은 <style>만 압축하므로 이건 평문으로 남는다. -->
+    <style>
+      :root { color-scheme: light dark; }
+      :root[data-theme="light"] { color-scheme: light; }
+      :root[data-theme="dark"] { color-scheme: dark; }
+      #intro {
+        --i-text: light-dark(oklch(0.235 0.015 250), oklch(0.93 0.006 240));
+        --i-muted: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
+        --i-border: light-dark(oklch(0.917 0.008 240), oklch(0.31 0.014 248));
+        --i-link: light-dark(oklch(0.474 0.138 243), oklch(0.78 0.11 240));
+        background: light-dark(oklch(0.978 0.003 240), oklch(0.172 0.008 250));
+        border-top: 1px solid var(--i-border);
+        color: var(--i-text);
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+          "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+        font-size: 15px;
+        line-height: 1.75;
+        word-break: keep-all;
+      }
+      #intro .intro-wrap { max-width: 720px; margin: 0 auto; padding: 56px 24px 80px; }
+      #intro h1 { margin: 0 0 14px; font-size: 26px; line-height: 1.35; letter-spacing: -0.02em; text-wrap: balance; }
+      #intro h2 { margin: 36px 0 10px; font-size: 17px; letter-spacing: -0.01em; }
+      #intro p { margin: 0 0 12px; }
+      #intro .lead { color: var(--i-muted); }
+      #intro ul, #intro ol { margin: 0 0 12px; padding-left: 20px; }
+      #intro li { margin: 0 0 5px; }
+      #intro li::marker { color: var(--i-muted); }
+      #intro dt { margin-top: 16px; font-weight: 700; }
+      #intro dd { margin: 4px 0 0; color: var(--i-muted); }
+      #intro a { color: var(--i-link); text-underline-offset: 2px; }
+      #intro a:focus-visible { outline: 2px solid var(--i-link); outline-offset: 2px; border-radius: 3px; }
+      #intro .foot { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--i-border); font-size: 13px; color: var(--i-muted); }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- min-height를 인라인으로 박아 앱이 뜨기 전에도 첫 화면 높이를 잡아 둔다.
+         앱 CSS는 늦게 오므로, 이게 없으면 아래 #intro가 위로 올라왔다
+         밀려 내려가며 레이아웃이 튄다. -->
+    <div id="app" style="min-height:100dvh"></div>
     <noscript>
       GIF 에디터는 JavaScript가 필요합니다 —
       <a href="https://tools.cranemont.com/">local-tools</a>
     </noscript>
+    <!-- 도구 아래 설명. 자가해제 압축을 타지 않는 평문이라 JS를 실행하지 않는
+         크롤러도 읽는다. 문구를 고치면 i18n.ts의 실제 동작과 어긋나지 않는지 볼 것. -->
+    <section id="intro">
+      <div class="intro-wrap">
+        <h1>움짤 만들기·GIF 편집 — 동영상·사진을 브라우저에서 바로</h1>
+        <p class="lead">GIF는 사진과 동영상을 움짤로 만들고, 이미 가진 GIF의 프레임을 한 장씩 직접 손보는 도구입니다. 파일을 서버에 올리지 않고 브라우저 안에서 처리하며, 페이지를 한 번 연 뒤에는 인터넷 없이도 동작합니다. 회원가입도 설치도 필요 없습니다.</p>
+
+        <h2>이런 때 씁니다</h2>
+        <ul>
+          <li>동영상의 한 장면만 잘라 움짤로 만들 때 — 구간과 초당 프레임 수를 정해서 가져옵니다</li>
+          <li>사진 여러 장을 이어 붙여 GIF 애니메이션을 만들 때</li>
+          <li>받은 GIF에서 필요 없는 앞뒤 프레임을 잘라내고 속도를 조절할 때</li>
+          <li>GIF 용량을 줄이려고 크기와 색상 수를 낮출 때</li>
+          <li>같은 움짤을 WebP나 MP4로 바꿔 더 작은 파일로 올릴 때</li>
+          <li>GIF 프레임을 PNG 낱장으로 뽑아 쓸 때</li>
+        </ul>
+
+        <h2>쓰는 방법</h2>
+        <ol>
+          <li>"파일을 끌어다 놓거나 클릭해서 선택"에 GIF·PNG·JPG·WebP 또는 동영상을 넣습니다. 동영상은 "프레임 가져오기" 창에서 구간과 초당 프레임(fps)을 정하고 "가져오기"를 누릅니다.</li>
+          <li>아래 필름스트립에서 프레임을 끌어 순서를 바꾸고 "삭제"·"복제"·"선택만 남기기"·"순서 뒤집기"로 다듬습니다.</li>
+          <li>오른쪽 패널에서 속도·크기·크롭·회전·반복·화질을 조절합니다. 프레임 딜레이(ms)는 선택한 프레임에만 적용할 수도 있습니다.</li>
+          <li>"형식"에서 GIF·WebP·MP4를 고르고 "저장 파일 이름"을 적은 뒤 "GIF 만들기"를 누르고 "다운로드"합니다.</li>
+          <li>프레임을 낱장 이미지로 쓰려면 "프레임 PNG 추출"을 누릅니다. 여러 장이면 ZIP 한 개로 저장됩니다.</li>
+        </ol>
+
+        <h2>자주 묻는 것</h2>
+        <dl>
+          <dt>파일이 서버로 올라가나요?</dt>
+          <dd>아닙니다. 프레임을 읽고 다시 인코딩하는 과정이 모두 브라우저 안에서 끝나고 파일은 어디로도 전송되지 않습니다. 외부에서 내려받는 처리 엔진도 없어서, 페이지를 한 번 연 뒤에는 인터넷을 끊어도 그대로 동작합니다.</dd>
+
+          <dt>어떤 파일을 넣을 수 있나요?</dt>
+          <dd>GIF·PNG·JPG·WebP 이미지와 MP4·WebM·MOV·MKV 동영상을 넣을 수 있습니다. 애니메이션 GIF와 애니메이션 WebP는 프레임 단위로 읽어 들입니다. 동영상은 지정한 구간만 초당 프레임 수에 맞춰 뽑아 프레임으로 만듭니다.</dd>
+
+          <dt>GIF 용량을 줄이려면 어떻게 하나요?</dt>
+          <dd>출력 크기를 줄이는 것이 가장 효과가 큽니다. 원본이 약 1000×1000픽셀보다 크면 축소를 제안하는 안내가 뜹니다. 색상 수를 256에서 64로 낮추거나, 같은 편집을 GIF 대신 WebP·MP4로 내보내면 더 작아집니다.</dd>
+
+          <dt>MP4로 내보내면 투명한 부분은 어떻게 되나요?</dt>
+          <dd>MP4는 투명을 지원하지 않아 투명한 부분이 흰색으로 채워집니다. 투명을 살려야 한다면 GIF나 WebP로 내보내세요. GIF와 WebP는 투명 픽셀을 그대로 유지합니다.</dd>
+
+          <dt>무료인가요? 워터마크나 용량 제한이 있나요?</dt>
+          <dd>무료이고 회원가입·로그인·워터마크·광고가 없습니다. 업로드를 하지 않으므로 서버 쪽 용량 제한도 없습니다. 다만 처리는 기기 메모리 안에서 이뤄지므로 프레임 수가 아주 많으면 느려질 수 있습니다.</dd>
+
+          <dt>어떤 브라우저가 필요한가요?</dt>
+          <dd>Chrome·Edge 같은 크로미엄 계열 최신 브라우저를 씁니다. GIF 디코딩과 인코딩에 브라우저 자체 기능을 쓰기 때문에, 이를 지원하지 않는 브라우저에서는 파일을 읽지 못한다는 안내가 뜹니다.</dd>
+        </dl>
+
+        <h2>함께 쓰는 도구</h2>
+        <p>움짤로 쓸 동영상을 먼저 필요한 길이로 자르거나 용량을 줄이려면 <a href="/video/">동영상 자르기·압축</a>이 편하고, 재료로 넣을 사진의 형식이나 크기를 미리 맞출 때는 <a href="/image/">이미지 변환·압축</a>을 쓰면 됩니다. 완성한 움짤을 폰으로 옮길 때는 <a href="/drop/">파일 전송</a>으로 기기끼리 바로 보낼 수 있습니다.</p>
+        <p class="foot">
+          <a href="/">local-tools의 다른 도구 보기</a> · 모든 처리는 브라우저 안에서 끝나고 파일은 서버로 전송되지 않습니다.
+        </p>
+      </div>
+    </section>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

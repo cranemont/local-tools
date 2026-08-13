@@ -55,13 +55,105 @@
         ]
       }
     </script>
+    <!-- 도구 아래 설명(section#intro) 전용. 앱 CSS는 자가해제 압축을 타서 늦게 오므로
+         여기서 독립적으로 선다. 값은 packages/theme/tokens.css와 같다.
+         자가해제 플러그인은 rel="stylesheet"가 붙은 <style>만 압축하므로 이건 평문으로 남는다. -->
+    <style>
+      :root { color-scheme: light dark; }
+      :root[data-theme="light"] { color-scheme: light; }
+      :root[data-theme="dark"] { color-scheme: dark; }
+      #intro {
+        --i-text: light-dark(oklch(0.235 0.015 250), oklch(0.93 0.006 240));
+        --i-muted: light-dark(oklch(0.51 0.022 248), oklch(0.685 0.018 245));
+        --i-border: light-dark(oklch(0.917 0.008 240), oklch(0.31 0.014 248));
+        --i-link: light-dark(oklch(0.474 0.138 243), oklch(0.78 0.11 240));
+        background: light-dark(oklch(0.978 0.003 240), oklch(0.172 0.008 250));
+        border-top: 1px solid var(--i-border);
+        color: var(--i-text);
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+          "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+        font-size: 15px;
+        line-height: 1.75;
+        word-break: keep-all;
+      }
+      #intro .intro-wrap { max-width: 720px; margin: 0 auto; padding: 56px 24px 80px; }
+      #intro h1 { margin: 0 0 14px; font-size: 26px; line-height: 1.35; letter-spacing: -0.02em; text-wrap: balance; }
+      #intro h2 { margin: 36px 0 10px; font-size: 17px; letter-spacing: -0.01em; }
+      #intro p { margin: 0 0 12px; }
+      #intro .lead { color: var(--i-muted); }
+      #intro ul, #intro ol { margin: 0 0 12px; padding-left: 20px; }
+      #intro li { margin: 0 0 5px; }
+      #intro li::marker { color: var(--i-muted); }
+      #intro dt { margin-top: 16px; font-weight: 700; }
+      #intro dd { margin: 4px 0 0; color: var(--i-muted); }
+      #intro a { color: var(--i-link); text-underline-offset: 2px; }
+      #intro a:focus-visible { outline: 2px solid var(--i-link); outline-offset: 2px; border-radius: 3px; }
+      #intro .foot { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--i-border); font-size: 13px; color: var(--i-muted); }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- min-height를 인라인으로 박아 앱이 뜨기 전에도 첫 화면 높이를 잡아 둔다.
+         앱 CSS는 늦게 오므로, 이게 없으면 아래 #intro가 위로 올라왔다
+         밀려 내려가며 레이아웃이 튄다. -->
+    <div id="app" style="min-height:100dvh"></div>
     <noscript>
       실험장은 JavaScript가 필요합니다 —
       <a href="https://tools.cranemont.com/">local-tools</a>
     </noscript>
+    <!-- 도구 아래 설명. 자가해제 압축을 타지 않는 평문이라 JS를 실행하지 않는
+         크롤러도 읽는다. 문구를 고치면 i18n.ts의 실제 동작과 어긋나지 않는지 볼 것. -->
+    <section id="intro">
+      <div class="intro-wrap">
+        <h1>한국어 임베딩 모델 비교 — 브라우저에서 직접 돌려 보고 고르기</h1>
+        <p class="lead">실험장은 한국어 임베딩 모델 여러 개를 같은 문장에 돌려 결과가 어떻게 갈리는지 보는 곳입니다. 모델은 브라우저 안에서 실행되고, 넣은 문장과 계산 결과는 어디로도 전송되지 않습니다. 파이썬 환경을 만들거나 서버를 띄우지 않고 탭 하나에서 끝납니다.</p>
+
+        <h2>이런 때 씁니다</h2>
+        <ul>
+          <li>RAG나 검색에 쓸 임베딩 모델을 고를 때 — 리더보드 점수 대신 내 문장으로 직접 재고 싶을 때</li>
+          <li>존댓말과 반말, 띄어쓰기가 흔들린 문장, 오타를 같은 뜻으로 묶는지 확인할 때</li>
+          <li>768차원을 128까지 잘라(Matryoshka) 용량을 줄이면 검색 결과가 언제 무너지는지 볼 때</li>
+          <li>q4·q8·fp32 양자화를 바꿔 가며 내려받는 용량과 정확도 중 어디까지 포기할 수 있는지 잴 때</li>
+          <li>모델 카드가 요구하는 프리픽스가 실제로 효과가 있는지 켜고 끄며 비교할 때</li>
+          <li>임베딩이 글자만 맞춰 보는 BM25보다 나은지, 수백 MB를 받을 값을 하는지 따질 때</li>
+        </ul>
+
+        <h2>쓰는 방법</h2>
+        <ol>
+          <li>코퍼스에서 내장된 '한국어 프로브'를 그대로 쓰거나 '직접 넣기'에 비교할 문장을 한 줄에 하나씩 붙여넣습니다.</li>
+          <li>모델·정밀도·차원·프리픽스를 고르고 '임베딩'을 누릅니다 — 첫 실행은 모델을 통째로 내려받습니다.</li>
+          <li>설정을 바꿔 한 번 더 돌린 뒤, 비교의 A·B 칸에 두 실행을 놓습니다.</li>
+          <li>유사도 행렬·순위 이동·이웃 목록·판정·비용–품질 탭에서 무엇이 달라졌는지 봅니다.</li>
+          <li>'저장소'에서 받아 둔 모델의 용량을 확인하고 필요 없는 것을 지웁니다.</li>
+        </ol>
+
+        <h2>자주 묻는 것</h2>
+        <dl>
+          <dt>넣은 문장이 서버로 전송되나요?</dt>
+          <dd>아닙니다. 문장과 계산 결과는 이 탭 안에만 있습니다. 밖으로 나가는 요청은 모델 가중치와 실행기(wasm)를 내려받는 것뿐이고, 접속하는 곳은 huggingface.co와 cdn.jsdelivr.net 두 곳입니다.</dd>
+
+          <dt>오프라인에서도 쓸 수 있나요?</dt>
+          <dd>이 앱만 예외입니다. 모델을 실행 시점에 외부에서 내려받기 때문에 처음에는 인터넷이 필요합니다. 한 번 받아 둔 모델은 브라우저에 남아 다음부터는 오프라인에서도 열립니다.</dd>
+
+          <dt>어떤 모델을 비교할 수 있나요?</dt>
+          <dd>EmbeddingGemma 300M, multilingual-e5-small, BGE-M3, Qwen3-Embedding 0.6B 네 가지와, 내려받을 것이 없는 기준선 BM25입니다. 모델마다 정밀도를 골라 용량과 정확도를 견줄 수 있고, 한국어 IR 리더보드 점수도 함께 표시됩니다.</dd>
+
+          <dt>느리거나 무겁지 않나요?</dt>
+          <dd>WebGPU를 쓸 수 있으면 그쪽으로, 없으면 WASM으로 돌아가는데 WASM은 훨씬 느립니다. 내려받는 용량은 모델과 정밀도에 따라 118MB에서 2.4GB까지이고, 한 번에 400문장까지 다룹니다.</dd>
+
+          <dt>정확도 숫자를 그대로 믿어도 되나요?</dt>
+          <dd>짝짓기 정확도에는 Wilson 신뢰구간이 함께 붙고, 두 설정을 비교할 때는 McNemar 검정으로 구별 가능한 차이인지 알려 줍니다. 40문장에서 100%와 97.5%는 구별되지 않습니다.</dd>
+
+          <dt>설치나 회원가입이 필요한가요?</dt>
+          <dd>필요 없습니다. 무료이고 광고와 추적이 없습니다. Chrome이나 Edge에서 페이지를 열면 바로 씁니다.</dd>
+        </dl>
+
+        <h2>함께 쓰는 도구</h2>
+        <p>임베딩할 문장을 다듬거나 JSON·YAML을 정리하는 데는 <a href="/dev/">개발자 유틸</a>의 변환·정규식 도구를 함께 씁니다. 이 실험장이 저장소 안에서 어떻게 만들어졌는지는 <a href="/stack/">기술 지도</a>에서 볼 수 있고, 문서 뭉치를 다루기 전에 파일을 정리해야 한다면 <a href="/pdf/">PDF 합치기</a>가 있습니다.</p>
+        <p class="foot">
+          <a href="/">local-tools의 다른 도구 보기</a> · 모델은 실행할 때 내려받고, 넣은 문장은 서버로 전송되지 않습니다.
+        </p>
+      </div>
+    </section>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
