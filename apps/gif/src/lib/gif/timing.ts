@@ -16,16 +16,32 @@ export function formatMinDelayMs(fmt: ExportFormat): number {
   return fmt === "webp" ? WEBP_MIN_DURATION_MS : MP4_MIN_DURATION_MS;
 }
 
+/** 뜻이 있는 배속은 양수뿐이다 — 0·음수·NaN은 1배속으로 본다.
+ *  음수를 그대로 나누면 raw가 통째로 음수가 되어 모든 프레임이 하한에 걸린 것처럼 보인다. */
+function usableSpeed(speed: number): number {
+  return Number.isFinite(speed) && speed > 0 ? speed : 1;
+}
+
+/** 배속까지 적용한 날것의 딜레이(ms). 유한한 수가 아니면 하한 아래로 본다 —
+ *  NaN·Infinity는 Math.max(20, NaN) = NaN으로 하한을 그냥 통과해
+ *  gifenc의 writeUInt16이나 WebP ANMF duration에 그대로 실린다. */
+function rawDelayMs(delayMs: number, speed: number): number {
+  if (!Number.isFinite(delayMs)) return Number.NEGATIVE_INFINITY;
+  return delayMs / usableSpeed(speed);
+}
+
 /** 배속을 적용하고 형식의 하한·눈금에 맞춘 실제 딜레이(ms). */
 export function effectiveDelayMs(
   delayMs: number,
   speed: number,
   fmt: ExportFormat,
 ): number {
-  const raw = delayMs / (speed || 1);
+  const min = formatMinDelayMs(fmt);
+  const raw = rawDelayMs(delayMs, speed);
+  if (raw < min) return min;
   // GIF는 10ms 눈금에 스냅된다. 나머지는 ms 단위 그대로.
   const snapped = fmt === "gif" ? Math.round(raw / 10) * 10 : Math.round(raw);
-  return Math.max(formatMinDelayMs(fmt), snapped);
+  return Math.max(min, snapped);
 }
 
 /** 형식의 하한에 걸려 결과가 느려지는 프레임인가 (화면 경고용).
@@ -35,5 +51,5 @@ export function isDelayFloored(
   speed: number,
   fmt: ExportFormat,
 ): boolean {
-  return delayMs / (speed || 1) < formatMinDelayMs(fmt);
+  return rawDelayMs(delayMs, speed) < formatMinDelayMs(fmt);
 }

@@ -218,6 +218,90 @@ describe("하한 판정(isDelayFloored)은 눈금 스냅과 하한을 구분한�
   });
 });
 
+describe("숫자가 아닌 값이 들어와도 형식이 담을 수 있는 값만 나간다", () => {
+  // 딜레이 칸을 비우면 Number("")이 아니라 Number(undefined)·Number("abc")로 NaN이 온다.
+  // NaN은 Math.max(20, NaN) = NaN이라 하한을 그대로 통과해 gifenc의 writeUInt16과
+  // WebP ANMF duration으로 들어간다 — 파일이 통째로 망가지는 자리다.
+  it("딜레이가 NaN이면 형식의 하한이 나간다", () => {
+    expect(effectiveDelayMs(Number.NaN, 1, "gif")).toBe(20);
+    expect(effectiveDelayMs(Number.NaN, 1, "webp")).toBe(10);
+    expect(effectiveDelayMs(Number.NaN, 1, "mp4")).toBe(10);
+  });
+
+  it("딜레이가 NaN이면 배속이 얼마든 하한이 나간다", () => {
+    for (const speed of [0.25, 1, 4]) {
+      expect(effectiveDelayMs(Number.NaN, speed, "gif")).toBe(20);
+    }
+  });
+
+  it("NaN 딜레이는 '입력한 값이 안 쓰인다'이므로 하한에 걸린 것으로 센다", () => {
+    for (const fmt of FORMATS) {
+      expect(isDelayFloored(Number.NaN, 1, fmt)).toBe(true);
+    }
+  });
+
+  it("Infinity 딜레이도 파일에 적을 수 없으므로 하한으로 떨어진다", () => {
+    expect(effectiveDelayMs(Number.POSITIVE_INFINITY, 1, "gif")).toBe(20);
+    expect(effectiveDelayMs(Number.NEGATIVE_INFINITY, 1, "webp")).toBe(10);
+    expect(Number.isFinite(effectiveDelayMs(Number.POSITIVE_INFINITY, 1, "mp4"))).toBe(true);
+  });
+
+  it("어떤 이상한 입력에도 결과는 유한한 정수다", () => {
+    const weird = [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+    for (const fmt of FORMATS) {
+      for (const ms of weird) {
+        for (const speed of [Number.NaN, 0, -2, 1, 4]) {
+          const out = effectiveDelayMs(ms, speed, fmt);
+          expect(Number.isInteger(out)).toBe(true);
+          expect(out).toBeGreaterThanOrEqual(formatMinDelayMs(fmt));
+        }
+      }
+    }
+  });
+});
+
+describe("음수 배속은 배속이 아니다", () => {
+  // -2배속은 뒤로 재생이 아니다(그런 설정이 없다). 그대로 나누면 raw가 음수가 되어
+  // 모든 프레임이 하한 아래로 내려가고, 화면 전체가 거짓 경고로 덮인다.
+  it("음수 배속에서 100ms 프레임은 하한에 걸리지 않는다", () => {
+    expect(isDelayFloored(100, -2, "gif")).toBe(false);
+    expect(isDelayFloored(100, -1, "webp")).toBe(false);
+  });
+
+  it("음수 배속은 1배속으로 떨어진다 — 딜레이가 그대로 나온다", () => {
+    expect(effectiveDelayMs(100, -2, "gif")).toBe(100);
+    expect(effectiveDelayMs(33, -0.5, "webp")).toBe(33);
+  });
+
+  it("음수 배속이어도 진짜 하한 미만인 프레임은 그대로 걸린다", () => {
+    expect(isDelayFloored(5, -2, "gif")).toBe(true);
+    expect(effectiveDelayMs(5, -2, "gif")).toBe(20);
+  });
+
+  it("0·NaN·음수는 전부 1배속과 같은 답을 준다", () => {
+    for (const fmt of FORMATS) {
+      const base = effectiveDelayMs(120, 1, fmt);
+      for (const speed of [0, -0, Number.NaN, -1, -3.5]) {
+        expect(effectiveDelayMs(120, speed, fmt)).toBe(base);
+        expect(isDelayFloored(120, speed, fmt)).toBe(false);
+      }
+    }
+  });
+
+  it("걸렸다고 판정하면 결과는 하한 그 값이다 — 이상한 배속에서도", () => {
+    for (const fmt of FORMATS) {
+      const min = formatMinDelayMs(fmt);
+      for (const speed of [-5, -1, 0, Number.NaN, 0.5, 2]) {
+        for (const ms of [0, 5, 19, 20, 100, Number.NaN]) {
+          if (isDelayFloored(ms, speed, fmt)) {
+            expect(effectiveDelayMs(ms, speed, fmt)).toBe(min);
+          }
+        }
+      }
+    }
+  });
+});
+
 describe("미리보기와 인코더가 같은 답을 받는다 (이 파일이 존재하는 이유)", () => {
   it("같은 입력을 몇 번을 물어도 같은 답이다 — 숨은 상태가 없다", () => {
     for (const fmt of FORMATS) {

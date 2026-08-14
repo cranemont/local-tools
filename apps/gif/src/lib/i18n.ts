@@ -40,6 +40,7 @@ export const t = {
 
   frames: {
     activate: "이 프레임 보기",
+    move: "순서 바꾸기",
     select: "선택/해제",
     delete: "삭제",
     duplicate: "복제",
@@ -56,6 +57,10 @@ export const t = {
   panel: {
     speed: "속도",
     speedChip: (x: number) => `${x}×`,
+    /** 지금 배속·형식에서 입력한 딜레이가 그대로 안 나가는 프레임이 있을 때만 뜬다. */
+    delayFloor: (ms: number) => `${ms}ms 하한`,
+    delayFloorHint: (n: number, ms: number, fmt: string) =>
+      `${fmt}는 ${ms}ms 미만을 담지 못해 ${n}개 프레임이 ${ms}ms로 저장돼요`,
     delayLabel: "프레임 딜레이(ms)",
     delayApplySelected: "선택에 적용",
     delayApplyAll: "전체에 적용",
@@ -127,6 +132,7 @@ export const t = {
     play: "Space",
     step: "← →",
     move: "Alt + ← →",
+    range: "Shift + 클릭",
     del: "Delete",
     selectAll: "Ctrl+A",
     undo: "Ctrl+Z",

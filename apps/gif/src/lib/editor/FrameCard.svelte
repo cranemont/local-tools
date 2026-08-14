@@ -31,7 +31,7 @@
     type="button"
     class="thumb"
     onclick={activate}
-    title={t.frames.activate}
+    title="{t.frames.activate} · {t.frames.move} ({t.keys.move})"
   >
     <img src={frame.thumb} alt={`#${index + 1}`} draggable="false" />
   </button>
@@ -40,7 +40,7 @@
     type="button"
     class="check"
     class:on={frame.selected}
-    title={t.frames.select}
+    title="{t.frames.select} · {t.panel.rangeSelect} ({t.keys.range})"
     aria-pressed={frame.selected}
     onclick={(e) => editor.toggleSelect(frame.id, e.shiftKey)}
   >

@@ -14,6 +14,7 @@
     type DelayMode,
     type PresetId,
   } from "./state.svelte";
+  import { formatMinDelayMs, isDelayFloored } from "../gif/timing";
   import { encodeGif, isAbortError, type RenderPlan } from "../gif/encode";
   import { encodeWebp } from "../gif/webp";
   import { encodeMp4 } from "../gif/mp4";
@@ -55,6 +56,14 @@
 
   const currentFrame = $derived(
     editor.frames[Math.min(editor.current, Math.max(0, editor.frames.length - 1))],
+  );
+
+  // 지금 배속·형식으로는 입력한 딜레이가 그대로 나가지 않는 프레임 — 있을 때만 배지를 띄운다.
+  const minDelay = $derived(formatMinDelayMs(editor.exportFormat));
+  const flooredCount = $derived(
+    editor.frames.filter((f) =>
+      isDelayFloored(f.delayMs, editor.speed, editor.exportFormat),
+    ).length,
   );
   // 덮어쓰기 값은 지금 보고 있는 프레임의 실제 딜레이를 따라간다(가감·비율은 그대로 둔다).
   $effect(() => {
@@ -262,6 +271,14 @@
           {t.panel.speedChip(x)}
         </button>
       {/each}
+      {#if flooredCount > 0}
+        <span
+          class="badge"
+          title={t.panel.delayFloorHint(flooredCount, minDelay, fmtLabel)}
+        >
+          {t.panel.delayFloor(minDelay)}
+        </span>
+      {/if}
     </div>
     <p class="sub">{t.panel.delayLabel}</p>
     <div class="chips" role="group" aria-label={t.panel.delayLabel}>
@@ -683,6 +700,21 @@
     background: var(--accent-weak);
     border-color: color-mix(in srgb, var(--accent) 40%, transparent);
     color: var(--accent-ink);
+  }
+
+  /* 조건이 참일 때만 붙는 경고 배지 — 컨트롤 옆자리를 쓰고 문단으로 자라지 않는다. */
+  .badge {
+    align-self: center;
+    padding: var(--space-2xs) var(--space-sm);
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: help;
   }
 
   .lbl {
