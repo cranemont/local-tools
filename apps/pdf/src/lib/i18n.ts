@@ -92,6 +92,11 @@ export const t = {
   errors: {
     rangeInvalid: "쪽 범위를 읽을 수 없어요",
     rangeNoPages: "대상 쪽에 해당하는 쪽이 없어요",
+    // 입력란 옆에 붙는 짧은 배지 — 자세한 사정은 위 두 문구를 title에 넣는다.
+    rangeBadge: {
+      syntax: "표기 오류",
+      noPages: "고를 쪽 없음",
+    },
     encryptedSource: (name: string) =>
       `암호가 걸려 있어 내보낼 수 없어요 — 암호 탭에서 먼저 풀어 주세요: ${name}`,
   },

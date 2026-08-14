@@ -1,7 +1,7 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { isPasswordException, PdfPasswordError } from "./engine";
 import { pdfjsLib } from "./pdfjs";
-import { parseRange } from "./range";
+import { RangeSpecError, resolveRange } from "./range";
 
 export interface RasterPage {
   id: string;
@@ -69,9 +69,19 @@ export async function rasterizePdf(
   const opaque = options.format === "jpeg";
 
   const spec = options.pageSpec?.trim();
-  const targets = spec
-    ? parseRange(spec, doc.numPages).indices
-    : Array.from({ length: doc.numPages }, (_, i) => i);
+  let targets: number[];
+  if (spec) {
+    // 편집 탭과 같은 규칙(resolveRange) — 조각 하나라도 문서 밖이면 전체를 거부한다.
+    // 예전엔 invalid를 버리고 indices만 읽어서, 9쪽 문서의 "12-"가 말없이 0장이 됐다.
+    const { indices, problem } = resolveRange(spec, doc.numPages);
+    if (problem) {
+      await loadingTask.destroy();
+      throw new RangeSpecError(problem, name);
+    }
+    targets = indices;
+  } else {
+    targets = Array.from({ length: doc.numPages }, (_, i) => i);
+  }
 
   const out: RasterPage[] = [];
 

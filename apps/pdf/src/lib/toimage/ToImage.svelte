@@ -2,7 +2,11 @@
   import Icon from "../Icon.svelte";
   import { t } from "../i18n";
   import { PdfPasswordError } from "../pdf/engine";
-  import { isRangeSyntaxValid } from "../pdf/range";
+  import {
+    isRangeSyntaxValid,
+    RangeSpecError,
+    type RangeProblem,
+  } from "../pdf/range";
   import {
     formatExt,
     rasterizePdf,
@@ -32,6 +36,11 @@
   let dragOver = $state(false);
   let fileInput: HTMLInputElement;
   let zipName = $state("images");
+  /**
+   * 대상 쪽 표기를 쓸 수 없는 이유. 쪽 수는 문서를 열어야 알 수 있어서 변환 중에도 난다.
+   * 입력란 옆 배지로만 알린다 — 상시 노출되는 해설이 아니라 조건부 경고다.
+   */
+  let rangeProblem = $state<RangeProblem | null>(null);
 
   const formats: { label: string; value: RasterFormat }[] = [
     { label: "PNG", value: "png" },
@@ -42,6 +51,12 @@
   const dpis = [108, 144, 216];
 
   const ext = $derived(formatExt(format));
+  const rangeBadge = $derived(
+    rangeProblem ? t.errors.rangeBadge[rangeProblem] : "",
+  );
+  const rangeDetail = $derived(
+    rangeProblem === "noPages" ? t.errors.rangeNoPages : t.errors.rangeInvalid,
+  );
 
   function revokeAll() {
     for (const p of pages) URL.revokeObjectURL(p.url);
@@ -52,17 +67,23 @@
     pages = [];
     error = "";
     status = "";
+    rangeProblem = null;
     busy = true;
+    // 화면에 오르기 전까지는 이 목록만이 object URL의 주인이다 — 중간에 엎어지면
+    // 여기서 거둬야 한다. 파일 여러 개를 한 번에 변환할 때 뒤쪽 문서가 대상 쪽을
+    // 거부하면 앞쪽 문서의 미리보기가 통째로 버려지는데, 그때 새는 자리였다.
+    const all: RasterPage[] = [];
     try {
-      const all: RasterPage[] = [];
       for (const doc of docs) {
         all.push(...(await renderDoc(doc)));
       }
       pages = all;
-      // 대상 쪽이 문서 밖만 가리키면 결과가 0장이다 — 조용히 비우지 않고 말한다.
-      if (!error && docs.length > 0 && all.length === 0) error = t.errors.rangeNoPages;
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      for (const p of all) URL.revokeObjectURL(p.url);
+      // 대상 쪽 표기가 이 문서에 안 맞으면 한 장도 내지 않는다(편집 탭과 같은 규칙).
+      // 이유는 입력란 옆 배지로 — 다른 실패와 섞이면 어디를 고쳐야 하는지 안 보인다.
+      if (err instanceof RangeSpecError) rangeProblem = err.problem;
+      else error = err instanceof Error ? err.message : String(err);
     } finally {
       busy = false;
       busyMsg = "";
@@ -149,11 +170,15 @@
   /** 대상 쪽 표기가 바뀌었을 때(Enter·포커스 아웃) 다시 변환한다. */
   function applyPageSpec() {
     const spec = pageSpec.trim();
+    // 먼저 지운다 — 표기가 틀려 여기서 돌아서도 앞서 뜬 다른 오류가 남아 있으면
+    // 배지와 배너가 서로 다른 실패를 가리켜 어디를 고쳐야 하는지 흐려진다.
+    error = "";
+    // 여기서는 쪽 수를 모른다 — 문법만 먼저 걸러 내고, 문서 밖인지는 변환하며 가린다.
     if (spec && !isRangeSyntaxValid(spec)) {
-      error = t.errors.rangeInvalid;
+      rangeProblem = "syntax";
       return;
     }
-    error = "";
+    rangeProblem = null;
     if (docs.length) rasterizeAll();
   }
 
@@ -194,6 +219,7 @@
     docCount = 0;
     error = "";
     status = "";
+    rangeProblem = null;
   }
 </script>
 
@@ -263,6 +289,7 @@
         bind:value={pageSpec}
         placeholder={t.toImg.pagesPlaceholder}
         aria-labelledby="toimg-pages"
+        aria-invalid={rangeProblem !== null}
         spellcheck="false"
         autocomplete="off"
         onchange={applyPageSpec}
@@ -270,6 +297,9 @@
           if (e.key === "Enter") applyPageSpec();
         }}
       />
+      {#if rangeProblem}
+        <span class="badge" role="alert" title={rangeDetail}>{rangeBadge}</span>
+      {/if}
 
       <span class="spacer"></span>
 
@@ -422,6 +452,21 @@
   .range:focus {
     outline: 2px solid var(--focus);
     outline-offset: 1px;
+  }
+  .range[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+  /* 조건부 경고 — 입력란 옆에 붙고 줄바꿈하지 않는다(자세한 사정은 title). */
+  .badge {
+    flex: none;
+    white-space: nowrap;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--danger);
+    border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2xs) var(--space-xs);
   }
   .status {
     font-size: var(--text-md);

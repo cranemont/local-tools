@@ -4,7 +4,7 @@
   import PageCard from "./PageCard.svelte";
   import { loadFile, loadPdf, PdfPasswordError, type LoadResult } from "../pdf/engine";
   import { buildPdf, buildPdfParts } from "../pdf/exporter";
-  import { chunkEvery, parseRange } from "../pdf/range";
+  import { chunkEvery, resolveRange, type RangeProblem } from "../pdf/range";
   import { saveBytes, saveZip } from "../pdf/save";
   import { unlockPdf } from "../pdf/unlock.svelte";
   import type { PageItem, Rotation, SourceDoc } from "../pdf/types";
@@ -156,10 +156,14 @@
   function applyPicked(picked: Set<number>) {
     pages = pages.map((p, i) => ({ ...p, selected: picked.has(i) }));
   }
+  /** 이미지 탭과 같은 이유·같은 문구를 쓴다(판정은 resolveRange 한 곳). */
+  function rangeMessage(problem: RangeProblem): string {
+    return problem === "noPages" ? t.errors.rangeNoPages : t.errors.rangeInvalid;
+  }
   function applyRange() {
-    const { indices, invalid } = parseRange(rangeSpec, pages.length);
-    if (invalid || indices.length === 0) {
-      rangeError = t.errors.rangeInvalid;
+    const { indices, problem } = resolveRange(rangeSpec, pages.length);
+    if (problem) {
+      rangeError = rangeMessage(problem);
       return;
     }
     rangeError = "";
@@ -176,26 +180,28 @@
   }
 
   // ── 나누기 ───────────────────────────────────────
-  /** 규칙대로 페이지를 묶는다. 읽을 수 없는 범위면 null. */
-  function splitGroups(): PageItem[][] | null {
+  /** 규칙대로 페이지를 묶는다. 쓸 수 없는 범위면 그 이유를 돌려준다. */
+  function splitGroups(): PageItem[][] | RangeProblem {
     if (splitMode === "ranges") {
-      const { groups, invalid } = parseRange(rangeSpec, pages.length);
-      if (invalid || groups.length === 0) return null;
+      const { groups, problem } = resolveRange(rangeSpec, pages.length);
+      if (problem) return problem;
       return groups.map((g) => g.map((i) => pages[i]));
     }
     const all = pages.map((_, i) => i);
     const size = splitMode === "single" ? 1 : splitSize;
-    return chunkEvery(all, size)
+    const chunks = chunkEvery(all, size)
       .filter((g) => g.length > 0)
       .map((g) => g.map((i) => pages[i]));
+    return chunks.length ? chunks : "noPages";
   }
 
   async function splitPdf() {
-    const groups = splitGroups();
-    if (!groups || groups.length === 0) {
-      rangeError = t.errors.rangeInvalid;
+    const result = splitGroups();
+    if (!Array.isArray(result)) {
+      rangeError = rangeMessage(result);
       return;
     }
+    const groups = result;
     rangeError = "";
     errorMsg = "";
     statusMsg = "";

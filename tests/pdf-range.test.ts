@@ -3,6 +3,8 @@ import {
   parseRange,
   isRangeSyntaxValid,
   chunkEvery,
+  resolveRange,
+  RangeSpecError,
 } from "../apps/pdf/src/lib/pdf/range";
 
 /**
@@ -365,5 +367,125 @@ describe("N쪽마다 끊기(chunkEvery)", () => {
 
   it("주어진 순서를 정렬하지 않는다 — 넘긴 순서가 곧 파일 순서다", () => {
     expect(chunkEvery([5, 0, 3], 2)).toEqual([[5, 0], [3]]);
+  });
+
+  it("★ size가 무한대면 '끊지 않는다' — 전부 한 묶음이다", () => {
+    // 회귀: Number.isFinite(Infinity)가 false라 '읽을 수 없는 값'과 같은 갈래로 떨어져
+    // 낱장이 됐다. 뜻이 정반대다 — 무한히 크게 끊으면 자를 자리가 없다.
+    expect(chunkEvery([0, 1, 2, 3], Infinity)).toEqual([[0, 1, 2, 3]]);
+  });
+
+  it("빈 목록은 무한대로 끊어도 빈 결과다 — 빈 묶음 하나를 만들지 않는다", () => {
+    expect(chunkEvery([], Infinity)).toEqual([]);
+  });
+
+  it("음의 무한대는 크기가 아니라 읽을 수 없는 값이다 — 낱장으로 물러난다", () => {
+    expect(chunkEvery([0, 1, 2], -Infinity)).toEqual([[0], [1], [2]]);
+  });
+});
+
+describe("앞자리 0 — 낱개와 범위가 같은 규칙이다", () => {
+  it("★ '007'은 무효다 — 범위 양끝인 '007-9'가 이미 무효인데 낱개만 통과하면 이유를 알 수 없다", () => {
+    expect(parseRange("007", 10).invalid).toBe(true);
+    expect(parseRange("007", 10).indices).toEqual([]);
+    expect(isRangeSyntaxValid("007")).toBe(false);
+  });
+
+  it("낱개·범위 양끝이 같은 이유로 거절된다 — 0으로 시작하는 숫자는 쪽 번호가 아니다", () => {
+    for (const junk of ["0", "00", "007", "007-9", "9-007", "0-5"]) {
+      expect(parseRange(junk, 10).invalid, junk).toBe(true);
+      expect(parseRange(junk, 10).indices, junk).toEqual([]);
+      expect(isRangeSyntaxValid(junk), junk).toBe(false);
+    }
+  });
+
+  it("앞자리 0이 없는 숫자는 그대로 읽는다 — 엄격해진 규칙이 정상 표기를 잡아먹지 않는다", () => {
+    expect(parseRange("7", 10).indices).toEqual([6]);
+    expect(parseRange("10", 10).indices).toEqual([9]);
+    expect(parseRange("1-10", 10).indices.length).toBe(10);
+  });
+});
+
+describe("★ 두 탭이 같은 규칙을 쓴다(resolveRange)", () => {
+  /**
+   * parseRange는 "읽힌 조각"과 "invalid 깃발"을 함께 돌려주고 판단을 부르는 쪽에 맡긴다.
+   * 그 판단이 탭마다 갈리면 같은 입력이 편집 탭에서는 오류, 이미지 탭에서는 0장이 된다.
+   * 화면이 쓰는 규칙은 여기 한 곳에만 있다 — 조각 하나라도 못 읽으면 전부 거부.
+   */
+  it("문서 밖만 가리킨 조각이 있으면 아무것도 내주지 않는다 — 9쪽 문서의 '12-'", () => {
+    const r = resolveRange("12-", 9);
+    expect(r.problem).toBe("syntax");
+    expect(r.groups).toEqual([]);
+    expect(r.indices).toEqual([]);
+  });
+
+  it("한 조각만 틀려도 살아남은 조각까지 버린다 — 반쪽 결과는 화면에서 구분할 수 없다", () => {
+    // parseRange 자체는 살아남은 조각을 그대로 돌려준다(부르는 쪽 몫).
+    expect(parseRange("1, 50, 3", 9).indices).toEqual([0, 2]);
+    const r = resolveRange("1, 50, 3", 9);
+    expect(r.problem).toBe("syntax");
+    expect(r.indices).toEqual([]);
+  });
+
+  it("읽히긴 했으나 고를 쪽이 없는 경우는 문법 오류와 다른 문제다 — 안내 문구가 갈린다", () => {
+    expect(resolveRange("", 9).problem).toBe("noPages");
+    expect(resolveRange("  , ; ", 9).problem).toBe("noPages");
+  });
+
+  it("정상 표기는 parseRange 결과를 그대로 통과시킨다 — groups 순서도 보존한다", () => {
+    const r = resolveRange("8, 1-2", 10);
+    expect(r.problem).toBe(null);
+    expect(r.groups).toEqual([[7], [0, 1]]);
+    expect(r.indices).toEqual([0, 1, 7]);
+  });
+
+  it("문서 경계에 걸쳐 잘린 것은 문제가 아니다 — '8-99'는 8쪽부터 끝까지다", () => {
+    const r = resolveRange("8-99", 10);
+    expect(r.problem).toBe(null);
+    expect(r.indices).toEqual([7, 8, 9]);
+  });
+
+  it("문제가 있으면 언제나 빈 결과다 — 부르는 쪽이 problem을 잊어도 반쪽 렌더가 안 나간다", () => {
+    for (const spec of ["12-", "50", "abc", "1, ?", "0", ""]) {
+      const r = resolveRange(spec, 9);
+      if (r.problem) {
+        expect(r.groups, spec).toEqual([]);
+        expect(r.indices, spec).toEqual([]);
+      }
+    }
+  });
+
+  it("같은 표기가 문서마다 갈린다 — 여러 파일을 한 번에 변환하면 짧은 쪽이 전체를 거부한다", () => {
+    // 이미지 탭은 문서를 하나씩 재고, 한 문서라도 거부하면 한 장도 내지 않는다.
+    // 엄격한 쪽으로 통일한 대가다 — 여기 적어 두어야 나중에 우연으로 읽히지 않는다.
+    expect(resolveRange("5", 10).indices).toEqual([4]);
+    expect(resolveRange("5", 3).problem).toBe("syntax");
+  });
+
+  it("문법 검사가 거절한 표기는 resolveRange도 거절한다 — 두 관문이 어긋나면 배지가 거짓말을 한다", () => {
+    // 이미지 탭은 관문이 둘이다: 입력 즉시 도는 isRangeSyntaxValid(쪽 수를 모른다)와
+    // 변환하며 도는 resolveRange(쪽 수를 안다). 앞이 통과시킨 것을 뒤가 다른 이유로
+    // 거절하는 것은 정상이지만(문서 밖), 앞이 거절한 것을 뒤가 통과시키면 안 된다.
+    for (const junk of ["abc", "1-2-3", "1--5", "007", "1, ?", "0-5"]) {
+      expect(isRangeSyntaxValid(junk), junk).toBe(false);
+      expect(resolveRange(junk, 100).problem, junk).not.toBe(null);
+    }
+  });
+});
+
+describe("표기를 쓸 수 없다는 신호(RangeSpecError)", () => {
+  it("Error 하위형이라 catch가 다른 실패와 가려낼 수 있다 — 배지와 오류 배너가 갈린다", () => {
+    const err = new RangeSpecError("noPages", "보고서.pdf");
+    expect(err instanceof RangeSpecError).toBe(true);
+    expect(err instanceof Error).toBe(true);
+    expect(err.problem).toBe("noPages");
+    expect(err.fileName).toBe("보고서.pdf");
+  });
+
+  it("문구가 아니라 이유 코드만 들고 간다 — 사용자 문구는 i18n.ts에만 있다", () => {
+    // 배너로 새어 나가더라도 한국어 문장이 되면 안 된다. 그러면 i18n을 우회한 문구다.
+    const err = new RangeSpecError("syntax", "a.pdf");
+    expect(err.message).toBe("range:syntax");
+    expect(/[가-힣]/.test(err.message)).toBe(false);
   });
 });
