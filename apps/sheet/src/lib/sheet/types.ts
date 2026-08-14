@@ -5,6 +5,8 @@
  * (엑셀 자신이 그렇게 한다. 변환은 serial.ts.)
  */
 
+import type { SheetFilter } from "./filter";
+
 /** 엑셀과 같은 오류값. 문자열이 아니라 이 객체로 다뤄 값과 구분한다. */
 export class CellError {
   constructor(readonly code: ErrorCode) {}
@@ -116,6 +118,11 @@ export interface SheetDoc {
   frozenRows: number;
   frozenCols: number;
   hidden?: boolean;
+  /**
+   * 자동 필터 — **뷰 상태**다. 셀을 하나도 바꾸지 않고, 저장 기본값도 바꾸지 않는다
+   * (걸러진 행도 파일에는 그대로 나간다). 걸린 열이 없으면 아예 없다.
+   */
+  filter?: SheetFilter;
 }
 
 export interface WorkbookDoc {

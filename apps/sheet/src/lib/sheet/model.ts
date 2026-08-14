@@ -6,6 +6,7 @@
  */
 
 import { areaContains, cellKey, type Area } from "./a1";
+import type { FilterCell } from "./filter";
 import { formatValue } from "./numfmt";
 import { parseDateInput } from "./serial";
 import {
@@ -16,6 +17,13 @@ import {
   type Scalar,
   type SheetDoc,
 } from "./types";
+
+/** 영역이 덮는 행 번호들. */
+function areaRows(area: Area): number[] {
+  const out: number[] = [];
+  for (let r = area.top; r <= area.bottom; r++) out.push(r);
+  return out;
+}
 
 export function getCell(sheet: SheetDoc, row: number, col: number): Cell | undefined {
   return sheet.cells.get(cellKey(row, col));
@@ -52,9 +60,24 @@ export function putCell(sheet: SheetDoc, row: number, col: number, patch: Partia
   else sheet.cells.set(key, next);
 }
 
-/** 값과 수식만 지운다(서식은 남긴다) — Delete 키의 동작. */
-export function clearContents(sheet: SheetDoc, area: Area): void {
-  for (let r = area.top; r <= area.bottom; r++) {
+/**
+ * 필터가 보는 칸 하나 — 계산된 값과 화면에 보이는 글자.
+ * 필터 엔진(filter.ts)은 문서를 모르므로 여기서 건네준다.
+ */
+export function filterCellAt(sheet: SheetDoc, row: number, col: number): FilterCell {
+  const cell = sheet.cells.get(cellKey(row, col));
+  return { v: cell?.v ?? null, text: cellText(cell) };
+}
+
+/**
+ * 값과 수식만 지운다(서식은 남긴다) — Delete 키의 동작.
+ *
+ * `rows`를 주면 그 줄들만 지운다 — 필터가 걸린 표에서 **보이는 칸만** 지우려는 것이다
+ * (숨은 줄이 함께 지워지면 사용자는 무엇이 사라졌는지 볼 수도 없다).
+ */
+export function clearContents(sheet: SheetDoc, area: Area, rows?: number[]): void {
+  const lines = rows ?? areaRows(area);
+  for (const r of lines) {
     for (let c = area.left; c <= area.right; c++) {
       const key = cellKey(r, c);
       const cell = sheet.cells.get(key);
@@ -294,6 +317,58 @@ export function deleteRows(sheet: SheetDoc, at: number, count: number, shift: Re
   sheet.rows = Math.max(1, sheet.rows - count);
 }
 
+/** 참조 보정 콜백 중 "어디서 몇 줄"을 함께 받는 것 — 여러 덩어리를 한 번에 지울 때 쓴다. */
+export type RowShift = (formula: string, at: number, count: number) => string;
+
+/** 정렬된 행 번호 배열을 이어진 덩어리로 접는다. */
+function runsOf(sorted: number[]): { at: number; count: number }[] {
+  const runs: { at: number; count: number }[] = [];
+  for (const row of sorted) {
+    const last = runs[runs.length - 1];
+    if (last && last.at + last.count === row) last.count++;
+    else runs.push({ at: row, count: 1 });
+  }
+  return runs;
+}
+
+/**
+ * 흩어진 여러 줄을 한 번에 지운다 — 필터가 걸린 표에서 **보이는 행만** 지우는 통로다.
+ *
+ * 이어지지 않은 줄들이라 `deleteRows`를 여러 번 부르면 부를 때마다 셀 Map을 통째로
+ * 다시 만든다(줄 수만큼 O(n)). 여기서는 한 번만 훑고, 참조 보정만 덩어리 단위로
+ * **아래쪽부터** 적용한다 — 위쪽을 먼저 지우면 아래쪽 덩어리의 번호가 밀려 틀린다.
+ */
+export function deleteRowSet(sheet: SheetDoc, rows: number[], shift: RowShift): void {
+  const doomed = [...new Set(rows)].sort((a, b) => a - b);
+  if (doomed.length === 0) return;
+  const gone = new Set(doomed);
+  const runs = runsOf(doomed);
+
+  /** 이 줄보다 앞에서 몇 줄이 사라지는가 = 위로 올라갈 칸 수. */
+  const lifted = (row: number): number => {
+    let lo = 0;
+    let hi = doomed.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (doomed[mid] < row) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+
+  moveCells(
+    sheet,
+    (f) => runs.reduceRight((acc, run) => shift(acc, run.at, run.count), f),
+    (row) => !gone.has(row),
+    (row, col) => ({ row: row - lifted(row), col }),
+  );
+
+  let heights = sheet.rowHeights;
+  for (let i = runs.length - 1; i >= 0; i--) heights = shiftSizes(heights, runs[i].at, -runs[i].count);
+  sheet.rowHeights = heights;
+  sheet.rows = Math.max(1, sheet.rows - doomed.length);
+}
+
 export function insertCols(sheet: SheetDoc, at: number, count: number, shift: RefShift): void {
   moveCells(
     sheet,
@@ -325,8 +400,8 @@ export function deleteCols(sheet: SheetDoc, at: number, count: number, shift: Re
 
 // ── 정렬 ────────────────────────────────────────────────────────
 
-/** 값 비교 — 수 < 글자 < 불리언 < 오류, 빈 칸은 언제나 맨 뒤. */
-function compareScalar(a: Scalar, b: Scalar): number {
+/** 값 비교 — 수 < 글자 < 불리언 < 오류, 빈 칸은 언제나 맨 뒤. 필터 목록도 이 차례를 쓴다. */
+export function compareScalar(a: Scalar, b: Scalar): number {
   const rank = (v: Scalar): number => {
     if (v === null) return 4;
     if (typeof v === "number") return 0;

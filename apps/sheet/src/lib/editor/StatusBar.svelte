@@ -31,6 +31,11 @@
   {#if editor.notice}
     <span class="notice">{editor.notice}</span>
   {/if}
+  {#if editor.hiddenRowCount > 0}
+    <span class="item muted" title={t.filter.hiddenHint}>
+      {t.filter.hidden(editor.hiddenRowCount)}
+    </span>
+  {/if}
   {#if editor.dirty}
     <span class="item muted">{t.status.unsaved}</span>
   {/if}

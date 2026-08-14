@@ -30,6 +30,14 @@ import {
 } from "../sheet/csv";
 import { exportText, readJson, type ExportFormat } from "../sheet/convert";
 import {
+  uniqueValues,
+  visibleRows as filterRows,
+  type ColumnFilter,
+  type FilterColumn,
+  type SheetFilter,
+  type UniqueValue,
+} from "../sheet/filter";
+import {
   applyStyle,
   cellText,
   clearContents,
@@ -37,6 +45,8 @@ import {
   colWidth,
   deleteCols,
   deleteRows,
+  deleteRowSet,
+  filterCellAt,
   forceText,
   getCell,
   guessHeaderRows,
@@ -86,6 +96,11 @@ export interface EditBuffer {
 interface ClipBuffer {
   area: Area;
   cells: (Cell | undefined)[][];
+  /**
+   * 각 줄이 어느 행에서 왔나. 필터가 걸려 있으면 숨은 줄을 건너뛰므로
+   * `area.top + i`로는 알 수 없다 — 수식 참조 보정이 이 값으로 간다.
+   */
+  rows: number[];
   /** 클립보드에 실제로 쓴 텍스트. 외부에서 바뀌었는지 대조하는 데 쓴다. */
   text: string;
 }
@@ -108,6 +123,9 @@ function cloneSheet(sheet: SheetDoc): SheetDoc {
     colWidths: new Map(sheet.colWidths),
     rowHeights: new Map(sheet.rowHeights),
     merges: sheet.merges.map((m) => ({ ...m })),
+    ...(sheet.filter
+      ? { filter: { headerRows: sheet.filter.headerRows, cols: new Map(sheet.filter.cols) } }
+      : {}),
   };
 }
 
@@ -147,6 +165,8 @@ export class EditorState {
 
   csvOptions = $state<CsvWriteOptions>({ ...DEFAULT_CSV_WRITE });
   exportHeader = $state(true);
+  /** 저장·복사에 보이는 행만 넣을지. 기본은 전부 — 거르는 쪽이 명시적인 선택이어야 한다. */
+  exportVisibleOnly = $state(false);
 
   private past: Snapshot[] = [];
   private future: Snapshot[] = [];
@@ -257,7 +277,187 @@ export class EditorState {
     return out;
   }
 
-  /** 선택 영역 요약(합계·평균 등). */
+  // ── 자동 필터 ─────────────────────────────────────────────────
+  //
+  // 좌표계가 둘이다. **행 번호**는 문서의 좌표(A1의 1, 수식·커서·복사가 쓰는 것)이고,
+  // **순번**은 보이는 행 목록에서의 자리(그리드가 세로로 그리는 위치)다.
+  // `visibleRows`가 순번 → 행 번호 표이고, 이 클래스 밖으로는 행 번호만 나간다.
+
+  /**
+   * 보이는 행 번호들. 필터가 없거나 아무 줄도 안 걸러지면 **null**이다 —
+   * 그때 순번은 곧 행 번호이므로 백만 줄짜리 배열을 만들 이유가 없다.
+   */
+  readonly visibleRows = $derived.by((): number[] | null => {
+    void this.revision;
+    const sheet = this.doc.sheets[this.doc.active];
+    const state = sheet.filter;
+    if (!state || state.cols.size === 0) return null;
+
+    const used = usedRange(sheet);
+    const top = Math.min(state.headerRows, Math.max(sheet.rows - 1, 0));
+    const bottom = Math.min(used.bottom, sheet.rows - 1);
+    if (bottom < top) return null;
+
+    const range: number[] = [];
+    for (let r = top; r <= bottom; r++) range.push(r);
+
+    const columns: FilterColumn[] = [];
+    for (const [col, filter] of state.cols) {
+      columns.push({ filter, cells: range.map((r) => filterCellAt(sheet, r, col)) });
+    }
+
+    const kept = filterRows(range, columns);
+    if (kept.length === range.length) return null;
+
+    // 머리글과 표 아래쪽 빈 줄은 걸러지지 않는다 — 엑셀과 같다.
+    const out: number[] = [];
+    for (let r = 0; r < top; r++) out.push(r);
+    for (const r of kept) out.push(r);
+    for (let r = bottom + 1; r < sheet.rows; r++) out.push(r);
+    return out;
+  });
+
+  readonly hiddenRowCount = $derived.by(() => {
+    const rows = this.visibleRows;
+    if (!rows) return 0;
+    void this.revision;
+    return Math.max(0, this.doc.sheets[this.doc.active].rows - rows.length);
+  });
+
+  /** 걸린 필터 수 — 도구줄의 "필터 지우기"가 이 값으로 켜진다. */
+  readonly filterCount = $derived.by(() => {
+    void this.revision;
+    return this.doc.sheets[this.doc.active].filter?.cols.size ?? 0;
+  });
+
+  /** 이 행이 화면에 있나. 필터가 없으면 언제나 참. */
+  isRowVisible(row: number): boolean {
+    const rows = this.visibleRows;
+    if (!rows) return true;
+    return rows[this.rowOrdinal(row)] === row;
+  }
+
+  /**
+   * 행 번호 → 순번. 숨은 행이면 **바로 다음 보이는 행**의 순번을 준다
+   * (그 자리가 화면에서 이 행이 있던 곳이다).
+   */
+  rowOrdinal(row: number): number {
+    const rows = this.visibleRows;
+    if (!rows) return row;
+    let lo = 0;
+    let hi = rows.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (rows[mid] < row) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  /** 영역 안에서 보이는 행들. 필터가 없으면 null(=전부). */
+  private visibleRowsIn(area: Area): number[] | null {
+    const rows = this.visibleRows;
+    if (!rows) return null;
+    const out: number[] = [];
+    for (let i = this.rowOrdinal(area.top); i < rows.length && rows[i] <= area.bottom; i++) {
+      out.push(rows[i]);
+    }
+    return out;
+  }
+
+  /** 걸러진 줄에 있는 행 번호를 가장 가까운 보이는 줄로 옮긴다. */
+  private snapRow(row: number): number {
+    const rows = this.visibleRows;
+    if (!rows || rows.length === 0) return row;
+    const i = this.rowOrdinal(row);
+    if (rows[i] === row) return row;
+    return rows[Math.min(i, rows.length - 1)];
+  }
+
+  /**
+   * 커서가 걸러진 줄에 남아 있으면 보이는 줄로 데려온다.
+   *
+   * 안 보이는 칸에 커서가 있으면 **편집 상자가 아예 안 그려진다**(그 줄이 DOM에 없다).
+   * 그 상태로 글자를 치면 화면에는 아무 일도 안 일어나는데 편집은 시작돼 있고,
+   * 이어서 다른 칸을 누르면 빈 글자가 확정되어 **보이지도 않는 칸의 내용이 지워졌다.**
+   * 그래서 필터를 걸 때와 편집을 시작할 때 커서를 화면 안으로 데려온다.
+   */
+  private snapCursor(): void {
+    const row = this.snapRow(this.cursor.row);
+    if (row !== this.cursor.row) this.cursor = { row, col: this.cursor.col };
+    const anchor = this.snapRow(this.anchor.row);
+    if (anchor !== this.anchor.row) this.anchor = { row: anchor, col: this.anchor.col };
+  }
+
+  /** 보이는 행을 따라 dRow만큼 움직인 행 번호. 숨은 줄은 세지 않는다. */
+  private stepRow(row: number, dRow: number): number {
+    const rows = this.visibleRows;
+    if (!rows) return clamp(row + dRow, 0, this.maxRow);
+    if (rows.length === 0) return row;
+    const i = this.rowOrdinal(row);
+    const onRow = rows[i] === row;
+    const to = onRow ? i + dRow : dRow > 0 ? i + dRow - 1 : i + dRow;
+    return rows[clamp(to, 0, rows.length - 1)];
+  }
+
+  columnFilter(col: number): ColumnFilter | undefined {
+    void this.revision;
+    return this.doc.sheets[this.doc.active].filter?.cols.get(col);
+  }
+
+  /**
+   * 필터 메뉴에 띄울 고유값 — **다른 열의 필터가 적용된 상태**에서 모은다.
+   * 그래야 목록에 뜬 값을 골랐는데 아무 행도 안 남는 일이 없다(엑셀과 같다).
+   */
+  filterValues(col: number): UniqueValue[] {
+    void this.revision;
+    const sheet = this.doc.sheets[this.doc.active];
+    const used = usedRange(sheet);
+    const top = Math.min(sheet.filter?.headerRows ?? guessHeaderRows(sheet), Math.max(sheet.rows - 1, 0));
+    const bottom = Math.min(used.bottom, sheet.rows - 1);
+    if (bottom < top) return [];
+
+    const range: number[] = [];
+    for (let r = top; r <= bottom; r++) range.push(r);
+
+    const columns: FilterColumn[] = [];
+    for (const [other, filter] of sheet.filter?.cols ?? []) {
+      if (other === col) continue;
+      columns.push({ filter, cells: range.map((r) => filterCellAt(sheet, r, other)) });
+    }
+
+    const rows = filterRows(range, columns);
+    return uniqueValues(rows.map((r) => filterCellAt(sheet, r, col)));
+  }
+
+  /**
+   * 열에 필터를 걸거나(=null이면) 푼다.
+   *
+   * 되돌리기에 남기지 않고 dirty도 세우지 않는다 — 필터는 셀을 하나도 바꾸지 않는
+   * 뷰 상태다. 저장하지 않은 편집이 없는데 "저장 안 함"이 뜨면 그 표시가 거짓말이 된다.
+   */
+  setColumnFilter(col: number, filter: ColumnFilter | null): void {
+    const sheet = this.doc.sheets[this.doc.active];
+    const state: SheetFilter = sheet.filter ?? {
+      // 머리글 줄 수는 첫 필터를 걸 때 굳힌다 — 나중에 내용이 바뀌어도 머리글은 머리글이다.
+      headerRows: guessHeaderRows(sheet),
+      cols: new Map(),
+    };
+    if (filter) state.cols.set(col, filter);
+    else state.cols.delete(col);
+    sheet.filter = state.cols.size > 0 ? state : undefined;
+    this.touch();
+    this.snapCursor();
+  }
+
+  clearFilters(): void {
+    const sheet = this.doc.sheets[this.doc.active];
+    if (!sheet.filter) return;
+    sheet.filter = undefined;
+    this.touch();
+  }
+
+  /** 선택 영역 요약(합계·평균 등). 필터가 걸려 있으면 **보이는 칸만** 센다. */
   readonly summary = $derived.by(() => {
     void this.revision;
     const sheet = this.doc.sheets[this.doc.active];
@@ -281,18 +481,27 @@ export class EditorState {
       }
     };
 
+    // 걸러진 행은 화면에 없다 — 안 보이는 칸이 합계에 들어가면 그 수는 아무 데도
+    // 없는 수가 된다. 세로 칸 수(rows)도 보이는 줄만 센다.
+    const hidden = this.visibleRows !== null;
+    let rows = areaHeight(area);
+
     if (wide) {
       for (const [key, cell] of sheet.cells) {
         const r = Math.floor(key / MAX_COLS);
         const c = key % MAX_COLS;
         if (r < area.top || r > area.bottom || c < area.left || c > area.right) continue;
+        if (hidden && !this.isRowVisible(r)) continue;
         visit(cell.v);
       }
     } else {
       for (let r = area.top; r <= area.bottom; r++) {
+        if (hidden && !this.isRowVisible(r)) continue;
         for (let c = area.left; c <= area.right; c++) visit(sheet.cells.get(cellKey(r, c))?.v ?? null);
       }
     }
+
+    if (hidden) rows = this.visibleRowsIn(area)?.length ?? rows;
 
     return {
       count,
@@ -301,7 +510,7 @@ export class EditorState {
       average: numbers > 0 ? sum / numbers : 0,
       min: numbers > 0 ? min : 0,
       max: numbers > 0 ? max : 0,
-      rows: areaHeight(area),
+      rows,
       cols: areaWidth(area),
     };
   });
@@ -347,7 +556,19 @@ export class EditorState {
   }
 
   private restore(snap: Snapshot): void {
+    // 필터는 뷰 상태다 — 되돌리기가 되돌리는 것은 셀이지 보기 방식이 아니다.
+    // (스냅샷에도 딸려 있지만, 지금 걸어 둔 것이 이긴다.)
+    //
+    // 다만 자리로 옮기는 것이라 **장 수가 달라졌으면 옮기지 않는다** — 장을 지운 것을
+    // 되돌리면 자리가 한 칸씩 밀려서 B장의 필터가 A장에 얹힌다(엉뚱한 줄이 사라진다).
+    // 그때는 스냅샷이 들고 있는 그 장의 필터를 그대로 쓴다.
+    const filters = this.doc.sheets.map((s) => s.filter);
     this.doc.sheets = snap.sheets;
+    if (filters.length === this.doc.sheets.length) {
+      this.doc.sheets.forEach((s, i) => {
+        s.filter = filters[i];
+      });
+    }
     this.doc.active = snap.active;
     this.cursor = snap.cursor;
     this.anchor = snap.anchor;
@@ -363,6 +584,8 @@ export class EditorState {
     this.dirty = true;
     recalculate(this.doc);
     this.touch();
+    // 스냅샷의 커서가 지금 걸린 필터에서는 안 보이는 줄일 수 있다.
+    this.snapCursor();
   }
 
   redo(): void {
@@ -375,6 +598,7 @@ export class EditorState {
     this.dirty = true;
     recalculate(this.doc);
     this.touch();
+    this.snapCursor();
   }
 
   // ── 선택·이동 ─────────────────────────────────────────────────
@@ -398,9 +622,10 @@ export class EditorState {
     this.anchor = { row: clamp(row, 0, this.maxRow), col: clamp(col, 0, this.maxCol) };
   }
 
+  /** 세로 이동은 **보이는 행**을 센다 — 걸러진 줄은 화면에 없으니 지나갈 수도 없다. */
   move(dRow: number, dCol: number, extend = false): void {
     const from = extend ? this.anchor : this.cursor;
-    const row = clamp(from.row + dRow, 0, this.maxRow);
+    const row = this.stepRow(from.row, dRow);
     const col = clamp(from.col + dCol, 0, this.maxCol);
     if (extend) this.anchor = { row, col };
     else this.select(row, col);
@@ -415,9 +640,11 @@ export class EditorState {
 
     const startFilled = filled(row, col);
     for (let i = 0; i < 100_000; i++) {
-      const nr = row + dRow;
+      const nr = dRow === 0 ? row : this.stepRow(row, dRow);
       const nc = col + dCol;
-      if (nr < 0 || nc < 0 || nr > this.maxRow || nc > this.maxCol) break;
+      if (nc < 0 || nc > this.maxCol) break;
+      // 더 갈 곳이 없으면 stepRow가 제자리를 준다.
+      if (nr === row && nc === col) break;
       if (startFilled && !filled(nr, nc)) break;
       row = nr;
       col = nc;
@@ -446,6 +673,8 @@ export class EditorState {
   // ── 셀 편집 ───────────────────────────────────────────────────
 
   beginEdit(initial?: string): void {
+    // 걸러진 줄에서는 편집 상자가 그려지지 않는다 — 먼저 보이는 줄로 데려온다.
+    this.snapCursor();
     const { row, col } = this.cursor;
     this.editing = {
       row,
@@ -501,9 +730,11 @@ export class EditorState {
     });
   }
 
+  /** Delete — 필터가 걸려 있으면 보이는 칸만 지운다(엑셀과 같다). */
   clearSelection(): void {
+    const rows = this.visibleRowsIn(this.selection);
     this.mutate(() => {
-      clearContents(this.doc.sheets[this.doc.active], this.selection);
+      clearContents(this.doc.sheets[this.doc.active], this.selection, rows ?? undefined);
     });
   }
 
@@ -542,8 +773,22 @@ export class EditorState {
     });
   }
 
+  /**
+   * 행 삭제. 필터가 걸려 있으면 **보이는 행만** 지운다 — 화면에 없던 줄이 함께
+   * 사라지면 무엇을 잃었는지 볼 방법이 없다.
+   */
   deleteRowsAt(): void {
     const area = this.selection;
+    const visible = this.visibleRowsIn(area);
+    if (visible) {
+      if (visible.length === 0) return;
+      this.mutate(() => {
+        deleteRowSet(this.doc.sheets[this.doc.active], visible, (f, at, count) =>
+          adjustRows(f, at, -count),
+        );
+      });
+      return;
+    }
     const count = areaHeight(area);
     this.mutate(() => {
       deleteRows(this.doc.sheets[this.doc.active], area.top, count, (f) =>
@@ -629,6 +874,23 @@ export class EditorState {
   /** 도구줄의 빠른 정렬 — 커서가 놓인 열 하나를 기준으로 삼는다. */
   sortBySelection(asc: boolean): void {
     this.sortRows([{ col: this.cursor.col, asc }], this.headerRowsGuess);
+  }
+
+  /**
+   * 필터 메뉴의 정렬 — 고른 영역과 무관하게 **표 전체**를 그 열로 정렬한다.
+   *
+   * 걸러진 행도 함께 옮긴다. 보이는 행만 정렬하면 필터를 풀었을 때 표가 뒤섞여
+   * 있고(숨은 줄만 제자리), 그건 사용자가 시킨 적 없는 편집이다.
+   */
+  sortByColumn(col: number, asc: boolean): void {
+    const sheet = this.doc.sheets[this.doc.active];
+    const used = usedRange(sheet);
+    const headerRows = sheet.filter?.headerRows ?? guessHeaderRows(sheet);
+    const top = Math.min(headerRows, used.bottom);
+    if (used.bottom <= top) return;
+    this.mutate(() => {
+      sortArea(sheet, { top, left: 0, bottom: used.bottom, right: used.right }, [{ col, asc }]);
+    });
   }
 
   /** 고른 열을 텍스트로 굳힌다 — 수로 읽혀 버린 전화번호·송장번호 열의 탈출구. */
@@ -748,12 +1010,21 @@ export class EditorState {
 
   // ── 복사·붙여넣기 ────────────────────────────────────────────
 
+  /** 복사 대상 행 — 필터가 걸려 있으면 보이는 줄만 나간다(엑셀과 같다). */
+  private copyRows(area: Area): number[] {
+    const visible = this.visibleRowsIn(area);
+    if (visible) return visible;
+    const out: number[] = [];
+    for (let r = area.top; r <= area.bottom; r++) out.push(r);
+    return out;
+  }
+
   /** 선택 영역을 TSV로 — 클립보드 텍스트이자 외부 앱과의 접점. */
   private selectionAsText(): string {
     const sheet = this.doc.sheets[this.doc.active];
     const area = this.selection;
     const lines: string[] = [];
-    for (let r = area.top; r <= area.bottom; r++) {
+    for (const r of this.copyRows(area)) {
       const fields: string[] = [];
       for (let c = area.left; c <= area.right; c++) {
         const text = cellText(sheet.cells.get(cellKey(r, c)));
@@ -767,14 +1038,15 @@ export class EditorState {
   async copy(): Promise<void> {
     const sheet = this.doc.sheets[this.doc.active];
     const area = this.selection;
+    const rows = this.copyRows(area);
     const cells: (Cell | undefined)[][] = [];
-    for (let r = area.top; r <= area.bottom; r++) {
+    for (const r of rows) {
       const row: (Cell | undefined)[] = [];
       for (let c = area.left; c <= area.right; c++) row.push(sheet.cells.get(cellKey(r, c)));
       cells.push(row);
     }
     const text = this.selectionAsText();
-    this.clip = { area: { ...area }, cells, text };
+    this.clip = { area: { ...area }, cells, rows, text };
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -806,12 +1078,14 @@ export class EditorState {
 
   private pasteRich(clip: ClipBuffer): void {
     const target = this.cursor;
-    const dRow = target.row - clip.area.top;
     const dCol = target.col - clip.area.left;
 
     this.mutate(() => {
       const sheet = this.doc.sheets[this.doc.active];
       clip.cells.forEach((row, r) => {
+        // 원본 행이 어디였는지로 참조를 옮긴다 — 숨은 줄을 건너뛰고 복사했으면
+        // 붙는 자리와 원본 자리의 차이가 줄마다 다르다.
+        const dRow = target.row + r - (clip.rows[r] ?? clip.area.top + r);
         row.forEach((cell, c) => {
           const to = { row: target.row + r, col: target.col + c };
           if (to.row > MAX_ROWS - 1 || to.col > MAX_COLS - 1) return;
@@ -1052,12 +1326,26 @@ export class EditorState {
     return (row, col) => cellText(sheet.cells.get(cellKey(row, col)));
   }
 
+  /**
+   * 내보낼 행 — 기본은 undefined(=전부)다.
+   *
+   * 필터는 뷰 상태이므로 저장에는 영향을 주지 않는 것이 기본이다. 화면에서 안 보인다는
+   * 이유로 파일에서 조용히 사라지면 그게 최악이다. 거르려면 저장 메뉴에서 명시적으로 켠다.
+   */
+  private exportRows(): number[] | undefined {
+    if (!this.exportVisibleOnly) return undefined;
+    return this.visibleRows ?? undefined;
+  }
+
   saveCsv(delimiter: Delimiter = this.csvOptions.delimiter): void {
     const options = { ...this.csvOptions, delimiter };
-    const bytes = writeCsv(this.doc.sheets[this.doc.active], this.renderer(), options);
+    const rows = this.exportRows();
+    const bytes = writeCsv(this.doc.sheets[this.doc.active], this.renderer(), options, rows);
     const name = withExtension(this.filename || "시트", delimiter === "\t" ? "tsv" : "csv");
     downloadBlob(new Blob([bytes as BlobPart], { type: "text/csv;charset=utf-8" }), name);
-    this.dirty = false;
+    // 일부만 내보낸 파일은 "저장했다"가 아니다 — 걸러진 줄은 아직 어느 파일에도 없다.
+    // 여기서 dirty를 내리면 창을 닫을 때 브라우저가 묻지 않아 그 줄들이 그냥 사라진다.
+    if (!rows) this.dirty = false;
     this.flash(t.save.saved(name));
   }
 
@@ -1085,19 +1373,28 @@ export class EditorState {
   }
 
   saveJson(): void {
-    const text = exportText(this.doc.sheets[this.doc.active], this.renderer(), "json", {
-      header: this.exportHeader,
-    });
+    const rows = this.exportRows();
+    const text = exportText(
+      this.doc.sheets[this.doc.active],
+      this.renderer(),
+      "json",
+      { header: this.exportHeader },
+      rows,
+    );
     const name = withExtension(this.filename || "시트", "json");
     downloadBlob(new Blob([text], { type: "application/json;charset=utf-8" }), name);
-    this.dirty = false;
+    if (!rows) this.dirty = false;
     this.flash(t.save.saved(name));
   }
 
   async copyAs(format: ExportFormat): Promise<void> {
-    const text = exportText(this.doc.sheets[this.doc.active], this.renderer(), format, {
-      header: this.exportHeader,
-    });
+    const text = exportText(
+      this.doc.sheets[this.doc.active],
+      this.renderer(),
+      format,
+      { header: this.exportHeader },
+      this.exportRows(),
+    );
     try {
       await navigator.clipboard.writeText(text);
       this.flash(t.save.copied);
@@ -1108,16 +1405,21 @@ export class EditorState {
 
   // ── 찾기·바꾸기 ──────────────────────────────────────────────
 
+  /** 찾기. 걸러진 행은 결과에서 뺀다 — 갈 수 없는 자리를 세어 주면 개수만 거짓말이 된다. */
   findMatches(query: string, matchCase: boolean): Pos[] {
     void this.revision;
     if (!query) return [];
     const sheet = this.doc.sheets[this.doc.active];
     const needle = matchCase ? query : query.toLowerCase();
+    const hidden = this.visibleRows !== null;
     const found: Pos[] = [];
     for (const [key, cell] of sheet.cells) {
       const text = cellText(cell);
       const hay = matchCase ? text : text.toLowerCase();
-      if (hay.includes(needle)) found.push({ row: Math.floor(key / MAX_COLS), col: key % MAX_COLS });
+      if (!hay.includes(needle)) continue;
+      const row = Math.floor(key / MAX_COLS);
+      if (hidden && !this.isRowVisible(row)) continue;
+      found.push({ row, col: key % MAX_COLS });
     }
     found.sort((a, b) => a.row - b.row || a.col - b.col);
     return found;

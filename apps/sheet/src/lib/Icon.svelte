@@ -26,6 +26,7 @@
     | "freeze"
     | "sort-asc"
     | "sort-desc"
+    | "filter"
     | "search"
     | "table"
     | "sheet"
@@ -112,6 +113,8 @@
   {:else if name === "sort-desc"}
     <path d="M7 4v16M4 17l3 3 3-3" />
     <path d="M13 6h4M13 12h6M13 18h8" />
+  {:else if name === "filter"}
+    <path d="M3.5 5h17l-6.5 7.6V20l-4-2.4v-5L3.5 5Z" />
   {:else if name === "search"}
     <circle cx="11" cy="11" r="6" />
     <path d="m20 20-3.5-3.5" />

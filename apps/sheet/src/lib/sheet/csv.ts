@@ -279,11 +279,16 @@ function quoteField(text: string, delimiter: Delimiter): string {
  * ("이름,메모\r\n김,\r\n" → "…\r\n김\r\n") 받는 쪽에서 열이 밀렸다.
  * 예외는 **칸이 하나도 없는 줄** 하나뿐이다 — 원문의 빈 줄에 없던 구분자를
  * 지어내지 않는다.
+ *
+ * `rows`를 주면 그 줄만, 준 차례대로 쓴다(자동 필터의 "보이는 행만 내보내기").
+ * 안 주면 표 전체가 나간다 — 화면에서 걸러 놓은 것이 저장에서 조용히 사라지지
+ * 않게, 거르는 쪽이 언제나 명시적인 선택이어야 한다.
  */
 export function writeCsv(
   sheet: SheetDoc,
   render: (row: number, col: number) => string,
   options: CsvWriteOptions = DEFAULT_CSV_WRITE,
+  rows?: number[],
 ): Uint8Array {
   let bottom = -1;
   let right = -1;
@@ -299,8 +304,15 @@ export function writeCsv(
   // 표의 폭. 값이 든 범위보다 원문이 넓었다면(오른쪽 끝 빈 열) 원문 쪽을 따른다.
   const width = Math.max(right + 1, sheet.srcCols ?? 0);
 
+  const order: number[] = [];
+  if (rows) {
+    for (const r of rows) if (r >= 0 && r <= bottom) order.push(r);
+  } else {
+    for (let r = 0; r <= bottom; r++) order.push(r);
+  }
+
   const lines: string[] = [];
-  for (let r = 0; r <= bottom; r++) {
+  for (const r of order) {
     // 칸이 하나도 없는 줄은 빈 줄 그대로 — 원문에 없던 구분자를 만들지 않는다.
     if (!filled.has(r)) {
       lines.push("");

@@ -20,8 +20,15 @@ interface Grid {
   values: Scalar[][];
 }
 
-/** 시트를 사각 격자로 굳힌다 — render는 표시 형식이 적용된 화면 문자열을 준다. */
-function toGrid(sheet: SheetDoc, render: (row: number, col: number) => string): Grid {
+/**
+ * 시트를 사각 격자로 굳힌다 — render는 표시 형식이 적용된 화면 문자열을 준다.
+ * `rows`를 주면 그 줄만 그 차례대로 담는다(자동 필터의 "보이는 행만").
+ */
+function toGrid(
+  sheet: SheetDoc,
+  render: (row: number, col: number) => string,
+  rows?: number[],
+): Grid {
   let bottom = -1;
   let right = -1;
   for (const key of sheet.cells.keys()) {
@@ -31,19 +38,26 @@ function toGrid(sheet: SheetDoc, render: (row: number, col: number) => string): 
     if (c > right) right = c;
   }
 
-  const rows: string[][] = [];
+  const order: number[] = [];
+  if (rows) {
+    for (const r of rows) if (r >= 0 && r <= bottom) order.push(r);
+  } else {
+    for (let r = 0; r <= bottom; r++) order.push(r);
+  }
+
+  const lines: string[][] = [];
   const values: Scalar[][] = [];
-  for (let r = 0; r <= bottom; r++) {
+  for (const r of order) {
     const line: string[] = [];
     const raw: Scalar[] = [];
     for (let c = 0; c <= right; c++) {
       line.push(render(r, c));
       raw.push(sheet.cells.get(cellKey(r, c))?.v ?? null);
     }
-    rows.push(line);
+    lines.push(line);
     values.push(raw);
   }
-  return { rows, values };
+  return { rows: lines, values };
 }
 
 /** JSON 값으로 — 오류는 문자열, 빈 칸은 null. */
@@ -68,8 +82,9 @@ export function exportText(
   render: (row: number, col: number) => string,
   format: ExportFormat,
   options: ExportOptions = { header: true },
+  rows?: number[],
 ): string {
-  const grid = toGrid(sheet, render);
+  const grid = toGrid(sheet, render, rows);
   if (grid.rows.length === 0) return format === "json" || format === "json-rows" ? "[]" : "";
 
   switch (format) {

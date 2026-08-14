@@ -348,6 +348,16 @@
     {/snippet}
   </Dropdown>
 
+  <button
+    class="btn small ghost labeled"
+    title={t.filter.clearAll}
+    disabled={editor.filterCount === 0}
+    onclick={() => editor.clearFilters()}
+  >
+    <Icon name="filter" size={16} />
+    {t.filter.clearAll}
+  </button>
+
   <button class="btn small ghost labeled" title={t.edit.mergeHint} onclick={() => editor.toggleMerge()}>
     <Icon name="merge" size={16} />
     {t.edit.merge}

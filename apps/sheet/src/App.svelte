@@ -282,6 +282,12 @@
             <input type="checkbox" bind:checked={editor.exportHeader} />
             {t.save.header}
           </label>
+          {#if editor.hiddenRowCount > 0}
+            <label class="item check" title={t.filter.visibleOnlyHint}>
+              <input type="checkbox" bind:checked={editor.exportVisibleOnly} />
+              {t.filter.visibleOnly}
+            </label>
+          {/if}
         {/snippet}
       </Dropdown>
 

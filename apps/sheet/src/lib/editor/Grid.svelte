@@ -7,10 +7,19 @@
    * 시점과 JS가 도는 시점이 달라서 빠르게 굴리면 머리글이 한 프레임씩 떨린다.
    * 그래서 셀을 절대 배치하지 않고 행이 실제 흐름 요소가 되게 두었다 —
    * 그 대가로 가상화는 "안 보이는 만큼 빈 상자로 메우는" 방식이 된다.
+   *
+   * ★ 자동 필터가 걸리면 **세로 좌표계가 둘로 갈린다.**
+   *   순번(i)  — 화면에서 위에서 몇 번째로 그려지는가. 높이·오프셋·가상화가 쓴다.
+   *   행 번호(r) — 문서의 좌표. 행 머리글 숫자·커서·선택·복사·수식이 쓴다.
+   * `rowOf(i)`가 순번을 행 번호로 옮기고 `ordOf(r)`이 그 반대다. 필터가 없으면
+   * 둘이 같아서 `rowList`가 null이고, 그때는 표를 만들지 않는다(백만 줄 대비).
+   * 이 둘을 섞으면 "3행을 지웠는데 7행이 사라지는" 종류의 사고가 난다.
    */
   import { untrack } from "svelte";
+  import Icon from "../Icon.svelte";
   import { areaContains, cellName } from "../sheet/a1";
   import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, isError } from "../sheet/types";
+  import FilterMenu from "./FilterMenu.svelte";
   import { editor } from "./state.svelte";
   import { t } from "../i18n";
 
@@ -46,12 +55,29 @@
     return out;
   });
 
+  /** 걸러지고 남은 행 번호들. null이면 필터가 없다 — 순번이 곧 행 번호다. */
+  const rowList = $derived(editor.visibleRows);
+  /** 화면에 그려질 줄 수. */
+  const rowCount = $derived(rowList ? rowList.length : sheet.rows);
+
+  /** 순번 → 문서의 행 번호. */
+  function rowOf(i: number): number {
+    if (!rowList) return i;
+    return rowList[Math.min(Math.max(i, 0), rowList.length - 1)] ?? 0;
+  }
+
+  /** 문서의 행 번호 → 순번. */
+  function ordOf(row: number): number {
+    return editor.rowOrdinal(row);
+  }
+
   const rowOffsets = $derived.by(() => {
     void editor.revision;
+    // 높이 지정이 하나도 없으면 줄 높이가 균일하다 — 필터가 걸려 있어도 곱셈으로 끝난다.
     if (sheet.rowHeights.size === 0) return null;
-    const out = new Float64Array(sheet.rows + 1);
-    for (let r = 0; r < sheet.rows; r++) {
-      out[r + 1] = out[r] + (sheet.rowHeights.get(r) ?? DEFAULT_ROW_HEIGHT);
+    const out = new Float64Array(rowCount + 1);
+    for (let i = 0; i < rowCount; i++) {
+      out[i + 1] = out[i] + (sheet.rowHeights.get(rowOf(i)) ?? DEFAULT_ROW_HEIGHT);
     }
     return out;
   });
@@ -59,22 +85,24 @@
   function colW(c: number): number {
     return sheet.colWidths.get(c) ?? DEFAULT_COL_WIDTH;
   }
-  function rowH(r: number): number {
-    return sheet.rowHeights.get(r) ?? DEFAULT_ROW_HEIGHT;
+  /** 문서의 행 번호로 재는 높이 — 높이는 행에 붙어 있지 순번에 붙어 있지 않다. */
+  function rowH(row: number): number {
+    return sheet.rowHeights.get(row) ?? DEFAULT_ROW_HEIGHT;
   }
   function colX(c: number): number {
     const offsets = colOffsets;
     if (!offsets) return c * DEFAULT_COL_WIDTH;
     return offsets[Math.min(c, sheet.cols)];
   }
-  function rowY(r: number): number {
+  /** 순번 → 세로 좌표. */
+  function ordY(i: number): number {
     const offsets = rowOffsets;
-    if (!offsets) return r * DEFAULT_ROW_HEIGHT;
-    return offsets[Math.min(r, sheet.rows)];
+    if (!offsets) return Math.min(Math.max(i, 0), rowCount) * DEFAULT_ROW_HEIGHT;
+    return offsets[Math.min(Math.max(i, 0), rowCount)];
   }
 
   const totalW = $derived(colX(sheet.cols));
-  const totalH = $derived(rowY(sheet.rows));
+  const totalH = $derived(ordY(rowCount));
 
   function colAtX(x: number): number {
     const offsets = colOffsets;
@@ -89,40 +117,40 @@
     return lo;
   }
 
-  function rowAtY(y: number): number {
+  /** 세로 좌표 → 순번. */
+  function ordAtY(y: number): number {
     const offsets = rowOffsets;
     if (!offsets) return Math.floor(y / DEFAULT_ROW_HEIGHT);
     let lo = 0;
-    let hi = sheet.rows - 1;
+    let hi = rowCount - 1;
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1;
       if (offsets[mid] <= y) lo = mid;
       else hi = mid - 1;
     }
-    return lo;
+    return Math.max(lo, 0);
   }
 
   // ── 보이는 창 ─────────────────────────────────────────────────
 
-  const frozenRows = $derived(Math.min(sheet.frozenRows, 20));
+  const frozenRows = $derived(Math.min(sheet.frozenRows, 20, rowCount));
   const frozenCols = $derived(Math.min(sheet.frozenCols, 10));
 
   /** 고정된 행이 차지하는 높이 — 그만큼은 늘 화면 위쪽에 붙어 있다. */
-  const frozenH = $derived(rowY(frozenRows));
+  const frozenH = $derived(ordY(frozenRows));
   const frozenW = $derived(colX(frozenCols));
 
-  const firstRow = $derived(
-    Math.max(frozenRows, rowAtY(Math.max(0, scrollTop - HEADER_H)) - OVERSCAN),
+  const firstOrd = $derived(
+    Math.max(frozenRows, ordAtY(Math.max(0, scrollTop - HEADER_H)) - OVERSCAN),
   );
-  const lastRow = $derived(
-    Math.min(sheet.rows - 1, rowAtY(scrollTop + viewportH) + OVERSCAN),
-  );
+  const lastOrd = $derived(Math.min(rowCount - 1, ordAtY(scrollTop + viewportH) + OVERSCAN));
   const firstCol = $derived(Math.max(frozenCols, colAtX(Math.max(0, scrollLeft)) - OVERSCAN));
   const lastCol = $derived(Math.min(sheet.cols - 1, colAtX(scrollLeft + viewportW) + OVERSCAN));
 
-  const bodyRows = $derived.by(() => {
+  /** 그릴 줄들 — 값은 **순번**이다. */
+  const bodyOrds = $derived.by(() => {
     const out: number[] = [];
-    for (let r = firstRow; r <= lastRow; r++) out.push(r);
+    for (let i = firstOrd; i <= lastOrd; i++) out.push(i);
     return out;
   });
 
@@ -132,9 +160,9 @@
     return out;
   });
 
-  const frozenRowList = $derived.by(() => {
+  const frozenOrdList = $derived.by(() => {
     const out: number[] = [];
-    for (let r = 0; r < frozenRows; r++) out.push(r);
+    for (let i = 0; i < frozenRows; i++) out.push(i);
     return out;
   });
 
@@ -147,8 +175,32 @@
   /** 왼쪽·위쪽으로 건너뛴 만큼을 빈 상자로 메운다. */
   const padLeft = $derived(colX(firstCol) - frozenW);
   const padRight = $derived(Math.max(0, totalW - colX(lastCol + 1)));
-  const padTop = $derived(rowY(firstRow) - frozenH);
-  const padBottom = $derived(Math.max(0, totalH - rowY(lastRow + 1)));
+  const padTop = $derived(ordY(firstOrd) - frozenH);
+  const padBottom = $derived(Math.max(0, totalH - ordY(lastOrd + 1)));
+
+  // ── 필터 메뉴 ────────────────────────────────────────────────
+  // 스크롤 상자 안에 두면 잘리므로 그리드 바깥에 fixed로 띄운다.
+
+  let menu = $state<{ col: number; x: number; y: number } | null>(null);
+  /** 방금 어느 단추로 닫혔나 — 같은 단추를 다시 누르면 열지 않고 닫힌 채로 둔다. */
+  let closed = { col: -1, at: 0 };
+
+  function closeMenu(): void {
+    closed = { col: menu?.col ?? -1, at: performance.now() };
+    menu = null;
+  }
+
+  function openFilter(event: MouseEvent, col: number): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (closed.col === col && performance.now() - closed.at < 300) return;
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    menu = { col, x: rect.right - 244, y: rect.bottom + 4 };
+  }
+
+  function hasFilter(col: number): boolean {
+    return editor.columnFilter(col) !== undefined;
+  }
 
   // ── 셀 그리기 ────────────────────────────────────────────────
 
@@ -196,7 +248,8 @@
 
     if (merge) {
       styles.push(`width:${colX(merge.right + 1) - colX(merge.left)}px`);
-      styles.push(`height:${rowY(merge.bottom + 1) - rowY(merge.top)}px`);
+      // 병합 높이도 화면 좌표라 순번으로 잰다 — 사이에 걸러진 줄이 있으면 그만큼 짧다.
+      styles.push(`height:${ordY(ordOf(merge.bottom + 1)) - ordY(ordOf(merge.top))}px`);
       classes.push("merged");
     }
 
@@ -312,8 +365,14 @@
   // ── 편집 상자 ────────────────────────────────────────────────
 
   function commitFromInput(move: { row: number; col: number }): void {
-    const text = editInput?.value ?? "";
-    editor.commitEdit(text, move);
+    // 편집 상자가 DOM에 없으면 확정하지 않는다. 예전엔 빈 글자로 떨어져서
+    // (그 줄이 필터에 걸려 사라진 뒤 다른 칸을 누르면) 보이지도 않는 칸이 지워졌다.
+    if (!editInput) {
+      editor.cancelEdit();
+      scroller?.focus();
+      return;
+    }
+    editor.commitEdit(editInput.value, move);
     scroller?.focus();
   }
 
@@ -354,8 +413,9 @@
     const { row, col } = editor.cursor;
     untrack(() => {
       if (!scroller) return;
-      const top = rowY(row);
-      const bottom = rowY(row + 1);
+      const ord = ordOf(row);
+      const top = ordY(ord);
+      const bottom = ordY(ord + 1);
       const left = colX(col);
       const right = colX(col + 1);
 
@@ -388,7 +448,7 @@
   onscroll={onScroll}
   role="grid"
   aria-label={t.a11y.grid}
-  aria-rowcount={sheet.rows}
+  aria-rowcount={rowCount}
   aria-colcount={sheet.cols}
   tabindex="0"
 >
@@ -397,73 +457,78 @@
     <div class="row head" style="height:{HEADER_H}px; top:0">
       <div class="corner" style="width:{HEADER_W}px"></div>
       {#each frozenColList as c (c)}
-        <div
-          class="colhead frozen-col"
-          class:hot={isSelected(0, c)}
-          style="width:{colW(c)}px; left:{HEADER_W + colX(c)}px"
-        >
-          <button
-            type="button"
-            class="headhit"
-            onmousedown={(e) => colHeaderMouseDown(e, c)}
-            ondblclick={() => editor.autoFitColumn(c)}
-            aria-label={t.a11y.colHeader(editor.columnLabel(c))}
-          >
-            {editor.columnLabel(c)}
-          </button>
-          <button
-            type="button"
-            class="col-resize"
-            aria-label={t.a11y.colResize(editor.columnLabel(c))}
-            onmousedown={(e) => startResize(e, c)}
-            onkeydown={(e) => resizeByKey(e, c)}
-            ondblclick={() => editor.autoFitColumn(c)}
-          ></button>
-        </div>
+        {@render colHead(c, true)}
       {/each}
       <div class="pad head-pad" style="width:{padLeft}px"></div>
       {#each bodyCols as c (c)}
-        <div class="colhead" class:hot={isSelected(0, c)} style="width:{colW(c)}px">
-          <button
-            type="button"
-            class="headhit"
-            onmousedown={(e) => colHeaderMouseDown(e, c)}
-            ondblclick={() => editor.autoFitColumn(c)}
-            aria-label={t.a11y.colHeader(editor.columnLabel(c))}
-          >
-            {editor.columnLabel(c)}
-          </button>
-          <button
-            type="button"
-            class="col-resize"
-            aria-label={t.a11y.colResize(editor.columnLabel(c))}
-            onmousedown={(e) => startResize(e, c)}
-            onkeydown={(e) => resizeByKey(e, c)}
-            ondblclick={() => editor.autoFitColumn(c)}
-          ></button>
-        </div>
+        {@render colHead(c, false)}
       {/each}
       <div class="pad head-pad tail" style="width:{padRight}px"></div>
     </div>
 
     <!-- 고정된 행 -->
-    {#each frozenRowList as r (r)}
-      <div class="row frozen-row" style="height:{rowH(r)}px; top:{HEADER_H + rowY(r)}px">
-        {@render rowBody(r)}
+    {#each frozenOrdList as i (rowOf(i))}
+      <div class="row frozen-row" style="height:{rowH(rowOf(i))}px; top:{HEADER_H + ordY(i)}px">
+        {@render rowBody(rowOf(i))}
       </div>
     {/each}
 
     <div style="height:{padTop}px"></div>
 
-    {#each bodyRows as r (r)}
-      <div class="row" style="height:{rowH(r)}px">
-        {@render rowBody(r)}
+    {#each bodyOrds as i (rowOf(i))}
+      <div class="row" style="height:{rowH(rowOf(i))}px">
+        {@render rowBody(rowOf(i))}
       </div>
     {/each}
 
     <div style="height:{padBottom}px"></div>
   </div>
 </div>
+
+{#if menu}
+  <FilterMenu col={menu.col} x={menu.x} y={menu.y} onClose={closeMenu} />
+{/if}
+
+{#snippet colHead(c: number, frozen: boolean)}
+  <div
+    class="colhead"
+    class:frozen-col={frozen}
+    class:hot={isSelected(0, c)}
+    style="width:{colW(c)}px;{frozen ? ` left:${HEADER_W + colX(c)}px` : ''}"
+  >
+    <button
+      type="button"
+      class="headhit"
+      onmousedown={(e) => colHeaderMouseDown(e, c)}
+      ondblclick={() => editor.autoFitColumn(c)}
+      aria-label={t.a11y.colHeader(editor.columnLabel(c))}
+    >
+      {editor.columnLabel(c)}
+    </button>
+    <button
+      type="button"
+      class="filter-btn"
+      class:on={hasFilter(c)}
+      title={hasFilter(c) ? t.filter.on(editor.columnLabel(c)) : t.filter.column(editor.columnLabel(c))}
+      aria-label={hasFilter(c)
+        ? t.filter.on(editor.columnLabel(c))
+        : t.filter.column(editor.columnLabel(c))}
+      aria-haspopup="dialog"
+      aria-expanded={menu?.col === c}
+      onclick={(e) => openFilter(e, c)}
+    >
+      <Icon name="filter" size={11} />
+    </button>
+    <button
+      type="button"
+      class="col-resize"
+      aria-label={t.a11y.colResize(editor.columnLabel(c))}
+      onmousedown={(e) => startResize(e, c)}
+      onkeydown={(e) => resizeByKey(e, c)}
+      ondblclick={() => editor.autoFitColumn(c)}
+    ></button>
+  </div>
+{/snippet}
 
 {#snippet cellBox(r: number, c: number, frozen: boolean)}
   {@const p = paint(r, c)}
@@ -659,6 +724,42 @@
   .row-resize:focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: -1px;
+  }
+
+  /* 열 머리글의 필터 단추 — 너비 조절 손잡이(오른쪽 6px)를 피해 그 안쪽에 앉는다. */
+  .filter-btn {
+    all: unset;
+    position: absolute;
+    top: 50%;
+    right: 5px;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    opacity: 0.5;
+    cursor: pointer;
+    z-index: 2;
+  }
+  .colhead:hover .filter-btn,
+  .filter-btn:focus-visible {
+    opacity: 1;
+  }
+  .filter-btn:hover {
+    background: var(--surface);
+    color: var(--text);
+    opacity: 1;
+  }
+  .filter-btn.on {
+    color: var(--accent-ink);
+    opacity: 1;
+  }
+  .filter-btn:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
   }
 
   .cell {
