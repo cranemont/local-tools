@@ -99,12 +99,36 @@ function extractImages(root: Document): ExtractedImage[] {
   return images;
 }
 
+/**
+ * 셀 안에 또 표가 든 경우 — 한글 문서에서는 흔하다(칸 맞추기용 표 안에 진짜 표).
+ * 그대로 turndown에 넘기면 안쪽 표가 파이프째 문자열이 됐다가 전부 `\|`로 이스케이프돼
+ * `| \| 작성일 \| 2021.06.28. \|| --- \| --- \||` 같은 읽을 수 없는 줄이 된다.
+ * 구조는 어차피 GFM에 담을 수 없으니, 읽히는 한 줄로 펴는 편이 낫다.
+ */
+function flattenNestedTables(cell: Element): Element {
+  const clone = cell.cloneNode(true) as Element;
+  for (const nested of Array.from(clone.querySelectorAll("table"))) {
+    const lines: string[] = [];
+    for (const row of Array.from(nested.querySelectorAll("tr"))) {
+      const parts = Array.from(row.querySelectorAll("th, td"))
+        .map((c) => (c.textContent ?? "").replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      if (parts.length > 0) lines.push(parts.join(" · "));
+    }
+    const span = clone.ownerDocument.createElement("span");
+    span.textContent = lines.join(" / ");
+    nested.replaceWith(span);
+  }
+  return clone;
+}
+
 function cellText(service: TurndownService, cell: Element): string {
   // 셀 안에서는 줄바꿈이 표를 깨뜨리므로 한 줄로 편다.
   return service
-    .turndown(cell.innerHTML)
+    .turndown(flattenNestedTables(cell).innerHTML)
     .replace(/\|/g, "\\|")
     .replace(/\s*\n+\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
     .trim();
 }
 
@@ -112,6 +136,10 @@ function cellText(service: TurndownService, cell: Element): string {
  * GFM 파이프 표. 첫 행을 머리글로 삼고, 열 수는 가장 넓은 행에 맞춘다.
  * rowspan/colspan은 마크다운에 자리가 없어 편다 — colspan은 빈 칸으로 채우고,
  * rowspan은 첫 행에만 남는다. 잃은 게 있으면 호출부가 notes로 알린다.
+ *
+ * 한글 문서의 표는 절반이 칸 맞추기용이라 그대로 옮기면 읽을 수 없다. 그래서
+ * 내용이 없는 행·열은 버리고, 칸이 하나뿐인 표는 표를 벗겨 글로 되돌린다.
+ * 버리는 것은 빈 칸뿐이고 글자는 하나도 잃지 않는다.
  */
 function tableToMarkdown(service: TurndownService, table: HTMLTableElement): string {
   const rows = Array.from(table.querySelectorAll("tr"));
@@ -131,11 +159,28 @@ function tableToMarkdown(service: TurndownService, table: HTMLTableElement): str
   }
   if (grid.length === 0) return "";
 
-  const width = Math.max(...grid.map((line) => line.length));
+  // 한글 문서는 표를 칸 맞추기에도 쓴다. 그대로 옮기면 내용 없는 `| | | |` 줄만 쌓이므로
+  // 빈 행과 빈 열을 걷어 낸다 — 지우는 것은 칸뿐이고 글자는 하나도 잃지 않는다.
+  const blank = (value: string | undefined): boolean => (value ?? "").trim() === "";
+  let rows2 = grid.filter((line) => !line.every(blank));
+  if (rows2.length === 0) return "";
+
+  const raw = Math.max(...rows2.map((line) => line.length));
+  const keep: number[] = [];
+  for (let column = 0; column < raw; column++) {
+    if (!rows2.every((line) => blank(line[column]))) keep.push(column);
+  }
+  if (keep.length === 0) return "";
+  rows2 = rows2.map((line) => keep.map((column) => line[column] ?? ""));
+
+  // 칸이 하나뿐이면 표가 아니라 그냥 글이다(한글에서 본문을 표로 감싸는 흔한 버릇).
+  if (rows2.length === 1 && rows2[0].length === 1) return `\n\n${rows2[0][0]}\n\n`;
+
+  const width = keep.length;
   const pad = (line: string[]): string =>
     `| ${[...line, ...Array(width - line.length).fill("")].join(" | ")} |`;
 
-  const [head, ...body] = grid;
+  const [head, ...body] = rows2;
   const divider = `| ${Array(width).fill("---").join(" | ")} |`;
   return `\n\n${[pad(head), divider, ...body.map(pad)].join("\n")}\n\n`;
 }
@@ -187,6 +232,10 @@ function collectNotes(root: Document, images: ExtractedImage[]): string[] {
     "td[rowspan]:not([rowspan='1']), th[rowspan]:not([rowspan='1'])",
   ).length;
   if (merged > 0) notes.push(`병합된 셀 ${merged}개는 마크다운 표로 옮기며 펴졌어요.`);
+
+  // 표 안의 표는 GFM에 담을 자리가 없어 한 줄로 편다 — 이건 진짜로 잃는 구조라 밝힌다.
+  const nested = root.querySelectorAll("table table").length;
+  if (nested > 0) notes.push(`표 안에 든 표 ${nested}개는 한 줄로 폈어요.`);
 
   const remoteImages = Array.from(root.querySelectorAll("img")).filter(
     (img) => !(img.getAttribute("src") ?? "").startsWith("images/"),

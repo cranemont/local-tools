@@ -24,7 +24,8 @@ export const t = {
 
   file: {
     opening: "여는 중…",
-    close: "닫기",
+    // "찾기 닫기"와 나란히 놓이므로 무엇을 닫는지 밝힌다 — 둘 다 X 아이콘이라 이름이 유일한 단서다.
+    close: "문서 닫기",
     pages: (n: number) => `${n}쪽`,
     kind: {
       hwp: "한글 문서",
