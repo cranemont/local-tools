@@ -19,13 +19,16 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = "https://tools.cranemont.com";
 
 /** 배포되는 도구 페이지. .github/workflows/deploy.yml의 조립 목록과 같아야 한다. */
-const APPS = ["pdf", "gif", "video", "image", "sheet", "doc", "drop", "dev", "lab", "stack"];
+// apps/stack(기술 지도)은 여기 없다 — 배포하지 않고 `pnpm dev:stack`으로 로컬에서만 띄운다.
+const APPS = ["pdf", "gif", "video", "image", "sheet", "doc", "drop", "dev", "lab"];
 
 /** 손으로 쓴 정적 가이드. site/guide/<slug>/index.html — 빌드를 안 탄다. */
 const GUIDES = ["hwp-mac", "hwp-to-pdf", "hwp-to-markdown", "phone-to-pc", "no-upload"];
 
-/** 크롤 가능한 본문의 최소 어절 수. 국내 경쟁 도구 사이트가 650~790단어다. */
-const MIN_WORDS = 200;
+/** 크롤 가능한 본문의 최소 어절 수.
+ *  분량을 강제하려는 게 아니라 section#intro가 통째로 사라진 걸 잡으려는 값이다
+ *  (지우면 6어절로 돌아간다). 긴 글은 site/guide/ 가 진다. */
+const MIN_WORDS = 150;
 
 const fail = [];
 

@@ -1,7 +1,10 @@
 # main 푸시마다 전체 앱을 빌드해 GitHub Pages로 배포한다.
-# 산출 구조: / (site/index.html 랜딩) · /pdf/ · /gif/ · /video/ · /dev/ · /image/ · /sheet/ · /doc/ · /drop/ · /lab/ · /stack/
-# — 대부분 자기완결 단일 HTML. 예외 셋: /stack/(메타 페이지, 코드 분할)과
-#   /sheet/·/doc/(PWA — 파일 연결용. /doc/에는 한글 렌더러 wasm도 함께 올라간다).
+# 산출 구조: / (site/index.html 랜딩) · /pdf/ · /gif/ · /video/ · /dev/ · /image/ · /sheet/ · /doc/ · /drop/ · /lab/
+#   + /guide/ (손으로 쓴 정적 가이드)
+# — 대부분 자기완결 단일 HTML. 예외 둘: /sheet/·/doc/(PWA — 파일 연결용.
+#   /doc/에는 한글 렌더러 wasm도 함께 올라간다).
+# apps/stack(기술 지도)은 **배포하지 않는다** — 저장소를 설명하는 개발용 화면이라
+#   `pnpm dev:stack`으로 로컬에서만 띄운다. 빌드·검사는 그대로 돈다.
 #   /lab/은 단일 HTML이지만 모델을 실행 시점에 외부에서 받는다(그래서 오프라인이 아니다).
 name: deploy
 
@@ -37,7 +40,7 @@ jobs:
       - run: pnpm build
       - name: Assemble site
         run: |
-          mkdir -p _site/pdf _site/gif _site/video _site/dev _site/image _site/drop _site/sheet _site/doc _site/lab _site/stack
+          mkdir -p _site/pdf _site/gif _site/video _site/dev _site/image _site/drop _site/sheet _site/doc _site/lab
           cp -R site/. _site/
           cp apps/pdf/dist/index.html _site/pdf/index.html
           cp apps/gif/dist/index.html _site/gif/index.html
@@ -46,8 +49,6 @@ jobs:
           cp apps/image/dist/index.html _site/image/index.html
           cp apps/drop/dist/index.html _site/drop/index.html
           cp apps/lab/dist/index.html _site/lab/index.html
-          # 기술 지도만 단일 HTML이 아니다(메타 페이지 — three.js를 따로 내려받는다)
-          cp -R apps/stack/dist/. _site/stack/
           # 시트는 두 벌이다. /sheet/는 PWA(설치해야 .csv 더블클릭이 이 앱으로 온다),
           # 단일 HTML은 그 옆에 내려받기용으로 둔다.
           cp -R apps/sheet/dist-pwa/. _site/sheet/
@@ -87,7 +88,7 @@ jobs:
           KEY=95230c9d8dfc47b845257ce99be41f5a
           HOST=tools.cranemont.com
           URLS="\"https://$HOST/\""
-          for p in pdf gif video image sheet doc drop dev lab stack \
+          for p in pdf gif video image sheet doc drop dev lab \
                    guide guide/hwp-mac guide/hwp-to-pdf guide/hwp-to-markdown \
                    guide/phone-to-pc guide/no-upload; do
             URLS="$URLS,\"https://$HOST/$p/\""

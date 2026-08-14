@@ -24,7 +24,6 @@
 | [드롭](https://tools.cranemont.com/drop/) | 폰↔PC 파일 전송 · 코드 6자리나 QR · 서버 없는 P2P · 용량 제한 없음 |
 | [개발자 도구](https://tools.cranemont.com/dev/) | JSON·YAML·XML · diff · JWT · 해시 · UUID · 정규식 · cron · 색 · QR 등 16종 |
 | [실험장](https://tools.cranemont.com/lab/) | 한국어 임베딩 모델 비교 (도구가 아니라 실험장 — 모델을 실행 시점에 내려받는다) |
-| [기술 지도](https://tools.cranemont.com/stack/) | 무엇으로 만들었나 — 저장소를 3D 도시로 그린 메타 페이지 |
 
 내려받으려면 [랜딩](https://tools.cranemont.com/)에서 카드 오른쪽 위의 내려받기 아이콘을 누른다.
 도구 하나가 HTML 파일 한 개(47 KB ~ 910 KB)로 저장된다.
@@ -34,8 +33,8 @@
 주장만 하면 소용이 없으니 확인할 수 있게 해 뒀다.
 
 - **직접 보기** — 도구를 열고 DevTools 네트워크 탭을 연 채 파일을 끌어다 놓는다. 요청이 늘지 않는다.
-- **[기술 지도](https://tools.cranemont.com/stack/)** — 어떤 기능이 어떤 API 위에 서 있고 무엇이
-  네트워크를 타는지 도구별로 그려 둔다. 도시가 성벽 밖에 세우는 중계탑이 실제 접속 상대다.
+- **소스 읽기** — 저장소가 통째로 공개돼 있다. 어떤 주소에 접속하는지 코드에서 그대로 확인된다.
+  `pnpm dev:stack`으로 띄우는 기술 지도는 그 구조를 3D 도시로 그린다(로컬 전용 화면이다).
 - **인터넷을 끊고 써 보기** — 단일 HTML을 내려받아 비행기 모드에서 더블클릭하면 그대로 동작한다.
 
 **인터넷이 필요한 예외 넷**을 먼저 밝힌다. PDF의 암호 설정·해제(qpdf), 이미지의 HEIC·AVIF 처리,
@@ -48,13 +47,14 @@ SHA-384로 검증한 뒤에만 실행하고(불일치 시 실행 거부), 파일
 ## 구조
 
 ```
-apps/pdf  gif  video  image  sheet  doc  drop  dev  lab  stack
+apps/pdf  gif  video  image  sheet  doc  drop  dev  lab
+     stack/                     # 기술 지도 — 배포하지 않는다. `pnpm dev:stack`으로 로컬에서만
 packages/
   theme/                        # 공용 디자인 토큰 + UI 프리미티브
   wasm-loader/                  # SRI + SHA-384 fail-closed 로더
   pwa-kit/                      # PNG 인코더·아이콘·서비스 워커 (sheet·doc)
   vite-plugin-self-extracting/  # 자가해제형 빌드 후처리
-site/                           # 랜딩·robots·sitemap·OG 이미지
+site/                           # 랜딩·가이드·robots·sitemap·OG 이미지
 scripts/                        # 지도 정합성·사이트 자산·파비콘·사이트맵 검사와 생성
 ```
 

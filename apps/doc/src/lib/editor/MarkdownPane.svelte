@@ -39,6 +39,8 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    /* Pages.svelte와 같은 이유 — 끝까지 읽어도 화면이 위로 밀리지 않는다. */
+    overscroll-behavior: contain;
     padding: var(--space-md);
     background: var(--surface);
   }

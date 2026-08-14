@@ -140,6 +140,8 @@ const cards = new Map(
 const renamed = [];
 for (const app of APPS) {
   if (app.path === null) continue; // 출입구는 도구가 아니라 카드가 없다
+  // 기술 지도 자신은 배포하지 않아 랜딩 카드가 없다(로컬 전용 화면).
+  if (app.id === "stack") continue;
   const card = cards.get(app.id);
   if (!card) renamed.push(`${app.id} — 랜딩에 카드가 없어요`);
   else if (card.label !== app.label || card.desc !== app.blurb) {

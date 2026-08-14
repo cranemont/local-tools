@@ -260,6 +260,10 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    /* 문서 끝까지 스크롤했을 때 페이지 전체가 딸려 올라가지 않게 한다.
+     * 이게 없으면 도구 아래 설명(section#intro)으로 스크롤이 넘어가면서
+     * 편집 화면이 위로 밀려 "잘린" 것처럼 보인다. */
+    overscroll-behavior: contain;
     padding: var(--space-md);
     display: flex;
     flex-direction: column;

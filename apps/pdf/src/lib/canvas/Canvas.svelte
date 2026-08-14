@@ -379,6 +379,9 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    /* 안쪽 스크롤이 끝에 닿아도 페이지 전체가 딸려 올라가지 않게 한다.
+     * 도구 아래 설명(section#intro)으로 스크롤이 넘어가면 화면이 잘린 것처럼 보인다. */
+    overscroll-behavior: contain;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 16px;

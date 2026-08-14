@@ -16,7 +16,8 @@ pnpm build    # 전체 앱 빌드 — 자가해제형 단일 HTML 산출 → app
 pnpm check    # 전체 svelte-check 타입 체크 (0 errors/warnings 유지할 것)
 ```
 
-배포: main에 푸시하면 GitHub Actions가 빌드해 **https://tools.cranemont.com/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`·`/image/`·`/sheet/`·`/doc/`·`/drop/`·`/lab/`·`/stack/`). 별도 배포 명령 없음.
+배포: main에 푸시하면 GitHub Actions가 빌드해 **https://tools.cranemont.com/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`·`/image/`·`/sheet/`·`/doc/`·`/drop/`·`/lab/` + `/guide/`). 별도 배포 명령 없음.
+**`apps/stack`(기술 지도)은 배포하지 않는다** — 저장소를 설명하는 개발용 화면이라 `pnpm dev:stack`으로 로컬에서만 띄운다. 빌드·`pnpm check`(정합성 검사)는 그대로 돈다.
 
 ## 구조 (경량 pnpm 모노레포)
 
