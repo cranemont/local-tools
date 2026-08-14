@@ -3,10 +3,11 @@
   import { t } from "../i18n";
   import { zipSync } from "fflate";
   import { CROP_RATIOS, CROP_RATIO_ORIGINAL, editor } from "./state.svelte";
-  import { processItem } from "../image/pipeline";
+  import { processItem, type AttemptReport } from "../image/pipeline";
   import { effectiveFit, effectiveSize, fitPlan, targetSize } from "../image/size";
   import { readExifDisplay, type ExifDisplay } from "../image/exif";
   import { downloadBlob, formatBytes } from "../image/save";
+  import { MAX_COLORS, MIN_COLORS } from "../image/quantize";
   import {
     OUTPUT_EXT,
     mayHaveAlpha,
@@ -14,6 +15,7 @@
     type FitMode,
     type OutputFormat,
     type ResizeMode,
+    type SizeUnit,
   } from "../image/types";
 
   const FORMAT_LABELS: Record<OutputFormat, string> = {
@@ -50,8 +52,27 @@
     { label: t.panel.padTransparent, value: null },
   ];
 
+  /** 색 수 프리셋 — 나머지 값은 옆 입력란으로 넣는다. */
+  const COLOR_PRESETS = [256, 64, 16, 4];
+
+  const TARGET_UNITS: SizeUnit[] = ["KB", "MB"];
+  const TARGET_PRESETS: { value: number; unit: SizeUnit }[] = [
+    { value: 300, unit: "KB" },
+    { value: 1, unit: "MB" },
+    { value: 2, unit: "MB" },
+    { value: 5, unit: "MB" },
+  ];
+
   let filename = $state("");
   let status = $state("");
+
+  /** 목표 용량이 켜져 있으면 품질·색 수는 탐색이 정한다 — 컨트롤을 잠그고 배지로 알린다. */
+  const auto = $derived(editor.targetOn);
+
+  /** PNG 탐색만 축소 배율까지 건드린다(target.ts의 사다리) — 그래서 아래 치수 안내는
+   *  이 조건에서만 상한이 된다. 배지 없이 두면 "출력 1000×1000px"이라 적어 놓고
+   *  250×250px을 내보내게 된다. */
+  const autoSize = $derived(auto && editor.format === "png");
 
   const ext = $derived(OUTPUT_EXT[editor.format]);
   const multiple = $derived(editor.items.length > 1);
@@ -170,6 +191,15 @@
   function onQualityInput(e: Event) {
     editor.setQuality(Number((e.target as HTMLInputElement).value));
   }
+  function onColorsInput(e: Event) {
+    editor.setPngColors(Number((e.target as HTMLInputElement).value));
+  }
+  function onDitherChange(e: Event) {
+    editor.setPngDither((e.target as HTMLInputElement).checked);
+  }
+  function onTargetValueChange(e: Event) {
+    editor.setTargetValue(Number((e.target as HTMLInputElement).value));
+  }
   function onScaleChange(e: Event) {
     editor.setResizeScale(Number((e.target as HTMLInputElement).value));
   }
@@ -201,27 +231,38 @@
     editor.busy = true;
     try {
       const settings = editor.settings;
+      // 목표 용량을 켜면 장마다 재인코딩을 여러 번 한다 — 시도 번호까지 띄워야
+      // 큰 그림에서 진행 표시가 멈춘 것처럼 보이지 않는다.
+      const progress = (item: { name: string }, i: number, total: number): AttemptReport =>
+        (info) => {
+          editor.busyMsg = t.panel.convertingSearch(item.name, i, total, info.index, info.max);
+        };
+
       if (items.length === 1) {
         editor.busyMsg = t.panel.converting(items[0].name, 1, 1);
-        const r = await processItem(items[0], settings);
+        const r = await processItem(items[0], settings, progress(items[0], 1, 1));
         downloadBlob(r.blob, `${cleanName()}.${ext}`);
-        status = t.panel.savedOne(formatBytes(r.blob.size));
+        const size = formatBytes(r.blob.size);
+        status =
+          r.search && !r.search.met ? t.panel.savedOneMiss(size) : t.panel.savedOne(size);
       } else {
         const files: Record<string, Uint8Array> = {};
         const used = new Set<string>();
         const failed: string[] = [];
         const errs: string[] = [];
         let total = 0;
+        let missed = 0;
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
           editor.busyMsg = t.panel.converting(item.name, i + 1, items.length);
           // 장별로 잡는다 — 한 장이 실패해도 나머지는 묶어서 내보낸다.
           try {
-            const r = await processItem(item, settings);
+            const r = await processItem(item, settings, progress(item, i + 1, items.length));
             files[uniqueName(used, baseName(item.name))] = new Uint8Array(
               await r.blob.arrayBuffer(),
             );
             total += r.blob.size;
+            if (r.search && !r.search.met) missed++;
           } catch (err) {
             failed.push(item.id);
             errs.push(err instanceof Error ? err.message : String(err));
@@ -240,9 +281,11 @@
         const buf = new Uint8Array(zipped.byteLength);
         buf.set(zipped);
         downloadBlob(new Blob([buf], { type: "application/zip" }), `${cleanName()}.zip`);
-        status = failed.length
+        // 실패와 목표 초과는 함께 일어날 수 있다 — 하나만 말하면 나머지가 묻힌다.
+        const base = failed.length
           ? t.panel.savedZipPartial(ok, formatBytes(total), failed.length)
           : t.panel.savedZip(ok, formatBytes(total));
+        status = missed ? t.panel.savedZipMiss(base, missed) : base;
       }
     } catch (err) {
       editor.error = err instanceof Error ? err.message : String(err);
@@ -282,8 +325,71 @@
     </div>
   </section>
 
-  <!-- 품질 (PNG는 무손실이라 조절할 것이 없다) -->
-  {#if editor.format !== "png"}
+  <!-- PNG는 품질 손잡이가 없다 — 대신 색 수를 줄여 용량을 낮춘다 -->
+  {#if editor.format === "png"}
+    <section class="sec">
+      <h3>{t.panel.colors}</h3>
+      <div class="chips" role="group" aria-label={t.panel.colors}>
+        <button
+          type="button"
+          class="chip"
+          class:active={editor.pngColors === null && !auto}
+          disabled={auto}
+          onclick={() => editor.setPngColors(null)}
+        >
+          {t.panel.colorsOriginal}
+        </button>
+        {#each COLOR_PRESETS as c (c)}
+          <button
+            type="button"
+            class="chip"
+            class:active={!auto && editor.pngColors === c}
+            disabled={auto}
+            onclick={() => editor.setPngColors(c)}
+          >
+            {c}
+          </button>
+        {/each}
+        {#if auto}
+          <span class="badge note" title={t.panel.autoColorsHint}>{t.panel.auto}</span>
+        {/if}
+      </div>
+      {#if editor.pngColors !== null && !auto}
+        <div class="row">
+          <input
+            class="slider"
+            type="range"
+            min={MIN_COLORS}
+            max={MAX_COLORS}
+            step="1"
+            value={editor.pngColors}
+            oninput={onColorsInput}
+            aria-label={t.panel.colors}
+          />
+          <input
+            class="num"
+            type="number"
+            min={MIN_COLORS}
+            max={MAX_COLORS}
+            step="1"
+            value={editor.pngColors}
+            onchange={onColorsInput}
+            aria-label={t.panel.colors}
+          />
+        </div>
+      {/if}
+      {#if editor.pngColors !== null || auto}
+        <label class="row checkrow">
+          <input type="checkbox" checked={editor.pngDither} onchange={onDitherChange} />
+          <span class="lbl">{t.panel.dither}</span>
+        </label>
+        <!-- 배지는 라벨 밖에 둔다 — 안에 넣으면 배지를 눌러도 디더링이 켜진다. -->
+        <div class="row">
+          <span class="badge note" title={t.panel.palette24Hint}>{t.panel.palette24}</span>
+        </div>
+      {/if}
+    </section>
+  {:else}
     <section class="sec">
       <h3>{t.panel.quality}</h3>
       <div class="row">
@@ -307,9 +413,64 @@
           onchange={onQualityInput}
           aria-label={t.panel.quality}
         />
+        {#if auto}
+          <span class="badge note" title={t.panel.autoQualityHint}>{t.panel.auto}</span>
+        {/if}
       </div>
     </section>
   {/if}
+
+  <!-- 목표 용량 — 켜면 이 이하로 떨어지는 가장 높은 설정을 이진 탐색으로 찾는다 -->
+  <section class="sec">
+    <h3>{t.panel.target}</h3>
+    <div class="chips" role="group" aria-label={t.panel.target}>
+      <button
+        type="button"
+        class="chip"
+        class:active={!editor.targetOn}
+        onclick={() => editor.setTargetOn(false)}
+      >
+        {t.panel.targetOff}
+      </button>
+      {#each TARGET_PRESETS as p (`${p.value}${p.unit}`)}
+        <button
+          type="button"
+          class="chip"
+          class:active={editor.targetOn &&
+            editor.targetValue === p.value &&
+            editor.targetUnit === p.unit}
+          onclick={() => editor.setTarget(p.value, p.unit)}
+        >
+          {p.value}{p.unit}
+        </button>
+      {/each}
+    </div>
+    {#if editor.targetOn}
+      <div class="row">
+        <input
+          class="num grow"
+          type="number"
+          min="1"
+          step="1"
+          value={editor.targetValue}
+          onchange={onTargetValueChange}
+          aria-label={t.panel.targetSizeLabel}
+        />
+        <div class="chips" role="group" aria-label={t.panel.targetUnitLabel}>
+          {#each TARGET_UNITS as u (u)}
+            <button
+              type="button"
+              class="chip"
+              class:active={editor.targetUnit === u}
+              onclick={() => editor.setTargetUnit(u)}
+            >
+              {u}
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </section>
 
   <!-- 크기 -->
   <section class="sec">
@@ -494,23 +655,28 @@
     {/if}
 
     {#if outDims}
-      <p class="info">
-        {#if currentEdited}
-          {t.panel.sizeInfoEdited(
-            outDims.eff.w,
-            outDims.eff.h,
-            outDims.target.w,
-            outDims.target.h,
-          )}
-        {:else}
-          {t.panel.sizeInfo(
-            outDims.eff.w,
-            outDims.eff.h,
-            outDims.target.w,
-            outDims.target.h,
-          )}
+      <div class="row">
+        <p class="info grow">
+          {#if currentEdited}
+            {t.panel.sizeInfoEdited(
+              outDims.eff.w,
+              outDims.eff.h,
+              outDims.target.w,
+              outDims.target.h,
+            )}
+          {:else}
+            {t.panel.sizeInfo(
+              outDims.eff.w,
+              outDims.eff.h,
+              outDims.target.w,
+              outDims.target.h,
+            )}
+          {/if}
+        </p>
+        {#if autoSize}
+          <span class="badge note" title={t.panel.autoSizeHint}>{t.panel.auto}</span>
         {/if}
-      </p>
+      </div>
       {#if outDims.fit === "contain" && outDims.padded}
         <p class="info">{t.panel.fitContainInfo(outDims.plan.draw.w, outDims.plan.draw.h)}</p>
       {:else if outDims.fit === "cover" && outDims.cropped}
@@ -776,6 +942,12 @@
     font-weight: 600;
     white-space: nowrap;
     cursor: help;
+  }
+  /* 잘못된 것이 아니라 알아 둘 것 — 같은 자리, 위험 색만 뺀다. */
+  .badge.note {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text-muted);
   }
 
   .lbl {

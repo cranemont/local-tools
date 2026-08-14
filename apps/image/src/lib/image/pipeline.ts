@@ -3,6 +3,8 @@ import { t } from "../i18n";
 import { encodeAvif } from "./avif";
 import { getBitmap } from "./decode";
 import { embedJpegExif, embedWebpExif, extractExif, neutralizeOrientation } from "./exif";
+import { applyPalette, quantize } from "./quantize";
+import { PNG_STEPS, pngStepAt, searchTarget, type AttemptInfo } from "./target";
 import {
   OUTPUT_MIME,
   supportsExifKeep,
@@ -13,11 +15,28 @@ import { effectiveFit, fitPlan, targetSize } from "./size";
 
 const pica = new Pica();
 
+/** 목표 용량 탐색이 돌았을 때만 채워진다 — 화면이 무엇을 고른 건지 말할 수 있게. */
+export interface SearchInfo {
+  /** 목표 이하로 떨어뜨렸는가. 거짓이면 가장 작은 결과를 돌려준 것이다. */
+  met: boolean;
+  attempts: number;
+  /** 고른 품질(png가 아닐 때). */
+  quality?: number;
+  /** 고른 팔레트 색 수(png일 때). null이면 색을 줄이지 않기로 한 것이다. */
+  colors?: number | null;
+  /** 더 건 축소 배율 %(png일 때). 100이면 크기를 건드리지 않았다. */
+  scale?: number;
+}
+
 export interface ProcessResult {
   blob: Blob;
   width: number;
   height: number;
+  search?: SearchInfo;
 }
+
+/** 목표 용량 탐색의 진행 알림 — 여러 장을 처리할 때 화면이 멈춘 것처럼 보이지 않게 쓴다. */
+export type AttemptReport = (info: AttemptInfo) => void;
 
 /** 회전만 적용한 원본 PNG — 크롭 오버레이의 바탕 화면용. */
 export async function renderRotated(item: ImageItem): Promise<Blob> {
@@ -26,14 +45,116 @@ export async function renderRotated(item: ImageItem): Promise<Blob> {
   return canvasToBlob(canvas, "image/png");
 }
 
-/** 아이템 한 장을 처리: 디코드 → 회전·반전·크롭 → 맞춤·리사이즈(pica) → 인코딩 → (EXIF 유지). */
+/**
+ * 아이템 한 장을 처리: 디코드 → 회전·반전·크롭 → 맞춤·리사이즈(pica) → 인코딩 → (EXIF 유지).
+ * `settings.targetBytes`가 있으면 그 이하로 떨어지는 가장 높은 설정을 이진 탐색으로 찾는다
+ * (탐색 계획은 target.ts, 여기서는 그 계획에 인코딩을 물려 준다).
+ */
 export async function processItem(
   item: ImageItem,
   settings: OutputSettings,
+  onAttempt?: AttemptReport,
 ): Promise<ProcessResult> {
+  const target = settings.targetBytes;
+  if (target === null || !(target > 0)) {
+    const stage = await renderStage(item, settings);
+    const colors = settings.format === "png" ? settings.pngColors : null;
+    const blob = await finish(stage, item, settings, settings.quality, colors);
+    return { blob, width: stage.w, height: stage.h };
+  }
+  return settings.format === "png"
+    ? searchPng(item, settings, target, onAttempt)
+    : searchQuality(item, settings, target, onAttempt);
+}
+
+// ── 목표 용량 탐색 ────────────────────────────────────────────────────────────
+
+/** 품질이 있는 형식: 스테이지는 한 번만 그리고 품질만 바꿔 다시 인코딩한다.
+ *  상한은 사용자가 고른 품질이다 — 부탁한 것보다 높은 품질을 돌려주지 않는다. */
+async function searchQuality(
+  item: ImageItem,
+  settings: OutputSettings,
+  target: number,
+  onAttempt?: AttemptReport,
+): Promise<ProcessResult> {
+  const stage = await renderStage(item, settings);
+  const max = Math.min(100, Math.max(1, Math.round(settings.quality)));
+  const hit = await searchTarget(
+    { targetBytes: target, min: 1, max },
+    async (quality) => {
+      const blob = await finish(stage, item, settings, quality, null);
+      return { bytes: blob.size, result: blob };
+    },
+    onAttempt,
+  );
+  if (!hit) throw new Error(t.errors.encodeFail);
+  return {
+    blob: hit.result,
+    width: stage.w,
+    height: stage.h,
+    search: { met: hit.met, attempts: hit.attempts, quality: hit.value },
+  };
+}
+
+/** PNG: 품질 손잡이가 없으니 색 수·축소 배율 사다리(target.ts)를 축으로 쓴다.
+ *  배율이 바뀔 때만 스테이지를 다시 그린다 — 같은 배율의 칸끼리는 캔버스를 재사용한다. */
+async function searchPng(
+  item: ImageItem,
+  settings: OutputSettings,
+  target: number,
+  onAttempt?: AttemptReport,
+): Promise<ProcessResult> {
+  let cached: { scale: number; stage: Stage } | null = null;
+  const hit = await searchTarget(
+    { targetBytes: target, min: 0, max: PNG_STEPS - 1 },
+    async (value) => {
+      const step = pngStepAt(value);
+      let stage: Stage;
+      if (cached && cached.scale === step.scale) {
+        stage = cached.stage;
+      } else {
+        stage = await renderStage(item, settings, step.scale);
+        cached = { scale: step.scale, stage };
+      }
+      const blob = await finish(stage, item, settings, settings.quality, step.colors);
+      return { bytes: blob.size, result: { blob, w: stage.w, h: stage.h, step } };
+    },
+    onAttempt,
+  );
+  if (!hit) throw new Error(t.errors.encodeFail);
+  return {
+    blob: hit.result.blob,
+    width: hit.result.w,
+    height: hit.result.h,
+    search: {
+      met: hit.met,
+      attempts: hit.attempts,
+      colors: hit.result.step.colors,
+      scale: hit.result.step.scale,
+    },
+  };
+}
+
+// ── 스테이지(그리기) / 인코딩 ─────────────────────────────────────────────────
+
+/** 인코딩 직전의 캔버스. 목표 용량 탐색은 이걸 한 번 만들어 여러 번 인코딩한다. */
+interface Stage {
+  canvas: HTMLCanvasElement;
+  w: number;
+  h: number;
+}
+
+/** extraScale은 리사이즈로 정해진 목표 크기에 더 거는 축소 배율(%)이다 — PNG 탐색만 쓴다. */
+async function renderStage(
+  item: ImageItem,
+  settings: OutputSettings,
+  extraScale = 100,
+): Promise<Stage> {
   const bitmap = await getBitmap(item);
   const base = renderBase(bitmap, item);
-  const { w, h } = targetSize(base.width, base.height, settings.resize);
+  const target = targetSize(base.width, base.height, settings.resize);
+  const w = scaleSide(target.w, extraScale);
+  const h = scaleSide(target.h, extraScale);
   const plan = fitPlan(base.width, base.height, w, h, effectiveFit(settings.resize));
 
   // cover: 목표 비율만큼만 가운데에서 잘라 낸다 — renderBase의 크롭과 같은 방식.
@@ -94,29 +215,77 @@ export async function processItem(
     stage = flat;
   }
 
-  let blob: Blob;
+  return { canvas: stage, w, h };
+}
+
+function scaleSide(n: number, pct: number): number {
+  return pct === 100 ? n : Math.max(1, Math.round((n * pct) / 100));
+}
+
+/** 인코딩 + EXIF 유지까지 — 탐색이 재는 바이트가 실제 저장될 파일 크기와 같아야 한다. */
+async function finish(
+  stage: Stage,
+  item: ImageItem,
+  settings: OutputSettings,
+  quality: number,
+  colors: number | null,
+): Promise<Blob> {
+  const blob = await encodeStage(stage, settings, quality, colors);
+  return keepExif(blob, item, settings, stage.w, stage.h);
+}
+
+async function encodeStage(
+  stage: Stage,
+  settings: OutputSettings,
+  quality: number,
+  colors: number | null,
+): Promise<Blob> {
+  const { canvas, w, h } = stage;
   if (settings.format === "avif") {
-    const ctx = context2d(stage);
-    blob = await encodeAvif(ctx.getImageData(0, 0, w, h), settings.quality);
-  } else {
-    const quality = settings.format === "png" ? undefined : settings.quality / 100;
-    blob = await canvasToBlob(stage, OUTPUT_MIME[settings.format], quality);
+    return encodeAvif(context2d(canvas).getImageData(0, 0, w, h), quality);
   }
-
-  if (settings.keepExif && supportsExifKeep(settings.format)) {
-    const tiff = extractExif(item.bytes, item.mime);
-    if (tiff) {
-      const neutral = neutralizeOrientation(tiff);
-      const out = new Uint8Array(await blob.arrayBuffer());
-      const embedded =
-        settings.format === "jpeg"
-          ? embedJpegExif(out, neutral)
-          : embedWebpExif(out, neutral, w, h);
-      if (embedded) blob = new Blob([embedded], { type: OUTPUT_MIME[settings.format] });
-    }
+  if (settings.format === "png") {
+    const target = colors === null ? canvas : reduceColors(canvas, colors, settings.pngDither);
+    return canvasToBlob(target, OUTPUT_MIME.png);
   }
+  return canvasToBlob(canvas, OUTPUT_MIME[settings.format], quality / 100);
+}
 
-  return { blob, width: w, height: h };
+/** 색을 줄인 **사본** 캔버스. 원본 스테이지는 그대로 둔다 —
+ *  탐색이 같은 캔버스를 색 수만 바꿔 여러 번 인코딩하기 때문이다. */
+function reduceColors(
+  canvas: HTMLCanvasElement,
+  colors: number,
+  dither: boolean,
+): HTMLCanvasElement {
+  const { width, height } = canvas;
+  // getImageData는 사본을 준다 — 여기 되쓰는 것은 원본 캔버스에 닿지 않는다.
+  const data = context2d(canvas).getImageData(0, 0, width, height);
+  applyPalette(quantize(data.data, width, height, { colors, dither }), data.data);
+  const out = document.createElement("canvas");
+  out.width = width;
+  out.height = height;
+  context2d(out).putImageData(data, 0, 0);
+  return out;
+}
+
+async function keepExif(
+  blob: Blob,
+  item: ImageItem,
+  settings: OutputSettings,
+  w: number,
+  h: number,
+): Promise<Blob> {
+  if (!settings.keepExif || !supportsExifKeep(settings.format)) return blob;
+  const tiff = extractExif(item.bytes, item.mime);
+  if (!tiff) return blob;
+  const neutral = neutralizeOrientation(tiff);
+  const out = new Uint8Array(await blob.arrayBuffer());
+  const embedded =
+    settings.format === "jpeg"
+      ? embedJpegExif(out, neutral)
+      : embedWebpExif(out, neutral, w, h);
+  return embedded ? new Blob([embedded], { type: OUTPUT_MIME[settings.format] }) : blob;
 }
 
 /** 회전·반전 → 크롭을 적용한 베이스 캔버스. */

@@ -42,6 +42,15 @@ export const t = {
     cropAdjust: "모서리를 끌어 조정한 뒤 자르기",
     cropApply: "자르기",
     cropArea: "크롭 영역",
+    /** 목표 용량 탐색이 도는 동안 — 몇 번째 시도인지 보인다. */
+    searching: (i: number, max: number) => `맞추는 중… ${i}/${max}`,
+    pickedQuality: (q: number) => `품질 ${q}`,
+    pickedColors: (c: number | null, scale: number) => {
+      const colors = c === null ? "원본 색" : `색 ${c}`;
+      return scale === 100 ? colors : `${colors} · ${scale}%`;
+    },
+    targetMiss: "목표 초과",
+    targetMissHint: (limit: string) => `${limit} 이하로는 못 줄여 가장 작은 결과를 뒀어요`,
   },
 
   edit: {
@@ -86,6 +95,25 @@ export const t = {
     format: "형식",
     quality: "품질",
 
+    colors: "색 수",
+    colorsOriginal: "원본",
+    dither: "디더링",
+    /** 색을 줄여도 브라우저가 팔레트 PNG를 못 만든다는 사실 — 배지 + 툴팁으로만 알린다. */
+    palette24: "24비트로 저장",
+    palette24Hint:
+      "브라우저 PNG 인코더는 팔레트를 쓰지 않아요. 색을 줄이면 압축이 잘 돼 용량은 줄지만 팔레트 PNG만큼은 아니에요",
+    /** 목표 용량이 켜져 있어 이 값을 자동으로 고른다는 표시. */
+    auto: "자동",
+    autoQualityHint: "목표 용량에 맞춰 이 값 이하에서 고릅니다",
+    autoColorsHint: "목표 용량에 맞춰 색 수와 축소 배율을 고릅니다",
+    /** PNG 탐색은 축소 배율까지 건드린다 — 아래 치수는 상한이지 확정값이 아니다. */
+    autoSizeHint: "목표 용량에 맞춰 이 치수보다 작게 나올 수 있어요",
+
+    target: "목표 용량",
+    targetOff: "끔",
+    targetSizeLabel: "목표 용량 값",
+    targetUnitLabel: "목표 용량 단위",
+
     size: "크기",
     sizeOriginal: "원본 크기",
     sizeScale: "배율",
@@ -128,11 +156,18 @@ export const t = {
     save: "저장",
     converting: (name: string, i: number, total: number) =>
       `변환 중… (${i}/${total}) ${name}`,
+    /** 장마다 따로 탐색하므로 시도 번호까지 보여 준다 — 안 그러면 멈춘 것처럼 보인다. */
+    convertingSearch: (name: string, i: number, total: number, step: number, max: number) =>
+      `변환 중… (${i}/${total}) ${name} · 맞추는 중 ${step}/${max}`,
     zipping: "ZIP으로 묶는 중…",
     savedOne: (size: string) => `저장됨 · ${size}`,
+    savedOneMiss: (size: string) => `저장됨 · ${size} · 목표 초과`,
     savedZip: (n: number, size: string) => `ZIP 저장됨 · ${n}장 · ${size}`,
     savedZipPartial: (n: number, size: string, failed: number) =>
       `ZIP 저장됨 · ${n}장 · ${size} · ${failed}장 실패`,
+    /** 실패와 함께 붙을 수 있으므로 앞 문구에 이어 붙인다 — 둘 중 하나만 말하면
+     *  목표를 넘긴 장이 조용히 묻힌다. */
+    savedZipMiss: (base: string, over: number) => `${base} · ${over}장 목표 초과`,
   },
 
   errors: {

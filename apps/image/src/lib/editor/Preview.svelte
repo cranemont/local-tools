@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from "../i18n";
   import { editor, MIN_CROP } from "./state.svelte";
-  import { processItem, renderRotated } from "../image/pipeline";
+  import { processItem, renderRotated, type SearchInfo } from "../image/pipeline";
   import { rotatedSize } from "../image/size";
   import { formatBytes } from "../image/save";
   import type { CropRect } from "../image/types";
@@ -33,8 +33,11 @@
     bytes: number;
     w: number;
     h: number;
+    search: SearchInfo | null;
   }
   let result = $state<ResultView | null>(null);
+  /** 목표 용량 탐색이 도는 중이면 몇 번째 시도인지 — 없으면 null. */
+  let searchStep = $state<{ index: number; max: number } | null>(null);
   /** 마지막 결과 URL — 반응 추적 밖에 둬야 이 값을 읽는 것이 재계산을 부르지 않는다. */
   let lastResultUrl = "";
 
@@ -51,19 +54,31 @@
     let cancelled = false;
     const timer = setTimeout(async () => {
       computing = true;
+      searchStep = null;
       try {
-        const r = await processItem(item, settings);
+        const r = await processItem(item, settings, (info) => {
+          if (!cancelled) searchStep = { index: info.index, max: info.max };
+        });
         if (cancelled) return;
         const prev = lastResultUrl;
         lastResultUrl = URL.createObjectURL(r.blob);
-        result = { url: lastResultUrl, bytes: r.blob.size, w: r.width, h: r.height };
+        result = {
+          url: lastResultUrl,
+          bytes: r.blob.size,
+          w: r.width,
+          h: r.height,
+          search: r.search ?? null,
+        };
         // 새 결과를 올린 뒤에 이전 URL을 놓아 준다. 미리 놓으면 크롭 모드에서
         // 돌아오는 순간 img가 이미 회수된 URL을 다시 받으러 가 그림이 깨진다.
         if (prev) URL.revokeObjectURL(prev);
       } catch (err) {
         if (!cancelled) editor.error = err instanceof Error ? err.message : String(err);
       } finally {
-        if (!cancelled) computing = false;
+        if (!cancelled) {
+          computing = false;
+          searchStep = null;
+        }
       }
     }, DEBOUNCE_MS);
     return () => {
@@ -111,6 +126,15 @@
   const shownUrl = $derived.by(() => {
     if (editor.cropMode) return cropUrl;
     return view === "original" ? origUrl : (result?.url ?? origUrl);
+  });
+
+  /** 목표 용량 탐색이 무엇을 골랐는지 — 고른 값을 감추면 화면이 결과를 설명하지 못한다. */
+  const picked = $derived.by(() => {
+    const s = result?.search;
+    if (!s) return "";
+    if (s.quality !== undefined) return t.preview.pickedQuality(s.quality);
+    if (s.scale !== undefined) return t.preview.pickedColors(s.colors ?? null, s.scale);
+    return "";
   });
 
   // ── 크롭 영역 잡기 ────────────────────────────────
@@ -395,7 +419,11 @@
     {/if}
 
     {#if computing && !editor.cropMode}
-      <span class="computing">{t.preview.computing}</span>
+      <span class="computing">
+        {searchStep
+          ? t.preview.searching(searchStep.index, searchStep.max)
+          : t.preview.computing}
+      </span>
     {/if}
   </div>
 
@@ -408,6 +436,17 @@
           deltaPct,
         )}
       </span>
+      {#if picked}
+        <span class="dims">{picked}</span>
+      {/if}
+      {#if result.search && !result.search.met}
+        <span
+          class="badge miss"
+          title={t.preview.targetMissHint(formatBytes(editor.targetBytes ?? 0))}
+        >
+          {t.preview.targetMiss}
+        </span>
+      {/if}
       <span class="dims">
         {t.preview.dims(item.width, item.height)}
         {#if result.w !== item.width || result.h !== item.height}
@@ -653,5 +692,12 @@
   .badge.larger {
     border-color: color-mix(in srgb, var(--danger) 40%, transparent);
     color: var(--danger);
+  }
+  /* 목표를 못 맞췄다는 표시 — 문단 대신 배지 하나로 말한다(자세한 것은 title). */
+  .badge.miss {
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+    cursor: help;
   }
 </style>

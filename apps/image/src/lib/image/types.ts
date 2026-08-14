@@ -60,14 +60,28 @@ export interface ResizeSpec {
   noEnlarge: boolean;
 }
 
+/** 목표 용량 입력의 단위 — 화면에서 고르고 바이트로 환산해 파이프라인에 넘긴다. */
+export type SizeUnit = "KB" | "MB";
+
+export const UNIT_BYTES: Record<SizeUnit, number> = {
+  KB: 1024,
+  MB: 1024 * 1024,
+};
+
 /** 전체 장에 일괄 적용되는 출력 파이프라인 설정. */
 export interface OutputSettings {
   format: OutputFormat;
-  /** 1–100. PNG(무손실)에서는 무시된다. */
+  /** 1–100. PNG(무손실)에서는 무시된다. 목표 용량을 켜면 탐색의 상한이 된다. */
   quality: number;
   resize: ResizeSpec;
   /** 원본 EXIF를 출력에 유지 (JPEG·WebP 출력만 지원). */
   keepExif: boolean;
+  /** PNG 전용 팔레트 색 수(2–256). null이면 색을 줄이지 않는다. */
+  pngColors: number | null;
+  /** PNG 색 수 축소에 Floyd–Steinberg 디더링을 쓴다. */
+  pngDither: boolean;
+  /** 목표 용량(바이트). null이면 탐색하지 않고 위 설정 그대로 한 번만 인코딩한다. */
+  targetBytes: number | null;
 }
 
 export const OUTPUT_MIME: Record<OutputFormat, string> = {

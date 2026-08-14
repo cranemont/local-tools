@@ -1,6 +1,8 @@
 import { t } from "../i18n";
 import { loadImage, releaseAll, releaseOne } from "../image/decode";
+import { MAX_COLORS, MIN_COLORS } from "../image/quantize";
 import { rotatedSize } from "../image/size";
+import { UNIT_BYTES } from "../image/types";
 import type {
   CropRect,
   FitMode,
@@ -11,6 +13,7 @@ import type {
   ResizeMode,
   ResizeSpec,
   Rotation,
+  SizeUnit,
 } from "../image/types";
 
 export const SCALE_DEFAULT = 50;
@@ -20,6 +23,9 @@ export const LONGEST_DEFAULT = 1280;
 
 /** 목표 치수의 상한 — 입력·계산 모두 이 값으로 자른다. */
 const SIZE_MAX = 20000;
+
+/** 목표 용량 입력의 상한(단위별). KB는 4GB 근처가 아니라 상식적인 자리에서 자른다. */
+const TARGET_MAX: Record<SizeUnit, number> = { KB: 999999, MB: 4096 };
 
 /** 크롭 영역의 최소 변 길이(px). */
 export const MIN_CROP = 8;
@@ -109,6 +115,16 @@ export class EditorState {
 
   format = $state<OutputFormat>("jpeg");
   quality = $state(80);
+  /** PNG 팔레트 색 수. null이면 색을 줄이지 않는다(기본) — 줄이면 반투명이 사라진다. */
+  pngColors = $state<number | null>(null);
+  /** 디더링은 기본이 꺼짐이다. 띠는 줄지만 고주파 노이즈가 늘어 PNG가 커진다 —
+   *  실측에서 화면 캡처를 4색으로 줄일 때 48% → 82%였다(용량을 줄이려고 켜는 기능인데
+   *  켜 두면 반대로 간다). 띠가 거슬리는 사람만 켠다. */
+  pngDither = $state(false);
+  /** 목표 용량을 켰는가. 끄면 아래 두 값은 그대로 남아 다시 켤 때 되살아난다. */
+  targetOn = $state(false);
+  targetValue = $state(1);
+  targetUnit = $state<SizeUnit>("MB");
   resizeMode = $state<ResizeMode>("none");
   resizeScale = $state(SCALE_DEFAULT);
   resizeWidth = $state(WIDTH_DEFAULT);
@@ -184,12 +200,22 @@ export class EditorState {
     return this.cropPortrait ? 1 / ratio : ratio;
   });
 
+  /** 목표 용량(바이트). 꺼져 있으면 null이고 파이프라인은 탐색을 건너뛴다. */
+  readonly targetBytes = $derived.by((): number | null => {
+    if (!this.targetOn) return null;
+    const bytes = Math.round(this.targetValue * UNIT_BYTES[this.targetUnit]);
+    return Number.isFinite(bytes) && bytes > 0 ? bytes : null;
+  });
+
   readonly settings = $derived.by(
     (): OutputSettings => ({
       format: this.format,
       quality: this.quality,
       resize: this.resizeSpec,
       keepExif: this.keepExif,
+      pngColors: this.pngColors,
+      pngDither: this.pngDither,
+      targetBytes: this.targetBytes,
     }),
   );
 
@@ -432,6 +458,46 @@ export class EditorState {
 
   setQuality(q: number): void {
     this.quality = Math.min(100, Math.max(1, Math.round(q)));
+    this.touch();
+  }
+
+  /** null이면 색을 줄이지 않는다. */
+  setPngColors(n: number | null): void {
+    if (n === null) this.pngColors = null;
+    else if (Number.isFinite(n)) {
+      this.pngColors = clamp(Math.round(n), MIN_COLORS, MAX_COLORS);
+    }
+    this.touch();
+  }
+
+  setPngDither(v: boolean): void {
+    this.pngDither = v;
+    this.touch();
+  }
+
+  setTargetOn(v: boolean): void {
+    this.targetOn = v;
+    this.touch();
+  }
+
+  setTargetValue(n: number): void {
+    if (Number.isFinite(n)) {
+      this.targetValue = clamp(Math.round(n), 1, TARGET_MAX[this.targetUnit]);
+    }
+    this.touch();
+  }
+
+  setTargetUnit(unit: SizeUnit): void {
+    this.targetUnit = unit;
+    this.targetValue = clamp(this.targetValue, 1, TARGET_MAX[unit]);
+    this.touch();
+  }
+
+  /** 프리셋 칩 — 값과 단위를 함께 놓고 켠다. */
+  setTarget(value: number, unit: SizeUnit): void {
+    this.targetUnit = unit;
+    this.targetValue = clamp(Math.round(value), 1, TARGET_MAX[unit]);
+    this.targetOn = true;
     this.touch();
   }
 
