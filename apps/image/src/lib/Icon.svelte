@@ -12,6 +12,11 @@
     | "image"
     | "crop"
     | "rotate"
+    | "rotate-ccw"
+    | "flip-x"
+    | "flip-y"
+    | "link"
+    | "link-off"
     | "undo"
     | "redo";
 
@@ -63,6 +68,24 @@
   {:else if name === "rotate"}
     <path d="M21 12a9 9 0 1 1-2.64-6.36" />
     <path d="M21 3v5h-5" />
+  {:else if name === "rotate-ccw"}
+    <path d="M3 12a9 9 0 1 0 2.64-6.36" />
+    <path d="M3 3v5h5" />
+  {:else if name === "flip-x"}
+    <path d="M12 3v18" />
+    <path d="M9 7 4 12l5 5V7Z" />
+    <path d="M15 7l5 5-5 5V7Z" />
+  {:else if name === "flip-y"}
+    <path d="M3 12h18" />
+    <path d="M7 9 12 4l5 5H7Z" />
+    <path d="M7 15h10l-5 5-5-5Z" />
+  {:else if name === "link"}
+    <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
+    <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
+  {:else if name === "link-off"}
+    <path d="M9 17H8a5 5 0 0 1 0-10h1" />
+    <path d="M15 7h1a5 5 0 0 1 0 10h-1" />
+    <path d="M8 12h2M14 12h2" />
   {:else if name === "undo"}
     <path d="M9 14 4 9l5-5" />
     <path d="M4 9h10a6 6 0 0 1 0 12h-3" />

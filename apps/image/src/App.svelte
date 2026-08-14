@@ -30,10 +30,6 @@
   <main class="content">
     <Editor />
   </main>
-
-  <footer class="footer">
-    <span class="privacy">{t.privacyNote}</span>
-  </footer>
 </div>
 
 <style>
@@ -98,15 +94,6 @@
     padding: 18px;
     display: flex;
     overflow: hidden;
-  }
-
-  .footer {
-    padding: 10px 18px;
-    border-top: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-muted);
-    font-size: var(--text-sm);
-    text-align: center;
   }
 
   /* 좁은 화면에선 작업 영역이 세로로 쌓이므로 셸이 스크롤을 허용한다 */

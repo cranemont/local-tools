@@ -8,6 +8,7 @@
   let { item, index }: { item: ImageItem; index: number } = $props();
 
   const isCurrent = $derived(index === editor.current);
+  const failed = $derived(editor.saveFailed.includes(item.id));
 </script>
 
 <div class="card" class:current={isCurrent}>
@@ -18,7 +19,9 @@
     title={t.cards.activate}
   >
     <img src={item.thumb} alt={item.name} draggable="false" />
-    {#if item.transform.rotation !== 0 || item.transform.crop}
+    {#if failed}
+      <span class="edited failed" title={t.edit.failed}><Icon name="x" size={10} /></span>
+    {:else if item.transform.rotation !== 0 || item.transform.flipX || item.transform.flipY || item.transform.crop}
       <span class="edited" title={t.edit.edited}><Icon name="crop" size={10} /></span>
     {/if}
   </button>
@@ -91,6 +94,10 @@
     justify-content: center;
     background: var(--accent);
     color: var(--accent-contrast);
+  }
+  /* 마지막 일괄 저장에서 빠진 장 — 나머지는 ZIP에 들어갔다는 표시이기도 하다. */
+  .edited.failed {
+    background: var(--danger);
   }
 
   .controls {

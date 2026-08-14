@@ -1,7 +1,8 @@
 <script lang="ts">
   import { t } from "../i18n";
   import { editor, MIN_CROP } from "./state.svelte";
-  import { processItem, renderRotated, rotatedSize } from "../image/pipeline";
+  import { processItem, renderRotated } from "../image/pipeline";
+  import { rotatedSize } from "../image/size";
   import { formatBytes } from "../image/save";
   import type { CropRect } from "../image/types";
 
@@ -80,7 +81,10 @@
     }
     const item = editor.currentItem;
     if (!item) return;
+    // 회전·반전은 크롭 바탕 자체를 바꾼다 — 셋 다 의존으로 잡아 둔다.
     void item.transform.rotation;
+    void item.transform.flipX;
+    void item.transform.flipY;
     let url = "";
     let cancelled = false;
     void (async () => {

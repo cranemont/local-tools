@@ -6,7 +6,6 @@ export const t = {
   brandName: "local-tools",
   appName: "이미지",
   home: "홈",
-  privacyNote: "파일은 브라우저 밖으로 나가지 않아요",
 
   theme: {
     label: "테마",
@@ -46,15 +45,25 @@ export const t = {
   },
 
   edit: {
-    title: "선택한 장",
+    title: "편집",
     cropStart: "영역 선택",
     cropCancel: "선택 취소",
     cropClear: "크롭 해제",
     cropRect: (w: number, h: number) => `크롭 ${w}×${h}px`,
+    ratioGroup: "크롭 비율",
     ratioFree: "자유",
-    rotate: "90° 회전",
+    ratioOriginal: "원본 비율",
+    ratioOriginalShort: "원본",
+    portrait: "세로로 뒤집기",
+    portraitShort: "세로",
+    rotateCw: "시계 방향 90° 회전",
+    rotateCcw: "반시계 방향 90° 회전",
+    flipX: "좌우 반전",
+    flipY: "상하 반전",
     reset: "편집 초기화",
+    applyAll: "모든 장에 적용",
     edited: "편집됨",
+    failed: "변환 실패",
   },
 
   exif: {
@@ -66,7 +75,6 @@ export const t = {
     exposure: "노출",
     gps: "GPS",
     keep: "내보낼 때 유지",
-    keepUnsupportedNote: "PNG·AVIF 출력은 유지를 지원하지 않아요",
   },
 
   engines: {
@@ -77,17 +85,36 @@ export const t = {
   panel: {
     format: "형식",
     quality: "품질",
-    qualityPngNote: "PNG는 무손실이라 품질 조절이 없어요",
 
     size: "크기",
     sizeOriginal: "원본 크기",
     sizeScale: "배율",
     sizeWidth: "가로",
     sizeHeight: "세로",
+    sizeLongest: "긴 변",
+    sizeExact: "정확히",
+    sizeExactLabel: "가로 × 세로(px)",
     scaleUnit: "%",
     pxUnit: "px",
+    lockRatio: "비율 고정",
+    noEnlarge: "원본보다 크게 늘리지 않기",
+
+    fit: "맞춤 방식",
+    fitStretch: "늘리기",
+    fitContain: "여백",
+    fitCover: "채우고 자르기",
+    padColor: "여백 색",
+    padWhite: "흰색",
+    padBlack: "검정",
+    padTransparent: "투명",
+    padCustom: "여백 색 직접 고르기",
+
     sizeInfo: (ow: number, oh: number, tw: number, th: number) =>
       `원본 ${ow}×${oh}px → 출력 ${tw}×${th}px`,
+    sizeInfoEdited: (ew: number, eh: number, tw: number, th: number) =>
+      `편집 후 ${ew}×${eh}px → 출력 ${tw}×${th}px`,
+    fitContainInfo: (w: number, h: number) => `그림은 ${w}×${h}px, 나머지는 여백`,
+    fitCoverInfo: (w: number, h: number) => `원본에서 ${w}×${h}px만 쓰고 나머지는 잘려요`,
 
     export: "내보내기",
     fileName: "저장 파일 이름",
@@ -97,6 +124,8 @@ export const t = {
     zipping: "ZIP으로 묶는 중…",
     savedOne: (size: string) => `저장됨 · ${size}`,
     savedZip: (n: number, size: string) => `ZIP 저장됨 · ${n}장 · ${size}`,
+    savedZipPartial: (n: number, size: string, failed: number) =>
+      `ZIP 저장됨 · ${n}장 · ${size} · ${failed}장 실패`,
   },
 
   errors: {
@@ -105,5 +134,6 @@ export const t = {
     encodeFail: "이미지를 인코딩하지 못했어요",
     canvasFail: "canvas 2d 컨텍스트를 만들 수 없어요",
     engineInit: (label: string) => `${label} 초기화에 실패했어요.`,
+    andMore: (first: string, rest: number) => `${first} 외 ${rest}건`,
   },
 } as const;

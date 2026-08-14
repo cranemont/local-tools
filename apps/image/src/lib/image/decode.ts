@@ -70,7 +70,7 @@ export async function loadImage(file: File): Promise<ImageItem> {
     width: bitmap.width,
     height: bitmap.height,
     thumb: renderThumb(bitmap),
-    transform: { rotation: 0, crop: null },
+    transform: { rotation: 0, flipX: false, flipY: false, crop: null },
   };
   cachePut(item.id, bitmap);
   return item;

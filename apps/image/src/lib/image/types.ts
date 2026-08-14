@@ -8,9 +8,12 @@ export interface CropRect {
   h: number;
 }
 
-/** 장별 편집 — 적용 순서: 회전 → 크롭. 회전이 바뀌면 크롭은 초기화된다. */
+/** 장별 편집 — 적용 순서: 회전 → 반전 → 크롭. 회전이 바뀌면 크롭은 초기화된다.
+ *  반전은 회전 후 화면 좌표계에서 뒤집으므로 크롭은 좌표만 거울로 옮긴다. */
 export interface ItemTransform {
   rotation: Rotation;
+  flipX: boolean;
+  flipY: boolean;
   crop: CropRect | null;
 }
 
@@ -31,17 +34,30 @@ export interface ImageItem {
 
 export type OutputFormat = "jpeg" | "png" | "webp" | "avif";
 
-export type ResizeMode = "none" | "scale" | "width" | "height";
+export type ResizeMode = "none" | "scale" | "width" | "height" | "longest" | "exact";
 
-/** 공통 리사이즈 설정 — 비율은 항상 유지된다. */
+/** 목표 캔버스와 그림의 비율이 어긋날 때 무엇을 할지. exact 모드에서만 갈린다
+ *  — 나머지 모드는 목표 크기 자체를 비율에 맞춰 계산하므로 언제나 stretch와 같다. */
+export type FitMode = "stretch" | "contain" | "cover";
+
+/** 공통 리사이즈 설정. exact를 뺀 모든 모드는 비율을 유지한다. */
 export interface ResizeSpec {
   mode: ResizeMode;
   /** mode=scale일 때 배율(%). */
   scale: number;
-  /** mode=width일 때 목표 가로(px). */
+  /** mode=width·exact일 때 목표 가로(px). */
   width: number;
-  /** mode=height일 때 목표 세로(px). */
+  /** mode=height·exact일 때 목표 세로(px). */
   height: number;
+  /** mode=longest일 때 긴 변 목표(px). */
+  longest: number;
+  /** mode=exact에서 비율이 어긋날 때의 처리. */
+  fit: FitMode;
+  /** contain 여백 색. null이면 투명 — 알파가 없는 JPEG는 흰색으로 떨어진다. */
+  padColor: string | null;
+  /** 목표 치수가 원본보다 크면 원본 크기로 둔다(width·height·longest에만 건다).
+   *  배율은 부른 배수가 곧 요청이고 exact는 캔버스가 고정이라 둘 다 해당 없음. */
+  noEnlarge: boolean;
 }
 
 /** 전체 장에 일괄 적용되는 출력 파이프라인 설정. */
