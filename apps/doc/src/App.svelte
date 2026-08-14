@@ -16,8 +16,8 @@
     install = show;
   });
 
-  // 설치된 앱에서 .hwp 더블클릭으로 들어온 경우.
-  onFileLaunch((file) => void editor.open(file));
+  // 설치된 앱에서 .hwp 더블클릭으로 들어온 경우. 여러 개를 골라 열면 일괄 변환으로 간다.
+  onFileLaunch((files) => editor.openFiles(files));
 
   // 엔진은 앱이 뜨자마자 배경에서 받아 둔다(데이터 절약 모드면 미룬다).
   editor.start();

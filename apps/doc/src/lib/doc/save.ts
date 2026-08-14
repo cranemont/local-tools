@@ -59,6 +59,14 @@ export function saveMarkdown(
   return { saved: name, zipped: true };
 }
 
+/**
+ * 일괄 변환의 결과 — 여러 문서의 마크다운과 그림을 ZIP 한 개로.
+ * 경로는 `batch.ts`가 이미 문서별 폴더로 갈라 놓았으므로 여기서는 묶기만 한다.
+ */
+export function saveZip(fileName: string, entries: Record<string, Uint8Array>): void {
+  downloadBlob(new Blob([zipSync(entries) as BlobPart], { type: "application/zip" }), fileName);
+}
+
 export function saveBytes(fileName: string, bytes: Uint8Array, mime: string): void {
   downloadBlob(new Blob([bytes as BlobPart], { type: mime }), fileName);
 }

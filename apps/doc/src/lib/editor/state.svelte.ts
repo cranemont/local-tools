@@ -9,7 +9,13 @@
  */
 
 import type { HwpDocument } from "../doc/engine";
-import { ENGINE_VERSION, prefetchEngine, retryEngine, watchEngine } from "../doc/engine";
+import {
+  ENGINE_VERSION,
+  engineStatus,
+  prefetchEngine,
+  retryEngine,
+  watchEngine,
+} from "../doc/engine";
 import type { EngineStatus } from "../doc/engine";
 import { detect } from "../doc/detect";
 import type { DocKind } from "../doc/detect";
@@ -43,10 +49,31 @@ import {
 import { docxHtml, renderDocx } from "../doc/docx";
 import { headingsOf, htmlToMarkdown } from "../doc/markdown";
 import type { ExtractedImage } from "../doc/markdown";
-import { saveBytes, saveMarkdown, withExtension } from "../doc/save";
+import { saveBytes, saveMarkdown, saveZip, withExtension } from "../doc/save";
+import { haltRest, outputsOf, planBatch, setStatus, zipEntries } from "../doc/batch";
+import type { BatchItem, ZipEntry } from "../doc/batch";
 import { t } from "../i18n";
 
-export type Stage = "empty" | "opening" | "locked" | "ready" | "error";
+export type Stage = "empty" | "opening" | "locked" | "ready" | "error" | "batch";
+
+/**
+ * 화면이 목록을 다시 그릴 틈. 한 문서를 옮기는 동안 wasm 호출이 프레임을 통째로 잡으므로,
+ * 다음 문서로 넘어가기 전에 한 번 양보하지 않으면 진행률이 끝나고 나서야 한꺼번에 움직인다.
+ *
+ * **타이머와 경주시킨다** — 탭이 뒤로 가면 크로미엄은 rAF를 아예 안 부르므로, 그것만
+ * 기다리면 스무 개짜리 일괄 변환이 탭을 옮기는 순간 통째로 멈춰 선다.
+ */
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    let timer: ReturnType<typeof setTimeout>;
+    const go = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    timer = setTimeout(go, 50);
+    requestAnimationFrame(go);
+  });
+}
 
 /**
  * 배율 사다리. 1이 **폭 맞춤**(창 너비에 맞춘 크기)이고, 나머지는 그 배수다.
@@ -117,11 +144,30 @@ class EditorState {
   /** 편집 뒤 오른쪽 마크다운은 낡았다. 읽기로 돌아갈 때 다시 뽑는다. */
   markdownStale = $state(false);
 
+  // ── 일괄 변환 ────────────────────────────────────────────
+  /** 여러 개를 놓았을 때의 목록. 편집기 대신 이 목록이 화면을 차지한다. */
+  batch = $state<BatchItem[]>([]);
+  /** 왜 멈췄는가 — 엔진 패닉이면 새로고침을 권하고, 사용자가 멈춘 것이면 그냥 멈춘다. */
+  batchHalt = $state<"panic" | "stopped" | null>(null);
+  /** 지금 비밀번호를 묻고 있는 파일(일괄 변환 중). 이 파일 하나만 기다린다. */
+  batchAsk = $state<{ name: string; wrong: boolean } | null>(null);
+
   private doc: HwpDocument | null = null;
   private bytes: Uint8Array | null = null;
   private images: ExtractedImage[] = [];
   private pageCache = new Map<number, string>();
   private history = new History();
+
+  /** 문서별 결과. 성공한 것만 쌓이고, 멈춘 뒤에도 이만큼은 ZIP으로 내려받을 수 있다. */
+  private batchOutputs = new Map<number, ZipEntry[]>();
+  /** 비밀번호 물음에 답할 자리 — 화면이 부르면 기다리던 변환이 이어진다. */
+  private batchAnswer: ((password: string | null) => void) | null = null;
+  private batchStopped = false;
+  /**
+   * 몇 번째 일괄 변환인가. 도는 도중에 닫거나 새로 시작하면 이 값이 올라가고,
+   * 뒤늦게 끝난 옛 작업은 자기 번호가 아닌 걸 보고 화면에 손대지 않는다.
+   */
+  private batchRun = 0;
 
   constructor() {
     watchEngine((status, error) => {
@@ -166,6 +212,19 @@ class EditorState {
     this.canUndo = false;
     this.canRedo = false;
     this.markdownStale = false;
+    this.resetBatch();
+  }
+
+  /** 돌던 일괄 변환이 있으면 그 자리에서 손을 뗀다(기다리던 비밀번호 물음도 풀어 준다). */
+  private resetBatch(): void {
+    this.batchRun++;
+    this.batchAnswer?.(null);
+    this.batchAnswer = null;
+    this.batch = [];
+    this.batchOutputs = new Map();
+    this.batchHalt = null;
+    this.batchAsk = null;
+    this.batchStopped = false;
   }
 
   /** 고쳐 놓고 저장하지 않았으면 한 번 묻는다 — 되돌릴 수 없는 일이므로. */
@@ -247,6 +306,162 @@ class EditorState {
     this.images = result.images;
     this.notes = result.notes;
     this.outline = outline ?? headingsOf(result.markdown);
+  }
+
+  // ── 일괄 변환 ────────────────────────────────────────────
+  //
+  // 여러 개를 놓으면 편집기 대신 목록이 뜨고, 앞에서부터 **하나씩** 마크다운으로 옮긴다.
+  // 순차인 이유는 wasm 인스턴스가 하나뿐이라서다 — 나란히 돌려 봐야 빨라지지 않고,
+  // 어느 문서가 엔진을 죽였는지도 알 수 없게 된다.
+
+  /**
+   * 무엇으로 열지 가르는 **유일한** 자리 — 하나면 지금까지처럼 편집기, 여럿이면 일괄 변환.
+   * 드롭·파일 선택·파일 연결(PWA 더블클릭)이 전부 여기를 지나므로 규칙이 갈라지지 않는다.
+   */
+  openFiles(files: File[]): void {
+    if (files.length > 1) void this.openBatch(files);
+    else if (files[0]) void this.open(files[0]);
+  }
+
+  /** 파일 여럿을 받아 목록을 세우고 곧바로 돌린다. */
+  async openBatch(files: File[]): Promise<void> {
+    if (!this.confirmDiscard()) return;
+    this.reset();
+    this.fileName = "";
+    this.fileSize = 0;
+    this.kind = null;
+    this.stage = "batch";
+    this.batch = planBatch(files.map((file) => file.name));
+
+    const run = this.batchRun;
+    await this.runBatch(files, run);
+  }
+
+  private async runBatch(files: File[], run: number): Promise<void> {
+    for (let id = 0; id < files.length; id++) {
+      if (run !== this.batchRun) return;
+      if (this.batchStopped) {
+        this.haltBatch("stopped", t.batch.reason.stopped);
+        return;
+      }
+      // 엔진이 이미 죽었으면(앞 문서가 죽였다) 남은 것은 시도조차 못 한다.
+      if (engineStatus() === "broken") {
+        this.haltBatch("panic", t.batch.reason.halted);
+        return;
+      }
+
+      this.batch = setStatus(this.batch, id, "running");
+      await nextFrame();
+      if (run !== this.batchRun) return;
+
+      try {
+        const outputs = await this.convertOne(files[id], this.batch[id]);
+        if (run !== this.batchRun) return;
+        if (outputs === null && this.batchStopped) {
+          // 비밀번호를 묻던 중에 멈춘 것이다 — 이 문서도 '건너뜀'이 아니라 '못 함'이다.
+          this.haltBatch("stopped", t.batch.reason.stopped);
+          return;
+        }
+        if (outputs === null) {
+          this.batch = setStatus(this.batch, id, "skipped", t.batch.reason.skipped);
+        } else {
+          this.batchOutputs.set(id, outputs);
+          this.batch = setStatus(this.batch, id, "done");
+        }
+      } catch (error) {
+        if (run !== this.batchRun) return;
+        const message = error instanceof Error ? error.message : String(error);
+        // 이 문서는 진짜로 실패했다. 다만 엔진까지 죽였다면 뒤는 손댈 수조차 없다 —
+        // 그 문서들을 '실패'로 세면 거짓말이므로 여기서 멈추고 '못 함'으로 남긴다.
+        this.batch = setStatus(this.batch, id, "failed", message);
+        if (engineStatus() === "broken") {
+          this.haltBatch("panic", t.batch.reason.halted);
+          return;
+        }
+      }
+    }
+  }
+
+  /**
+   * 문서 하나를 ZIP 항목으로. 비밀번호를 물었는데 건너뛰면 null이다(실패가 아니다).
+   * 워드 문서는 rhwp를 타지 않으므로 패닉과 무관하다.
+   */
+  private async convertOne(file: File, item: BatchItem): Promise<ZipEntry[] | null> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const found = detect(file.name, bytes.subarray(0, 4096));
+    if (found.kind === null) throw new Error(found.reason);
+
+    if (found.kind === "docx") {
+      const result = htmlToMarkdown(await docxHtml(bytes));
+      return outputsOf(item, result.markdown, result.images);
+    }
+
+    let doc: HwpDocument | null = null;
+    let password: string | undefined;
+    for (;;) {
+      try {
+        doc = await openHwp(bytes, password);
+        break;
+      } catch (error) {
+        // 잠긴 문서 하나 때문에 나머지 열아홉 개가 멈추면 안 된다 — 이 파일만 묻는다.
+        if (!(error instanceof PasswordRequiredError)) throw error;
+        const answer = await this.askBatchPassword(file.name, error.wrongPassword);
+        if (answer === null) return null;
+        password = answer;
+      }
+    }
+
+    try {
+      const content = documentContent(doc);
+      const result = htmlToMarkdown(content.html);
+      return outputsOf(item, result.markdown, result.images);
+    } finally {
+      // free()를 맨몸으로 부르지 않는다 — 패닉 뒤에는 그 호출도 실패해 원인을 덮어쓴다.
+      closeHwp(doc);
+    }
+  }
+
+  private askBatchPassword(name: string, wrong: boolean): Promise<string | null> {
+    this.batchAsk = { name, wrong };
+    return new Promise<string | null>((resolve) => {
+      this.batchAnswer = (password) => {
+        this.batchAnswer = null;
+        this.batchAsk = null;
+        resolve(password);
+      };
+    });
+  }
+
+  /** 화면이 비밀번호를 건네거나(문자열) 건너뛴다(null). */
+  answerBatchPassword(password: string | null): void {
+    this.batchAnswer?.(password);
+  }
+
+  /** 남은 것을 '못 함'으로 굳힌다 — 이미 끝난 것은 그대로 남는다. */
+  private haltBatch(cause: "panic" | "stopped", reason: string): void {
+    this.batch = haltRest(this.batch, reason);
+    this.batchHalt = cause;
+    this.batchAsk = null;
+    this.batchAnswer = null;
+  }
+
+  /** 사용자가 멈춘다. 기다리던 비밀번호 물음이 있으면 그것부터 풀어 준다. */
+  stopBatch(): void {
+    this.batchStopped = true;
+    this.batchAnswer?.(null);
+  }
+
+  /** 지금까지 성공한 것만 ZIP 한 개로. 하나도 없으면 만들지 않는다. */
+  saveBatchZip(): Promise<void> {
+    return this.run(t.busy.zipping, async () => {
+      const entries = zipEntries(this.batch, this.batchOutputs);
+      if (!entries) {
+        this.flash = t.batch.nothing;
+        return;
+      }
+      saveZip(t.batch.zipName, entries);
+      this.flash = t.flash.saved(t.batch.zipName);
+    });
   }
 
   /** 한글 문서 페이지 한 장(SVG). 이미 그린 것은 다시 그리지 않는다. */

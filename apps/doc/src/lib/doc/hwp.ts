@@ -225,13 +225,17 @@ function asHeading(html: string, level: number): string | null {
 export function documentContent(doc: HwpDocument): DocumentContent {
   const parts: string[] = [];
   const outline: OutlineItem[] = [];
-  const sections = doc.getSectionCount();
+  // 문단을 세는 이 세 호출도 guard를 지난다. 맨몸으로 부르면 여기서 난 패닉이
+  // `markEngineBroken()`을 못 거쳐 상태가 `ready`로 남고, 화면은 rust가 뱉은
+  // "unreachable executed"를 그대로 띄운다 — 일괄 변환에서는 뒤따르는 문서 하나가
+  // '못 함'이 아니라 '실패'로 세어진다(그 문서는 시도조차 못 했다).
+  const sections = guard(() => doc.getSectionCount());
 
   for (let section = 0; section < sections; section++) {
-    const paragraphs = doc.getParagraphCount(section);
+    const paragraphs = guard(() => doc.getParagraphCount(section));
 
     for (let paragraph = 0; paragraph < paragraphs; paragraph++) {
-      const length = doc.getParagraphLength(section, paragraph);
+      const length = guard(() => doc.getParagraphLength(section, paragraph));
       if (length > 0) {
         try {
           const html = unwrapFragment(

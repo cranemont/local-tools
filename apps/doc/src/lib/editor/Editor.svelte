@@ -8,6 +8,7 @@
   import Icon from "../Icon.svelte";
   import { editor } from "./state.svelte";
   import Dropzone from "./Dropzone.svelte";
+  import BatchPane from "./BatchPane.svelte";
   import Toolbar from "./Toolbar.svelte";
   import Pages from "./Pages.svelte";
   import MarkdownPane from "./MarkdownPane.svelte";
@@ -53,9 +54,11 @@
   /** 찾기는 원본(그림)을 위한 것이다 — 마크다운만 보고 있으면 브라우저 찾기가 맞다. */
   const canFind = $derived(editor.kind !== "docx" && onOriginal);
 
-  function openFile(file: File): void {
-    void editor.open(file);
-  }
+  /**
+   * 놓인 것이 하나면 편집기, 여럿이면 일괄 변환 — 가르는 규칙은 `editor.openFiles` 한 곳에만
+   * 있다. 드롭·파일 선택·PWA 파일 연결이 전부 그것을 지난다.
+   */
+  const openFiles = (files: File[]): void => editor.openFiles(files);
 
   function onDragEnter(event: DragEvent): void {
     if (!event.dataTransfer?.types.includes("Files")) return;
@@ -74,8 +77,7 @@
   function onDrop(event: DragEvent): void {
     event.preventDefault();
     dragDepth = 0;
-    const file = event.dataTransfer?.files?.[0];
-    if (file) openFile(file);
+    openFiles(Array.from(event.dataTransfer?.files ?? []));
   }
 
   /** 입력칸 안에서는 브라우저에 맡긴다(찾기 입력·쪽 번호·편집 중인 글자). */
@@ -187,14 +189,20 @@
 
 <div class="editor" bind:this={root}>
   {#if editor.stage === "empty"}
-    <Dropzone open={openFile} />
+    <Dropzone open={openFiles} />
+  {:else if editor.stage === "batch"}
+    <BatchPane />
   {:else if editor.stage === "opening"}
     <div class="center">
       <span class="spinner" aria-hidden="true"></span>
       <p>{editor.engine === "loading" ? t.engine.loading : t.file.opening}</p>
     </div>
   {:else if editor.stage === "locked"}
-    <PasswordDialog />
+    <PasswordDialog
+      wrong={editor.wrongPassword}
+      submit={(password) => void editor.unlock(password)}
+      cancel={() => editor.close()}
+    />
   {:else if editor.stage === "error"}
     <div class="center">
       <Icon name="alert" size={32} />

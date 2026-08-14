@@ -3,13 +3,14 @@
   import Icon from "../Icon.svelte";
   import { ACCEPT } from "../doc/detect";
 
-  let { open }: { open: (file: File) => void } = $props();
+  /** 여러 개를 고를 수 있다 — 하나면 편집기로, 여럿이면 일괄 변환으로 가른다(호출부의 몫). */
+  let { open }: { open: (files: File[]) => void } = $props();
 
   let input = $state<HTMLInputElement | null>(null);
 
   function pick(event: Event): void {
-    const file = (event.currentTarget as HTMLInputElement).files?.[0];
-    if (file) open(file);
+    const files = Array.from((event.currentTarget as HTMLInputElement).files ?? []);
+    if (files.length > 0) open(files);
     if (input) input.value = ""; // 같은 파일을 다시 골라도 열리게
   }
 </script>
@@ -25,6 +26,7 @@
     class="sr-only"
     type="file"
     accept={ACCEPT}
+    multiple
     onchange={pick}
     aria-label={t.drop.open}
   />

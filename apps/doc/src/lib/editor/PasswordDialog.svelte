@@ -1,9 +1,28 @@
 <script lang="ts">
   /** 암호가 걸린 한글 문서 — 엔진이 비밀번호와 함께 다시 열어 준다.
-   * 비밀번호는 wasm 안으로만 들어가고 어디에도 저장하지 않는다. */
+   * 비밀번호는 wasm 안으로만 들어가고 어디에도 저장하지 않는다.
+   *
+   * 문서 하나를 열 때와 일괄 변환 중 한 파일이 잠겼을 때가 같은 물음이라 한 벌만 둔다.
+   * 다른 것은 취소가 무엇을 뜻하는가뿐이다 — 하나일 땐 닫기, 일괄일 땐 그 파일만 건너뛰기.
+   */
   import { t } from "../i18n";
   import Icon from "../Icon.svelte";
-  import { editor } from "./state.svelte";
+
+  let {
+    wrong,
+    submit,
+    cancel,
+    cancelLabel = t.password.cancel,
+    fileName = null,
+  }: {
+    /** 한 번 틀렸는가 — 문구가 달라진다 */
+    wrong: boolean;
+    submit: (password: string) => void;
+    cancel: () => void;
+    cancelLabel?: string;
+    /** 일괄 변환에서 지금 묻고 있는 파일. 하나만 열 때는 없다(이미 위에 떠 있다). */
+    fileName?: string | null;
+  } = $props();
 
   let password = $state("");
   let input = $state<HTMLInputElement | null>(null);
@@ -12,19 +31,22 @@
     input?.focus();
   });
 
-  function submit(event: SubmitEvent): void {
+  function onSubmit(event: SubmitEvent): void {
     event.preventDefault();
     if (!password) return;
-    void editor.unlock(password);
+    submit(password);
     password = "";
   }
 </script>
 
 <div class="wrap">
-  <form class="card" onsubmit={submit}>
+  <form class="card" onsubmit={onSubmit}>
     <Icon name="lock" size={28} />
     <h2>{t.password.title}</h2>
-    {#if editor.wrongPassword}
+    {#if fileName}
+      <p class="file" title={fileName}>{fileName}</p>
+    {/if}
+    {#if wrong}
       <p>{t.password.wrong}</p>
     {/if}
 
@@ -38,7 +60,7 @@
     />
 
     <div class="row">
-      <button type="button" class="btn" onclick={() => editor.close()}>{t.password.cancel}</button>
+      <button type="button" class="btn" onclick={cancel}>{cancelLabel}</button>
       <button type="submit" class="btn primary" disabled={!password}>{t.password.submit}</button>
     </div>
   </form>
@@ -78,6 +100,14 @@
   p {
     margin: 0;
     font-size: var(--text-sm);
+  }
+  .file {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+    font-weight: 600;
   }
 
   input {

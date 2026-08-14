@@ -16,7 +16,7 @@ export const t = {
 
   drop: {
     hint: "문서를 끌어다 놓거나 클릭해서 선택",
-    sub: "한글 .hwp · .hwpx · 워드 .docx",
+    sub: "한글 .hwp · .hwpx · 워드 .docx · 여러 개면 일괄 변환",
     open: "문서 열기",
     overlay: "여기에 놓으면 열려요",
   },
@@ -69,6 +69,34 @@ export const t = {
     copying: "복사하는 중…",
     converting: ".hwpx로 바꾸는 중…",
     saving: "저장하는 중…",
+    zipping: "ZIP 묶는 중…",
+  },
+
+  // 일괄 변환 — 여러 개를 놓으면 편집기 대신 이 목록이 뜬다.
+  batch: {
+    title: "일괄 변환",
+    progress: (done: number, total: number) => `${done} / ${total}`,
+    saveZip: "ZIP으로 저장",
+    stop: "중단",
+    skip: "건너뛰기",
+    zipName: "문서-마크다운.zip",
+    nothing: "저장할 결과가 없어요",
+    // 패닉은 새로고침 말고 살릴 길이 없다(CLAUDE.md 17번). 한 줄로 그 사실만 알린다.
+    halted: "엔진이 멈춰 남은 문서는 못 했어요 — 새로고침한 뒤 남은 것만 다시 해 주세요",
+    stopped: "중단했어요",
+    status: {
+      pending: "대기",
+      running: "변환 중",
+      done: "완료",
+      failed: "실패",
+      skipped: "건너뜀",
+      halted: "못 함",
+    },
+    reason: {
+      halted: "앞 문서에서 엔진이 멈춰 손대지 못했어요.",
+      stopped: "중단해서 손대지 못했어요.",
+      skipped: "비밀번호를 건너뛰었어요.",
+    },
   },
 
   edit: {
