@@ -8,7 +8,8 @@ export const t = {
 
   tabs: {
     edit: "편집·병합",
-    toImage: "PDF→이미지",
+    // 이 탭은 "PDF를 다른 것으로 바꾸는" 자리다 — 이미지에 텍스트가 더해졌다.
+    toImage: "이미지·텍스트",
     password: "암호",
   },
 
@@ -58,7 +59,7 @@ export const t = {
   toImg: {
     addPdf: "PDF 추가",
     dropHint: "PDF를 끌어다 놓거나 클릭해서 선택",
-    dropSub: "페이지별 이미지로 변환 · PDF만",
+    dropSub: "페이지별 이미지 · 텍스트로 변환 · PDF만",
     format: "형식",
     resolution: "해상도",
     dpi: (n: number) => `${n}dpi`,
@@ -74,6 +75,25 @@ export const t = {
     pageCount: (n: number) => `${n}장`,
     savedDl: (n: number) => `이미지 저장됨 · ${n}장`,
     savedZip: (n: number) => `ZIP 저장됨 · ${n}장`,
+    onlyPdf: "PDF 파일만 변환할 수 있어요.",
+    defaultName: "images",
+  },
+
+  // 같은 탭의 출력 형식 하나 — 이미지 대신 텍스트 레이어를 꺼낸다.
+  toText: {
+    defaultName: "text",
+    extracting: (i: number, total: number, name: string) =>
+      `텍스트 추출 중… (${i}/${total}) ${name}`,
+    pageNo: (n: number) => `${n}쪽`,
+    pageCount: (n: number) => `${n}쪽`,
+    savedDl: (n: number) => `텍스트 저장됨 · ${n}쪽`,
+    savedZip: (n: number) => `ZIP 저장됨 · 파일 ${n}개`,
+    // 스캔 PDF 경고 — 배지 한 개와 title, 문단으로 늘어놓지 않는다.
+    noTextBadge: "텍스트 없음",
+    noTextDetail: "글자 정보가 없어요 — 스캔한 PDF는 그림만 들어 있어요",
+    emptyBadge: (n: number) => `빈 쪽 ${n}`,
+    emptyDetail: "글자가 없는 쪽이 있어요 — 스캔한 쪽일 수 있어요",
+    pageEmpty: "빈 쪽",
   },
 
   // 암호 걸린 PDF를 편집·이미지 탭에서 바로 여는 경로.
