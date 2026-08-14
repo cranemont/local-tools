@@ -6,8 +6,6 @@ export const t = {
   brandName: "local-tools",
   appName: "실험장",
   home: "홈",
-  privacyNote:
-    "문장은 이 탭 안에서만 벡터가 돼요 — 나가는 건 모델을 내려받는 요청뿐이에요",
 
   theme: {
     label: "테마",
@@ -24,7 +22,6 @@ export const t = {
   corpus: {
     title: "코퍼스",
     probe: "한국어 프로브",
-    probeDesc: "같은 뜻의 짝을 현상별로 묶은 문장 모음",
     pasted: "직접 넣기",
     pastedDesc: "한 줄에 한 문장",
     placeholder: "비교할 문장을 한 줄에 하나씩 붙여넣으세요",
@@ -48,7 +45,6 @@ export const t = {
     mrl: "MRL 학습됨",
     noMrl: "MRL 미학습 — 절단은 보장되지 않아요(그게 실험이에요)",
     prefix: "프리픽스",
-    prefixHelp: "모델 카드가 요구하는 접두어를 붙여요",
     noPrefix: "이 모델은 프리픽스를 쓰지 않아요",
     noDownload: "내려받지 않는 기준선",
   },
@@ -68,7 +64,6 @@ export const t = {
     loadMs: "로드",
     embedMs: "임베딩",
     throughput: (n: number) => `${n.toFixed(1)}문장/초`,
-    first: "첫 실행은 모델을 통째로 받아요",
   },
 
   compare: {
@@ -112,14 +107,10 @@ export const t = {
   matrix: {
     legend: "코사인 유사도",
     legendLexical: "BM25 점수",
-    hint: "칸에 대면 어떤 문장 쌍인지 보여요",
-    diag: "대각선은 자기 자신이에요",
     diagLexical: "BM25는 비대칭이라 행렬이 대각선 기준으로 접히지 않아요",
-    pairHint: "짝끼리 밝은 사각형이 뜨면 그 현상을 모델이 잡아낸 거예요",
   },
 
   bump: {
-    hint: "왼쪽이 A, 오른쪽이 B — 선이 엇갈릴수록 순위가 뒤집힌 거예요",
     query: "기준 문장",
     stayed: "자리 지킴",
     moved: "자리 바뀜",
@@ -136,7 +127,6 @@ export const t = {
 
   score: {
     title: "짝짓기 정확도",
-    help: "각 문장의 1순위 이웃이 자기 짝인가 — 프로브 코퍼스에서만 잴 수 있어요",
     overall: "전체",
     misses: "짝을 놓친 문장",
     took: "대신 고른 것",
@@ -150,7 +140,6 @@ export const t = {
 
   ir: {
     title: "판정 대비 성적",
-    help: "직접 매긴 정답에 대고 잰 검색 품질 — 리더보드가 하는 계산을 내 문장으로",
     ndcg: (k: number) => `NDCG@${k}`,
     recall: (k: number) => `Recall@${k}`,
     mrr: "MRR",
@@ -161,8 +150,6 @@ export const t = {
 
   judge: {
     title: "판정",
-    intro:
-      "지금까지 돌린 모든 설정의 상위 결과를 합쳐 왔어요. 한 번 매기면 나중에 추가한 설정까지 같은 정답으로 채점돼요",
     bias:
       "풀링의 한계: 아무 설정도 데려오지 않은 문장은 여기 뜨지 않아요. 나중에 붙인 모델이 아무도 못 찾은 정답을 찾아오면 무관으로 세어져요",
     query: "질의 문장",
@@ -176,13 +163,11 @@ export const t = {
     confirmClear: "이 코퍼스의 판정을 전부 지울까요?",
     marks: (n: number) => `매긴 표 ${n}개`,
     needRun: "판정하려면 실행이 하나는 있어야 해요",
-    saved: "판정은 이 브라우저에 코퍼스별로 남아요",
     depth: "풀링 깊이",
   },
 
   pareto: {
     title: "비용–품질",
-    help: "점 하나가 (모델 · 정밀도 · 차원) 조합이에요. 왼쪽 위로 갈수록 좋아요 — 싸고 정확한 쪽",
     x: "내려받는 용량",
     yPair: "짝짓기 정확도",
     yNdcg: (k: number) => `NDCG@${k}`,
@@ -207,7 +192,6 @@ export const t = {
     removeAll: "전부 지우기",
     confirmAll: "받아 둔 모델을 전부 지울까요?",
     close: "닫기",
-    note: "지우면 다음에 쓸 때 다시 받아요",
   },
 
   net: {

@@ -18,7 +18,6 @@
       <h3>{t.ir.title}</h3>
       <span class="overall">{t.ir.queries(ir.queries)}</span>
     </header>
-    <p class="note">{t.ir.help}</p>
     <ul class="irnums">
       <li>
         <span class="irlabel">{t.ir.ndcg(ir.k)}</span>
@@ -53,8 +52,6 @@
   {#if report.rate === null}
     <p class="note">{t.score.none}</p>
   {:else}
-    <p class="note">{t.score.help}</p>
-
     <ul class="kinds">
       {#each report.kinds as k (k.kind)}
         <li>

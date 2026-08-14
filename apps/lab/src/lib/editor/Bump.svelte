@@ -57,8 +57,6 @@
     </select>
   </label>
 
-  <p class="hint">{t.bump.hint}</p>
-
   <div class="cols" style:--row={`${ROW}px`}>
     <ol class="col">
       <li class="head" data-slot="A">{viewA.label}</li>
@@ -134,12 +132,6 @@
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
-  }
-
-  .hint {
-    margin: 0;
-    font-size: var(--text-sm);
-    color: var(--text-muted);
   }
 
   .cols {

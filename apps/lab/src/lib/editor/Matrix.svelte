@@ -158,9 +158,8 @@
         <span>{domain.lo.toFixed(3)}</span>
         <span>{domain.hi.toFixed(3)}</span>
       </div>
-      <p class="note">{lexical ? t.matrix.diagLexical : t.matrix.diag}</p>
-      {#if lab.source === "probe"}
-        <p class="note">{t.matrix.pairHint}</p>
+      {#if lexical}
+        <p class="note">{t.matrix.diagLexical}</p>
       {/if}
     </div>
 
@@ -179,8 +178,6 @@
         <p class="score">{view.matrix[hover.i * n + hover.j].toFixed(4)}</p>
         <p class="txt">{a?.text}</p>
         <p class="txt muted">{c?.text}</p>
-      {:else}
-        <p class="note">{t.matrix.hint}</p>
       {/if}
     </div>
   </div>

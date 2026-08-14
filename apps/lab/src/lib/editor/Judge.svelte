@@ -33,8 +33,6 @@
 </script>
 
 <div class="judge">
-  <p class="intro">{t.judge.intro}</p>
-
   <div class="bar">
     <label class="picker">
       <span>{t.judge.query}</span>
@@ -105,7 +103,6 @@
         <button class="btn small ghost danger" onclick={clearAll}>{t.judge.clear}</button>
       </span>
     </footer>
-    <p class="saved">{t.judge.saved}</p>
   {/if}
 </div>
 
@@ -116,8 +113,6 @@
     gap: var(--space-md);
   }
 
-  .intro,
-  .saved,
   .empty {
     margin: 0;
     font-size: var(--text-sm);

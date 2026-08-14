@@ -57,9 +57,7 @@
       </button>
     </div>
 
-    {#if lab.source === "probe"}
-      <p class="hint">{t.corpus.probeDesc}</p>
-    {:else}
+    {#if lab.source === "pasted"}
       <textarea
         class="paste"
         rows="6"
@@ -139,7 +137,9 @@
       />
       <span>{t.model.prefix}</span>
     </label>
-    <p class="hint">{spec.prefix ? t.model.prefixHelp : t.model.noPrefix}</p>
+    {#if !spec.prefix}
+      <p class="hint">{t.model.noPrefix}</p>
+    {/if}
     <!-- MRL 학습분이 있으면 그 단계가 곧 절단 후보라 한 줄이면 된다.
          없을 때만 우리가 만든 실험용 눈금을 따로 보여 준다. -->
     <p class="hint" class:warn={!spec.mrl.length}>
@@ -167,8 +167,6 @@
       <div class="bar" role="progressbar" aria-valuenow={Math.round(lab.progress * 100)}>
         <div class="fill" style:width={`${Math.round(lab.progress * 100)}%`}></div>
       </div>
-    {:else if !lab.runs.length}
-      <p class="hint">{t.run.first}</p>
     {/if}
 
     {#if lab.device}

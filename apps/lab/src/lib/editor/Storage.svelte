@@ -104,7 +104,6 @@
       {/if}
 
       <footer>
-        <p class="note">{t.storage.note}</p>
         {#if report.models.length}
           <button class="btn small danger" disabled={working} onclick={removeAll}>
             {t.storage.removeAll}
@@ -153,7 +152,6 @@
 
   .usage,
   .runtime,
-  .note,
   .empty {
     margin: 0;
     font-size: var(--text-sm);

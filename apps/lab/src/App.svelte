@@ -44,7 +44,6 @@
   </main>
 
   <footer class="footer">
-    <span class="privacy">{t.privacyNote}</span>
     <span class="hosts">
       {t.net.title}:
       {#each NETWORK_HOSTS as host, i (host)}<code>{host}</code>{#if i < NETWORK_HOSTS.length - 1}<span

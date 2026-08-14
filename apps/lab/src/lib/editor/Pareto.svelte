@@ -135,8 +135,6 @@
 </script>
 
 <div class="pareto" bind:this={box}>
-  <p class="help">{t.pareto.help}</p>
-
   {#if !points.length}
     <p class="empty">{t.pareto.empty}</p>
   {:else}
@@ -203,7 +201,6 @@
     gap: var(--space-sm);
     min-width: 0;
   }
-  .help,
   .note,
   .empty,
   .counts {
