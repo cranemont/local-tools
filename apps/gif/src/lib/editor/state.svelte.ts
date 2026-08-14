@@ -7,6 +7,13 @@ import {
   probeVideo,
   type ExtractOptions,
 } from "../gif/video";
+import {
+  clampFontSize,
+  clampStrokeWidth,
+  newOverlay,
+  selectionAffectsOverlays,
+  type TextOverlay,
+} from "../gif/overlay";
 import type { ExportFormat } from "../gif/timing";
 import type { CropRect, Frame, Rotation, Transform } from "../gif/types";
 import type { FrameSource } from "../gif/types";
@@ -61,12 +68,17 @@ function clampDelay(ms: number): number {
   return Math.min(MAX_DELAY_MS, Math.max(MIN_DELAY_MS, Math.round(ms)));
 }
 
-/** 되돌리기 지점 — 프레임 목록(순서·딜레이·선택)과 출력 변형만 담는다.
- *  형식·화질·반복은 패널에 그대로 보이고 직접 되돌릴 수 있어 제외한다. */
+/** 되돌리기 지점 — 프레임 목록(순서·딜레이·선택)과 출력 변형·오버레이 목록을 담는다.
+ *  형식·화질·반복은 패널에 그대로 보이고 직접 되돌릴 수 있어 제외한다.
+ *  오버레이는 추가·삭제(구조가 바뀌는 일)에서만 지점을 남긴다 — 칸 하나 고칠 때마다
+ *  지점을 남기면 글자를 치는 동안 스택이 키 입력 수만큼 쌓인다. */
 interface Snapshot {
   frames: Frame[];
   current: number;
   transform: Transform;
+  overlays: TextOverlay[];
+  /** 편집 중이던 오버레이도 같이 돌아온다 — 안 그러면 되돌린 뒤 편집칸이 통째로 사라진다. */
+  activeOverlayId: string | null;
 }
 
 /** 단일 에디터 뷰의 전역 상태. 앱에 에디터가 하나뿐이라 모듈 싱글턴으로 둔다. */
@@ -82,6 +94,11 @@ export class EditorState {
   loopCount = $state(3);
   transform = $state<Transform>(defaultTransform());
   cropMode = $state(false);
+
+  /** 프레임 위에 얹는 텍스트. 여러 개(위 자막 + 아래 자막)를 겹칠 수 있다. */
+  overlays = $state<TextOverlay[]>([]);
+  /** 패널에서 편집 중인 오버레이. 목록에서 사라지면 아래 activeOverlay가 null로 떨어진다. */
+  activeOverlayId = $state<string | null>(null);
 
   exportFormat = $state<ExportFormat>("gif");
   gifColors = $state(256);
@@ -138,6 +155,10 @@ export class EditorState {
   readonly selectedCount = $derived(
     this.frames.filter((f) => f.selected).length,
   );
+  /** 패널이 편집하는 오버레이. 지워진 id가 남아 있어도 null로 떨어진다. */
+  readonly activeOverlay = $derived(
+    this.overlays.find((o) => o.id === this.activeOverlayId) ?? null,
+  );
   /** gifenc repeat 값: -1=1회 재생, 0=무한, n>0=추가 반복 횟수. */
   readonly repeat = $derived.by(() => {
     if (this.loopForever) return 0;
@@ -172,6 +193,8 @@ export class EditorState {
       frames: this.frames.map((f) => ({ ...f })),
       current: this.current,
       transform: cloneTransform(this.transform),
+      overlays: this.overlays.map((o) => ({ ...o })),
+      activeOverlayId: this.activeOverlayId,
     };
   }
 
@@ -192,6 +215,10 @@ export class EditorState {
     this.frames = snap.frames.map((f) => ({ ...f }));
     this.current = Math.min(snap.current, Math.max(0, snap.frames.length - 1));
     this.transform = cloneTransform(snap.transform);
+    this.overlays = snap.overlays.map((o) => ({ ...o }));
+    this.activeOverlayId = snap.overlays.some((o) => o.id === snap.activeOverlayId)
+      ? snap.activeOverlayId
+      : null;
     this.cropMode = false;
     this.#anchor = 0;
   }
@@ -350,6 +377,9 @@ export class EditorState {
     // (#pruneSources가 히스토리에서 밀려난 소스만 버린다.)
     releaseAll(); // 디코더·비트맵 캐시는 소스 바이트에서 다시 만들 수 있다
     this.transform = defaultTransform();
+    // 오버레이도 함께 비운다 — 위에서 #mark()를 했으므로 되돌리기로 통째로 돌아온다.
+    this.overlays = [];
+    this.activeOverlayId = null;
     this.cropMode = false;
     this.playing = false;
     this.current = 0;
@@ -374,6 +404,13 @@ export class EditorState {
   }
 
   // ── 선택 ────────────────────────────────────────
+  /** 선택이 바뀌면 "선택한 프레임만" 글자가 붙는 자리도 바뀐다 — 그때만 리비전을 올린다.
+   *  미리보기는 리비전으로만 다시 그리고 결과의 '낡음' 표시도 같은 값을 본다.
+   *  늘 올리면 글자가 없을 때도 프레임을 고를 때마다 결과가 낡음으로 표시된다. */
+  #touchIfSelectionDraws(): void {
+    if (selectionAffectsOverlays(this.overlays)) this.touch();
+  }
+
   /** 한 장 토글. range면 기준점부터 이 프레임까지 한 번에 칠한다(Shift+클릭). */
   toggleSelect(id: string, range = false): void {
     const i = this.frames.findIndex((x) => x.id === id);
@@ -384,6 +421,7 @@ export class EditorState {
     }
     this.frames[i].selected = !this.frames[i].selected;
     this.#anchor = i;
+    this.#touchIfSelectionDraws();
   }
 
   /** 인덱스 a..b 구간의 선택 상태를 한꺼번에 바꾼다. */
@@ -394,6 +432,7 @@ export class EditorState {
     const hi = Math.min(last, Math.max(a, b));
     for (let i = lo; i <= hi; i++) this.frames[i].selected = value;
     this.#anchor = Math.max(0, Math.min(b, last));
+    this.#touchIfSelectionDraws();
   }
 
   /** 1-based 프레임 번호 구간을 선택한다(패널 입력용). */
@@ -405,10 +444,12 @@ export class EditorState {
   selectAll(): void {
     for (const f of this.frames) f.selected = true;
     this.#anchor = 0;
+    this.#touchIfSelectionDraws();
   }
 
   selectNone(): void {
     for (const f of this.frames) f.selected = false;
+    this.#touchIfSelectionDraws();
   }
 
   // ── 프레임 조작 ─────────────────────────────────
@@ -639,6 +680,58 @@ export class EditorState {
     this.transform = defaultTransform();
     this.cropMode = false;
     this.touch();
+  }
+
+  // ── 텍스트 오버레이 ─────────────────────────────
+  /** 기본값은 캔버스 높이에서 나온다 — 원본이 얼마든 처음부터 읽히는 크기로 뜬다.
+   *  높이는 원본이 아니라 **배율 1 기준 출력** 높이다. 크롭·회전이 걸리면 둘이 갈라지고,
+   *  원본 높이로 잡으면 잘라 낸 조각보다 큰 글자가 기본값으로 뜬다. */
+  addOverlay(): void {
+    this.#mark();
+    const o = newOverlay(uid(), this.unscaledOutput.h, this.frames.length);
+    this.overlays = [...this.overlays, o];
+    this.activeOverlayId = o.id;
+    this.touch();
+  }
+
+  removeOverlay(id: string): void {
+    if (!this.overlays.some((o) => o.id === id)) return;
+    this.#mark();
+    this.overlays = this.overlays.filter((o) => o.id !== id);
+    if (this.activeOverlayId === id) {
+      this.activeOverlayId = this.overlays.length
+        ? this.overlays[this.overlays.length - 1].id
+        : null;
+    }
+    this.touch();
+  }
+
+  setActiveOverlay(id: string | null): void {
+    this.activeOverlayId = id;
+  }
+
+  /** 칸 하나를 고친다. 되돌리기 지점을 남기지 않는다(위 Snapshot 주석 참고). */
+  updateOverlay(id: string, patch: Partial<Omit<TextOverlay, "id">>): void {
+    const i = this.overlays.findIndex((o) => o.id === id);
+    if (i < 0) return;
+    const merged = { ...this.overlays[i], ...patch };
+    // 화면에서 들어온 수는 비어 있거나 범위 밖일 수 있다 — 캔버스로 나가기 전에 가둔다.
+    merged.fontSize = clampFontSize(merged.fontSize);
+    merged.strokeWidth = clampStrokeWidth(merged.strokeWidth);
+    merged.dx = Number.isFinite(merged.dx) ? Math.round(merged.dx) : 0;
+    merged.dy = Number.isFinite(merged.dy) ? Math.round(merged.dy) : 0;
+    merged.from = this.#clampFrameNo(merged.from);
+    merged.to = this.#clampFrameNo(merged.to);
+    const next = [...this.overlays];
+    next[i] = merged;
+    this.overlays = next;
+    this.touch();
+  }
+
+  #clampFrameNo(n: number): number {
+    const last = Math.max(1, this.frames.length);
+    if (!Number.isFinite(n)) return 1;
+    return Math.min(last, Math.max(1, Math.round(n)));
   }
 }
 

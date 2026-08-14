@@ -23,6 +23,7 @@
     | "scissors"
     | "film"
     | "image"
+    | "text"
     | "undo"
     | "redo";
 
@@ -109,6 +110,10 @@
     <rect x="3" y="4" width="18" height="16" rx="2" />
     <circle cx="8.5" cy="9.5" r="1.5" />
     <path d="m21 16-5-5L5 20" />
+  {:else if name === "text"}
+    <path d="M5 6V4h14v2" />
+    <path d="M12 4v16" />
+    <path d="M9 20h6" />
   {:else if name === "undo"}
     <path d="M9 14 4 9l5-5" />
     <path d="M4 9h10a6 6 0 0 1 0 12h-3" />

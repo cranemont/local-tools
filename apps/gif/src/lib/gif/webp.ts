@@ -18,8 +18,19 @@ export interface WebpEncodeOptions extends RenderPlan {
 }
 
 export async function encodeWebp(opts: WebpEncodeOptions): Promise<Blob> {
-  const { frames, sources, transform, baseW, baseH, speed, loop, quality, signal, onProgress } =
-    opts;
+  const {
+    frames,
+    sources,
+    transform,
+    overlays,
+    baseW,
+    baseH,
+    speed,
+    loop,
+    quality,
+    signal,
+    onProgress,
+  } = opts;
   const { w, h } = outputSize(baseW, baseH, transform);
 
   const canvas = new OffscreenCanvas(w, h);
@@ -33,7 +44,11 @@ export async function encodeWebp(opts: WebpEncodeOptions): Promise<Blob> {
     const source = sources.get(frame.sourceId);
     if (!source) continue;
 
-    renderFrame(ctx, await getFrameBitmap(source, frame.frameIndex), transform, baseW, baseH);
+    renderFrame(ctx, await getFrameBitmap(source, frame.frameIndex), transform, baseW, baseH, {
+      overlays,
+      index: i,
+      selected: frame.selected,
+    });
     const blob = await canvas.convertToBlob({ type: "image/webp", quality: quality / 100 });
     const still = extractFrameData(new Uint8Array(await blob.arrayBuffer()));
     encoded.push({

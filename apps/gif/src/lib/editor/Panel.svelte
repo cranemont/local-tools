@@ -15,6 +15,12 @@
     type PresetId,
   } from "./state.svelte";
   import { formatMinDelayMs, isDelayFloored } from "../gif/timing";
+  import type {
+    OverlayAlign,
+    OverlayScope,
+    OverlayVAlign,
+    TextOverlay,
+  } from "../gif/overlay";
   import { encodeGif, isAbortError, type RenderPlan } from "../gif/encode";
   import { encodeWebp } from "../gif/webp";
   import { encodeMp4 } from "../gif/mp4";
@@ -38,6 +44,22 @@
     scale: t.panel.delayValueScale,
   };
   const DELAY_MODES: DelayMode[] = ["set", "add", "scale"];
+
+  const V_ALIGNS: { id: OverlayVAlign; label: string }[] = [
+    { id: "top", label: t.panel.textVTop },
+    { id: "middle", label: t.panel.textVMiddle },
+    { id: "bottom", label: t.panel.textVBottom },
+  ];
+  const ALIGNS: { id: OverlayAlign; label: string }[] = [
+    { id: "left", label: t.panel.textAlignLeft },
+    { id: "center", label: t.panel.textAlignCenter },
+    { id: "right", label: t.panel.textAlignRight },
+  ];
+  const SCOPES: { id: OverlayScope; label: string }[] = [
+    { id: "all", label: t.panel.textScopeAll },
+    { id: "selected", label: t.panel.textScopeSelected },
+    { id: "range", label: t.panel.textScopeRange },
+  ];
 
   let filename = $state("animation");
   let delayMode = $state<DelayMode>("set");
@@ -103,6 +125,7 @@
       frames: editor.frames,
       sources: editor.sources,
       transform: $state.snapshot(editor.transform),
+      overlays: $state.snapshot(editor.overlays),
       baseW: editor.base.w,
       baseH: editor.base.h,
       signal: aborter?.signal,
@@ -253,6 +276,41 @@
   function toggleCropMode() {
     editor.playing = false;
     editor.cropMode = !editor.cropMode;
+  }
+
+  // ── 텍스트 오버레이 ───────────────────────────────
+  const active = $derived(editor.activeOverlay);
+  /** 범위가 '선택'인데 선택된 프레임이 없으면 이 텍스트는 어디에도 안 그려진다. */
+  const overlayUnseen = $derived(active?.scope === "selected" && editor.selectedCount === 0);
+
+  type OverlayPatch = Partial<Omit<TextOverlay, "id">>;
+  type OverlayNumberKey = "fontSize" | "strokeWidth" | "dx" | "dy" | "from" | "to";
+
+  function patchActive(patch: OverlayPatch) {
+    if (active) editor.updateOverlay(active.id, patch);
+  }
+  function onOverlayText(e: Event) {
+    patchActive({ text: (e.target as HTMLTextAreaElement).value });
+  }
+  /** 가둔 값을 칸에 되써 준다 — 400을 넘겨 적거나 칸을 비우면 상태만 가둬지고
+   *  칸에는 적은 수가 그대로 남는다(같은 값으로 가둬지면 Svelte가 DOM을 안 건드린다).
+   *  그러면 화면에 보이는 크기와 실제로 그리는 크기가 갈린다. */
+  function onOverlayNumber(key: OverlayNumberKey) {
+    return (e: Event) => {
+      const el = e.target as HTMLInputElement;
+      const patch: OverlayPatch = {};
+      patch[key] = Number(el.value);
+      patchActive(patch);
+      const applied = editor.activeOverlay?.[key];
+      if (applied !== undefined) el.value = String(applied);
+    };
+  }
+  function onOverlayColor(key: "color" | "strokeColor") {
+    return (e: Event) => {
+      const patch: OverlayPatch = {};
+      patch[key] = (e.target as HTMLInputElement).value;
+      patchActive(patch);
+    };
   }
 </script>
 
@@ -460,6 +518,197 @@
         {t.panel.resetTransform}
       </button>
     </div>
+  </section>
+
+  <!-- 텍스트 -->
+  <section class="sec">
+    <h3>{t.panel.text}</h3>
+    {#if editor.overlays.length}
+      <div class="olist">
+        {#each editor.overlays as o, i (o.id)}
+          <div class="orow" class:active={o.id === editor.activeOverlayId}>
+            <button
+              type="button"
+              class="opick"
+              aria-label={t.panel.textItem(i + 1)}
+              onclick={() => editor.setActiveOverlay(o.id)}
+            >
+              {o.text.trim() || t.panel.textEmpty}
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              aria-label={t.panel.textRemove}
+              title={t.panel.textRemove}
+              onclick={() => editor.removeOverlay(o.id)}
+            >
+              <Icon name="trash" size={14} />
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+    <div class="row">
+      <button type="button" class="btn small" onclick={() => editor.addOverlay()}>
+        <Icon name="text" size={14} /> {t.panel.textAdd}
+      </button>
+      {#if overlayUnseen}
+        <span class="badge" title={t.panel.textNoSelectionHint}>
+          {t.panel.textNoSelection}
+        </span>
+      {/if}
+    </div>
+
+    {#if active}
+      <textarea
+        class="otext"
+        rows="2"
+        spellcheck="false"
+        aria-label={t.panel.text}
+        placeholder={t.panel.textPlaceholder}
+        value={active.text}
+        oninput={onOverlayText}
+      ></textarea>
+
+      <p class="sub">{t.panel.textVAlign}</p>
+      <div class="chips" role="group" aria-label={t.panel.textVAlign}>
+        {#each V_ALIGNS as v (v.id)}
+          <button
+            type="button"
+            class="chip"
+            class:active={active.vAlign === v.id}
+            onclick={() => patchActive({ vAlign: v.id })}
+          >
+            {v.label}
+          </button>
+        {/each}
+      </div>
+
+      <p class="sub">{t.panel.textAlign}</p>
+      <div class="chips" role="group" aria-label={t.panel.textAlign}>
+        {#each ALIGNS as a (a.id)}
+          <button
+            type="button"
+            class="chip"
+            class:active={active.align === a.id}
+            onclick={() => patchActive({ align: a.id })}
+          >
+            {a.label}
+          </button>
+        {/each}
+      </div>
+
+      <div class="row">
+        <label class="lbl" for="ov-size">{t.panel.textSize}</label>
+        <input
+          id="ov-size"
+          class="num"
+          type="number"
+          min="6"
+          max="400"
+          step="1"
+          value={active.fontSize}
+          onchange={onOverlayNumber("fontSize")}
+        />
+      </div>
+      <div class="row">
+        <label class="lbl" for="ov-color">{t.panel.textColor}</label>
+        <input
+          id="ov-color"
+          class="color"
+          type="color"
+          value={active.color}
+          oninput={onOverlayColor("color")}
+        />
+      </div>
+      <div class="row">
+        <label class="lbl" for="ov-stroke-color">{t.panel.textStrokeColor}</label>
+        <input
+          id="ov-stroke-color"
+          class="color"
+          type="color"
+          value={active.strokeColor}
+          oninput={onOverlayColor("strokeColor")}
+        />
+      </div>
+      <div class="row">
+        <label class="lbl" for="ov-stroke">{t.panel.textStrokeWidth}</label>
+        <input
+          id="ov-stroke"
+          class="num"
+          type="number"
+          min="0"
+          max="40"
+          step="1"
+          value={active.strokeWidth}
+          onchange={onOverlayNumber("strokeWidth")}
+        />
+      </div>
+      <div class="row">
+        <label class="lbl" for="ov-dx">{t.panel.textOffsetX}</label>
+        <input
+          id="ov-dx"
+          class="num"
+          type="number"
+          step="1"
+          value={active.dx}
+          onchange={onOverlayNumber("dx")}
+        />
+      </div>
+      <div class="row">
+        <label class="lbl" for="ov-dy">{t.panel.textOffsetY}</label>
+        <input
+          id="ov-dy"
+          class="num"
+          type="number"
+          step="1"
+          value={active.dy}
+          onchange={onOverlayNumber("dy")}
+        />
+      </div>
+
+      <p class="sub">{t.panel.textScope}</p>
+      <div class="chips" role="group" aria-label={t.panel.textScope}>
+        {#each SCOPES as s (s.id)}
+          <button
+            type="button"
+            class="chip"
+            class:active={active.scope === s.id}
+            onclick={() => patchActive({ scope: s.id })}
+          >
+            {s.label}
+          </button>
+        {/each}
+      </div>
+      {#if active.scope === "range"}
+        <div class="row">
+          <label class="lbl" for="ov-from">{t.panel.rangeFrom}</label>
+          <input
+            id="ov-from"
+            class="num"
+            type="number"
+            min="1"
+            max={Math.max(1, editor.frames.length)}
+            step="1"
+            value={active.from}
+            onchange={onOverlayNumber("from")}
+          />
+        </div>
+        <div class="row">
+          <label class="lbl" for="ov-to">{t.panel.rangeTo}</label>
+          <input
+            id="ov-to"
+            class="num"
+            type="number"
+            min="1"
+            max={Math.max(1, editor.frames.length)}
+            step="1"
+            value={active.to}
+            onchange={onOverlayNumber("to")}
+          />
+        </div>
+      {/if}
+    {/if}
   </section>
 
   <!-- 반복 -->
@@ -734,6 +983,75 @@
     font-variant-numeric: tabular-nums;
   }
   .num:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  }
+
+  /* 텍스트 오버레이 목록 */
+  .olist {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+  }
+  .orow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding-right: var(--space-2xs);
+  }
+  .orow.active {
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: var(--accent-weak);
+  }
+  .opick {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    padding: var(--space-xs) var(--space-sm);
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font-size: var(--text-md);
+    font-family: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .orow.active .opick {
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+
+  .otext {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: var(--text-base);
+    font-family: inherit;
+    line-height: 1.4;
+  }
+  .otext:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  }
+
+  /* 캔버스에 칠할 색 — UI 색이 아니라 그림 내용이라 토큰이 아닌 사용자 값을 담는다. */
+  .color {
+    width: 44px;
+    height: 30px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .color:focus {
     outline: none;
     border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   }

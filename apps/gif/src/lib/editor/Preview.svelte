@@ -21,7 +21,8 @@
     if (!canvas || !editor.frames.length) return;
     const seq = ++renderSeq;
 
-    const frame = editor.frames[Math.min(editor.current, editor.frames.length - 1)];
+    const index = Math.min(editor.current, editor.frames.length - 1);
+    const frame = editor.frames[index];
     const source = editor.sources.get(frame.sourceId);
     if (!source) return;
 
@@ -38,7 +39,18 @@
     if (canvas.height !== h) canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    renderFrame(ctx, bitmap, tf, baseW, baseH);
+    // 크롭 모드에서는 텍스트를 얹지 않는다 — 변형 전 좌표계라 결과와 자리가 다르고,
+    // 남길 영역을 고르는 화면에 글자가 겹치면 방해만 된다.
+    renderFrame(
+      ctx,
+      bitmap,
+      tf,
+      baseW,
+      baseH,
+      editor.cropMode
+        ? undefined
+        : { overlays: editor.overlays, index, selected: frame.selected },
+    );
   }
 
   // 일시정지 상태의 다시 그리기 (변형·프레임 변경 반영)

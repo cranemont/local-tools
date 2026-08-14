@@ -13,7 +13,7 @@ export async function extractPngFrames(
   plan: RenderPlan,
   onProgress?: (done: number, total: number) => void,
 ): Promise<PngFrame[]> {
-  const { frames, sources, transform, baseW, baseH, signal } = plan;
+  const { frames, sources, transform, overlays, baseW, baseH, signal } = plan;
   const { w, h } = outputSize(baseW, baseH, transform);
 
   const canvas = new OffscreenCanvas(w, h);
@@ -28,7 +28,11 @@ export async function extractPngFrames(
     const source = sources.get(frame.sourceId);
     if (!source) continue;
 
-    renderFrame(ctx, await getFrameBitmap(source, frame.frameIndex), transform, baseW, baseH);
+    renderFrame(ctx, await getFrameBitmap(source, frame.frameIndex), transform, baseW, baseH, {
+      overlays,
+      index: i,
+      selected: frame.selected,
+    });
     const blob = await canvas.convertToBlob({ type: "image/png" });
     out.push({
       name: `frame-${String(i + 1).padStart(pad, "0")}.png`,

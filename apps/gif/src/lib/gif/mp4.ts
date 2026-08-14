@@ -31,7 +31,8 @@ const QUALITY_MAP = {
 } as const;
 
 export async function encodeMp4(opts: Mp4EncodeOptions): Promise<Blob> {
-  const { frames, sources, transform, baseW, baseH, speed, quality, signal, onProgress } = opts;
+  const { frames, sources, transform, overlays, baseW, baseH, speed, quality, signal, onProgress } =
+    opts;
   const { w, h } = outputSize(baseW, baseH, transform);
   // H.264는 짝수 치수만 안전하다 — 렌더 캔버스를 짝수 캔버스로 한 번 더 그린다.
   const evenW = Math.max(2, w - (w % 2));
@@ -62,6 +63,7 @@ export async function encodeMp4(opts: Mp4EncodeOptions): Promise<Blob> {
         transform,
         baseW,
         baseH,
+        { overlays, index: i, selected: frame.selected },
       );
       // MP4는 투명을 지원하지 않으므로 흰 배경 위에 얹는다.
       exportCtx.fillStyle = "#fff";
