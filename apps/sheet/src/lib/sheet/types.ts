@@ -71,6 +71,15 @@ export interface Cell {
   /** 수식 원문 — "=" 없이 저장한다. 예: "SUM(A1:A9)" */
   f?: string;
   s?: CellStyle;
+  /**
+   * 파일에서 읽은 원문. **표시가 원문과 달라지는 칸에만** 남는다
+   * ("+821012345678"·"2024/01/05"·"1.50" 같은 것들).
+   *
+   * 이 칸은 화면에도 원문 그대로 그리고 저장할 때도 원문 그대로 내보낸다 —
+   * 손대지 않은 칸이 왕복만으로 바뀌면 받는 쪽 시스템이 파일을 거부한다.
+   * 값·수식·표시 형식을 건드리면 사라진다(model.ts의 putCell·applyStyle·clearStyles).
+   */
+  raw?: string;
 }
 
 export interface MergeArea {

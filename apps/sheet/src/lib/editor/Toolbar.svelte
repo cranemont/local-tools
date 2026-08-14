@@ -6,6 +6,7 @@
    * 손으로 그린 B 모양보다 그게 훨씬 빨리 읽힌다.
    */
   import Icon from "../Icon.svelte";
+  import { DELIMITERS, ENCODINGS, type Delimiter } from "../sheet/csv";
   import { FORMAT_PRESETS } from "../sheet/numfmt";
   import type { BorderSide } from "../sheet/types";
   import Dropdown from "./Dropdown.svelte";
@@ -15,6 +16,42 @@
   let { onFind }: { onFind: () => void } = $props();
 
   const style = $derived(editor.cursorStyle);
+
+  // ── 정렬 ──────────────────────────────────────────────────────
+  // 기준을 세 줄까지 받는다. 앞 줄이 같을 때만 다음 줄을 본다.
+  const SORT_SLOTS = [0, 1, 2];
+  let sortCols = $state<number[]>([-1, -1, -1]);
+  let sortAsc = $state<boolean[]>([true, true, true]);
+  /** 머리글 체크는 추정값에서 시작하고, 손으로 고치면 그 값이 이긴다. */
+  let sortHeaderPick = $state<boolean | null>(null);
+
+  const sortHeader = $derived(sortHeaderPick ?? editor.headerRowsGuess > 0);
+  const sortColumns = $derived(editor.sortableColumns(sortHeader ? 1 : 0));
+
+  /**
+   * 고른 기준 중 지금 표에 실제로 있는 것만 남긴다 — 고른 값은 파일을 바꿔도
+   * 그대로 남아 있어서, 좁은 표를 열면 사라진 열을 가리킨 채로 있을 수 있다.
+   * 그대로 두면 버튼은 눌리는데 아무 일도 안 일어난다.
+   */
+  const sortKeys = $derived(
+    SORT_SLOTS.filter((i) => sortColumns.some((column) => column.col === sortCols[i])).map((i) => ({
+      col: sortCols[i],
+      asc: sortAsc[i],
+    })),
+  );
+
+  function runSort(close: () => void): void {
+    if (sortKeys.length === 0) return;
+    editor.sortRows(sortKeys, sortHeader ? 1 : 0);
+    close();
+  }
+
+  // ── 다시 읽기 ─────────────────────────────────────────────────
+
+  function reread(options: { encoding?: string; delimiter?: Delimiter }): void {
+    if (editor.dirty && !confirm(`${t.file.unsavedTitle}\n${t.file.rereadWarn}`)) return;
+    editor.reread(options);
+  }
 
   const MARKS = [
     { key: "bold", glyph: "B", label: t.format.bold },
@@ -219,7 +256,7 @@
 
   <span class="divider" aria-hidden="true"></span>
 
-  <Dropdown title={t.edit.sort} label={t.edit.sort} icon="sort-asc">
+  <Dropdown title={t.edit.sort} label={t.edit.sort} icon="sort-asc" wide>
     {#snippet children(close)}
       <button
         class="item"
@@ -230,6 +267,7 @@
       >
         <Icon name="sort-asc" size={15} />
         {t.edit.sortAsc}
+        <span class="trail">{t.edit.sortQuick}</span>
       </button>
       <button
         class="item"
@@ -240,9 +278,47 @@
       >
         <Icon name="sort-desc" size={15} />
         {t.edit.sortDesc}
+        <span class="trail">{t.edit.sortQuick}</span>
       </button>
+
       <span class="sep"></span>
-      <span class="group-label">{t.edit.sortHint}</span>
+      <span class="group-label">{t.edit.sort}</span>
+
+      {#each SORT_SLOTS as slot (slot)}
+        <div class="sortkey">
+          <span class="rank">{t.edit.sortKey(slot + 1)}</span>
+          <select bind:value={sortCols[slot]} aria-label="{t.edit.sortKey(slot + 1)} {t.edit.sort}">
+            <option value={-1}>{t.edit.sortKeyNone}</option>
+            {#each sortColumns as column (column.col)}
+              <option value={column.col}>{column.label}</option>
+            {/each}
+          </select>
+          <select
+            bind:value={sortAsc[slot]}
+            disabled={sortCols[slot] < 0}
+            aria-label="{t.edit.sortKey(slot + 1)} {t.edit.sortDirection}"
+          >
+            <option value={true}>{t.edit.sortAsc}</option>
+            <option value={false}>{t.edit.sortDesc}</option>
+          </select>
+        </div>
+      {/each}
+
+      <label class="item check">
+        <input
+          type="checkbox"
+          checked={sortHeader}
+          onchange={(e) => (sortHeaderPick = e.currentTarget.checked)}
+        />
+        {t.edit.sortHeader}
+      </label>
+      <button
+        class="btn small primary sort-run"
+        disabled={sortKeys.length === 0}
+        onclick={() => runSort(close)}
+      >
+        {t.edit.sortRun}
+      </button>
     {/snippet}
   </Dropdown>
 
@@ -260,6 +336,14 @@
       </button>
       <button class="item" onclick={() => { editor.deleteColsAt(); close(); }}>
         {t.edit.deleteCol}
+      </button>
+      <span class="sep"></span>
+      <button
+        class="item"
+        title={t.edit.asTextHint}
+        onclick={() => { editor.forceSelectionText(); close(); }}
+      >
+        {t.edit.asText}
       </button>
     {/snippet}
   </Dropdown>
@@ -286,6 +370,43 @@
     <Icon name="search" size={16} />
     {t.find.label}
   </button>
+
+  {#if editor.canReread}
+    <Dropdown title={t.file.rereadHint} label={t.file.reread} icon="refresh" wide>
+      {#snippet children(close)}
+        <span class="group-label">{t.file.encoding}</span>
+        {#each ENCODINGS as enc (enc.id)}
+          <button
+            class="item"
+            class:on={editor.encodingChoice === enc.id}
+            onclick={() => {
+              reread({ encoding: enc.id });
+              close();
+            }}
+          >
+            {enc.label}
+            {#if enc.id === "auto" && editor.encodingChoice === "auto"}
+              <span class="trail">{t.file.detected(editor.encoding)}</span>
+            {/if}
+          </button>
+        {/each}
+        <span class="sep"></span>
+        <span class="group-label">{t.file.delimiter}</span>
+        {#each DELIMITERS as d (d.id)}
+          <button
+            class="item"
+            class:on={editor.delimiter === d.id}
+            onclick={() => {
+              reread({ delimiter: d.id });
+              close();
+            }}
+          >
+            {d.label}
+          </button>
+        {/each}
+      {/snippet}
+    </Dropdown>
+  {/if}
 </div>
 
 <style>
@@ -339,6 +460,46 @@
     gap: var(--space-2xs);
     color: var(--text);
     font-weight: 500;
+  }
+
+  /* 정렬 기준 한 줄 — 메뉴 안에 들어가는 유일한 입력 묶음이라
+   * 항목(.item)과 같은 좌우 여백에 맞춰 둔다. */
+  .sortkey {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    padding: var(--space-3xs) var(--space-sm);
+  }
+  .sortkey .rank {
+    flex: none;
+    width: 3.5em;
+    font-size: var(--text-2xs);
+    color: var(--text-muted);
+  }
+  .sortkey select {
+    min-width: 0;
+    height: 26px;
+    padding: 0 var(--space-2xs);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    font-size: var(--text-sm);
+  }
+  .sortkey select:first-of-type {
+    flex: 1;
+  }
+  .sortkey select:disabled {
+    opacity: 0.45;
+  }
+  .sortkey select:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+
+  .sort-run {
+    margin: var(--space-2xs) var(--space-sm);
   }
 
   .swatches {

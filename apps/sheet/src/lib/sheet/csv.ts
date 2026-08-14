@@ -7,9 +7,35 @@
 
 import { cellKey } from "./a1";
 import { parseInput } from "./model";
+import { formatValue } from "./numfmt";
 import { emptySheet, type Cell, type SheetDoc } from "./types";
 
 export type Delimiter = "," | "\t" | ";" | "|";
+
+/** 손으로 고를 수 있는 인코딩 — 라벨은 TextDecoder에 그대로 넘긴다. */
+export const ENCODINGS: { id: string; label: string }[] = [
+  { id: "auto", label: "자동" },
+  { id: "utf-8", label: "UTF-8" },
+  { id: "euc-kr", label: "CP949" },
+  { id: "utf-16le", label: "UTF-16LE" },
+  { id: "utf-16be", label: "UTF-16BE" },
+  { id: "shift_jis", label: "Shift_JIS" },
+  { id: "windows-1252", label: "Latin-1" },
+];
+
+export const DELIMITERS: { id: Delimiter; label: string }[] = [
+  { id: ",", label: "쉼표 ," },
+  { id: "\t", label: "탭" },
+  { id: ";", label: "세미콜론 ;" },
+  { id: "|", label: "수직선 |" },
+];
+
+export interface CsvReadOptions {
+  /** 구분자를 못 박는다. 없으면 추론. */
+  delimiter?: Delimiter;
+  /** TextDecoder 라벨을 못 박는다("euc-kr" 등). 없거나 "auto"면 판별. */
+  encoding?: string;
+}
 
 export interface CsvReadResult {
   sheet: SheetDoc;
@@ -17,6 +43,10 @@ export interface CsvReadResult {
   delimiter: Delimiter;
   /** 첫 줄을 머리글로 볼 만한가 — 자동 굵게 처리에 쓴다. */
   headerLikely: boolean;
+  /** 실제로 잡힌 열 수 — 1이면 구분자 추론이 빗나갔다는 뜻이다. */
+  columns: number;
+  /** 원문 그대로 남긴 칸 수(수·날짜로 읽으면 표기가 바뀌던 칸들). */
+  preserved: number;
 }
 
 export interface CsvWriteOptions {
@@ -35,8 +65,17 @@ export const DEFAULT_CSV_WRITE: CsvWriteOptions = {
   newline: "\r\n",
 };
 
-/** 바이트를 글자로. BOM을 먼저 보고, 없으면 UTF-8 → cp949 순으로 시도한다. */
-export function decodeText(bytes: Uint8Array): { text: string; encoding: string } {
+/**
+ * 바이트를 글자로. BOM을 먼저 보고, 없으면 UTF-8 → cp949 순으로 시도한다.
+ * `forced`를 주면 판별을 건너뛰고 그 인코딩으로 읽는다(추론이 빗나갔을 때의 손잡이).
+ */
+export function decodeText(bytes: Uint8Array, forced?: string): { text: string; encoding: string } {
+  if (forced && forced !== "auto") {
+    const label = ENCODINGS.find((e) => e.id === forced)?.label ?? forced.toUpperCase();
+    // BOM 제거는 TextDecoder가 한다(ignoreBOM 기본값이 false).
+    return { text: new TextDecoder(forced).decode(bytes), encoding: label };
+  }
+
   if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     return { text: new TextDecoder("utf-8").decode(bytes.subarray(3)), encoding: "UTF-8 (BOM)" };
   }
@@ -170,15 +209,26 @@ function looksLikeHeader(rows: string[][]): boolean {
   return headAllText && bodyHasNumber;
 }
 
-/** 텍스트 → 시트. 값 해석(수·날짜·불리언)은 parseInput과 같은 규칙을 쓴다. */
-export function readCsv(bytes: Uint8Array, name = "Sheet1", forced?: Delimiter): CsvReadResult {
-  const { text, encoding } = decodeText(bytes);
-  const delimiter = forced ?? sniffDelimiter(text);
+/**
+ * 텍스트 → 시트. 값 해석(수·날짜·불리언)은 parseInput과 같은 규칙을 쓴다.
+ *
+ * 해석 결과를 다시 그렸을 때 원문과 달라지는 칸은 **원문을 함께 들고 있는다**
+ * (`Cell.raw`). 그 칸은 화면에도 원문으로 보이고 저장할 때도 원문 그대로 나간다 —
+ * 값은 수로 갖고 있으므로 합계·정렬은 그대로 된다.
+ */
+export function readCsv(
+  bytes: Uint8Array,
+  name = "Sheet1",
+  options: CsvReadOptions = {},
+): CsvReadResult {
+  const { text, encoding } = decodeText(bytes, options.encoding);
+  const delimiter = options.delimiter ?? sniffDelimiter(text);
   const rows = parseRows(text, delimiter);
   const headerLikely = looksLikeHeader(rows);
 
   const sheet = emptySheet(name, Math.max(200, rows.length + 20), 26);
   let maxCols = 0;
+  let preserved = 0;
 
   for (let r = 0; r < rows.length; r++) {
     const cols = rows[r];
@@ -190,6 +240,11 @@ export function readCsv(bytes: Uint8Array, name = "Sheet1", forced?: Delimiter):
       const cell: Cell = { v: parsed.value };
       if (parsed.formula) cell.f = parsed.formula;
       if (parsed.numFmt) cell.s = { numFmt: parsed.numFmt };
+      // 수식 셀은 값이 계산 결과라 원문과 같을 수가 없다 — 원문은 f가 이미 갖고 있다.
+      if (!parsed.formula && formatValue(parsed.value, parsed.numFmt) !== raw) {
+        cell.raw = raw;
+        preserved++;
+      }
       if (headerLikely && r === 0) cell.s = { ...cell.s, bold: true };
       sheet.cells.set(cellKey(r, c), cell);
     }
@@ -197,7 +252,7 @@ export function readCsv(bytes: Uint8Array, name = "Sheet1", forced?: Delimiter):
 
   sheet.cols = Math.max(26, maxCols + 3);
   if (headerLikely) sheet.frozenRows = 1;
-  return { sheet, encoding, delimiter, headerLikely };
+  return { sheet, encoding, delimiter, headerLikely, columns: maxCols, preserved };
 }
 
 function quoteField(text: string, delimiter: Delimiter): string {
@@ -210,7 +265,11 @@ function quoteField(text: string, delimiter: Delimiter): string {
   return needs ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-/** 시트 → CSV 바이트. 화면에 보이는 문자열(표시 형식 적용 후)로 내보낸다. */
+/**
+ * 시트 → CSV 바이트. 화면에 보이는 문자열(표시 형식 적용 후)로 내보낸다.
+ * 파일에서 온 뒤로 손대지 않은 칸은 원문(`raw`)을 그대로 다시 쓴다 — 한 칸만
+ * 고치고 저장했는데 건드리지 않은 열이 통째로 달라져 있는 일을 막는다.
+ */
 export function writeCsv(
   sheet: SheetDoc,
   render: (row: number, col: number) => string,
@@ -230,7 +289,8 @@ export function writeCsv(
     const fields: string[] = [];
     for (let c = 0; c <= right; c++) {
       const cell = sheet.cells.get(cellKey(r, c));
-      const text = options.formulas && cell?.f ? `=${cell.f}` : render(r, c);
+      const text =
+        options.formulas && cell?.f ? `=${cell.f}` : (cell?.raw ?? render(r, c));
       fields.push(quoteField(text, options.delimiter));
     }
     // 오른쪽 끝의 빈 칸들은 떨어낸다 — 파일이 쓸데없이 넓어 보인다.

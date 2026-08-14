@@ -6,6 +6,7 @@
  */
 
 import { areaContains, cellKey, type Area } from "./a1";
+import { formatValue } from "./numfmt";
 import { parseDateInput } from "./serial";
 import {
   DEFAULT_COL_WIDTH,
@@ -24,6 +25,18 @@ export function getValue(sheet: SheetDoc, row: number, col: number): Scalar {
   return sheet.cells.get(cellKey(row, col))?.v ?? null;
 }
 
+/**
+ * 셀 하나가 글자로 어떻게 보이는가 — 화면·복사·내보내기가 전부 이 함수를 거친다.
+ *
+ * 원문(raw)이 남아 있는 칸은 원문이 곧 표시다. 그래서 "화면에 보이는 것"과
+ * "파일에 적히는 것"이 언제나 같다 — 손대지 않은 칸이 조용히 바뀔 자리가 없다.
+ */
+export function cellText(cell: Cell | undefined): string {
+  if (!cell) return "";
+  if (cell.raw !== undefined) return cell.raw;
+  return formatValue(cell.v, cell.s?.numFmt);
+}
+
 /** 셀을 고친다. 값·수식·서식 중 준 것만 바뀐다. 빈 셀이 되면 Map에서 지운다. */
 export function putCell(sheet: SheetDoc, row: number, col: number, patch: Partial<Cell>): void {
   const key = cellKey(row, col);
@@ -32,6 +45,8 @@ export function putCell(sheet: SheetDoc, row: number, col: number, patch: Partia
   if (patch.f === undefined && "f" in patch) delete next.f;
   if (next.f === undefined) delete next.f;
   if (next.s && Object.keys(next.s).length === 0) delete next.s;
+  // 값이나 수식을 새로 넣은 칸은 더 이상 "파일에서 온 그대로"가 아니다.
+  if (patch.raw === undefined && ("v" in patch || "f" in patch)) delete next.raw;
 
   if (next.v === null && next.f === undefined && !next.s) sheet.cells.delete(key);
   else sheet.cells.set(key, next);
@@ -57,7 +72,8 @@ export function clearStyles(sheet: SheetDoc, area: Area): void {
       const key = cellKey(r, c);
       const cell = sheet.cells.get(key);
       if (!cell?.s) continue;
-      const { s: _drop, ...rest } = cell;
+      // 표시 형식까지 떨어져 나가므로 원문 보존도 여기서 끝난다(아래 applyStyle과 같은 이유).
+      const { s: _drop, raw: _dropRaw, ...rest } = cell;
       if (rest.v === null && rest.f === undefined) sheet.cells.delete(key);
       else sheet.cells.set(key, rest);
     }
@@ -66,6 +82,10 @@ export function clearStyles(sheet: SheetDoc, area: Area): void {
 
 /** 영역에 서식을 덮어쓴다. 값이 undefined인 키는 그 속성을 지운다는 뜻이다. */
 export function applyStyle(sheet: SheetDoc, area: Area, patch: Partial<CellStyle>): void {
+  // 표시 형식을 손대면 "원문 그대로 보이고 원문 그대로 나간다"는 약속이 깨진다 —
+  // 사용자가 형식을 골랐다는 건 그 형식으로 보고 싶다는 뜻이므로 원문을 놓아 준다.
+  const dropRaw = "numFmt" in patch;
+
   for (let r = area.top; r <= area.bottom; r++) {
     for (let c = area.left; c <= area.right; c++) {
       const key = cellKey(r, c);
@@ -79,13 +99,39 @@ export function applyStyle(sheet: SheetDoc, area: Area, patch: Partial<CellStyle
         if (cell.v === null && cell.f === undefined) sheet.cells.delete(key);
         else {
           const { s: _drop, ...rest } = cell;
+          if (dropRaw) delete rest.raw;
           sheet.cells.set(key, rest);
         }
       } else {
-        sheet.cells.set(key, { ...cell, s: style });
+        const next: Cell = { ...cell, s: style };
+        if (dropRaw) delete next.raw;
+        sheet.cells.set(key, next);
       }
     }
   }
+}
+
+/**
+ * 영역의 값을 보이는 그대로 글자로 굳히고 표시 형식을 "@"(텍스트)로 못 박는다.
+ *
+ * 전화번호·주민번호·송장번호 열이 수로 읽혔을 때 되돌리는 통로다. 원문이 남아
+ * 있으면 그 원문이 그대로 값이 되므로 파일에 적힌 글자를 정확히 되찾는다.
+ * 수식 셀은 건드리지 않는다(값이 아니라 식을 지우게 된다). 바뀐 칸 수를 준다.
+ */
+export function forceText(sheet: SheetDoc, area: Area): number {
+  let changed = 0;
+  for (let r = area.top; r <= area.bottom; r++) {
+    for (let c = area.left; c <= area.right; c++) {
+      const key = cellKey(r, c);
+      const cell = sheet.cells.get(key);
+      if (!cell || cell.f !== undefined || cell.v === null) continue;
+      const text = cellText(cell);
+      const style: CellStyle = { ...cell.s, numFmt: "@" };
+      sheet.cells.set(key, { v: text, s: style });
+      changed++;
+    }
+  }
+  return changed;
 }
 
 /** 실제로 내용이 있는 범위. 비어 있으면 A1 한 칸. */
@@ -154,10 +200,43 @@ export function parseInput(text: string): ParsedInput {
   const leadingZero = /^0\d/.test(s);
   if (!leadingZero && NUMBER_RE.test(s) && /\d/.test(s)) {
     const n = Number(s.replace(/,/g, ""));
-    if (Number.isFinite(n)) return { value: n, numFmt: s.includes(",") ? "#,##0" : undefined };
+    if (Number.isFinite(n) && !losesDigits(s, n)) {
+      return { value: n, numFmt: s.includes(",") ? "#,##0" : undefined };
+    }
   }
 
   return { value: text };
+}
+
+/**
+ * 이 문자열을 수로 바꾸면 자릿수가 날아가는가.
+ *
+ * 안전 정수(2^53−1)를 넘는 정수는 double이 담지 못한다 — 19자리 송장번호,
+ * 카드번호, 유전자 ID가 그 자리에서 다른 수가 된다. 되돌릴 방법이 없으므로
+ * 글자로 남긴다. 소수점을 찍은 표기("1.23E+20")는 애초에 근삿값을 적은 것이라
+ * 그대로 수로 받는다 — 식별자는 소수점을 안 쓴다.
+ */
+function losesDigits(text: string, n: number): boolean {
+  if (text.includes(".")) return false;
+  return !Number.isSafeInteger(n);
+}
+
+/** 첫 줄이 머리글로 보이면 1, 아니면 0 — 정렬에서 첫 줄을 뺄지 정하는 기본값. */
+export function guessHeaderRows(sheet: SheetDoc): number {
+  if (sheet.frozenRows > 0) return Math.min(sheet.frozenRows, 5);
+  const used = usedRange(sheet);
+  if (used.bottom < 1) return 0;
+
+  let headText = 0;
+  let bodyNumbers = 0;
+  for (let c = used.left; c <= used.right; c++) {
+    const head = sheet.cells.get(cellKey(0, c))?.v ?? null;
+    const body = sheet.cells.get(cellKey(1, c))?.v ?? null;
+    if (typeof head === "string" && head.trim() !== "") headText++;
+    else if (head !== null) return 0; // 첫 줄에 수가 있으면 머리글이 아니다
+    if (typeof body === "number") bodyNumbers++;
+  }
+  return headText > 0 && bodyNumbers > 0 ? 1 : 0;
 }
 
 // ── 행·열 삽입/삭제 ──────────────────────────────────────────────
@@ -257,23 +336,53 @@ function compareScalar(a: Scalar, b: Scalar): number {
   return 0;
 }
 
+/** 정렬 기준 한 줄. 앞에 적은 것이 1순위다. */
+export interface SortKey {
+  col: number;
+  asc: boolean;
+}
+
 /**
- * 영역을 특정 열 기준으로 정렬한다. 셀 값·서식이 통째로 따라 움직인다.
+ * 영역을 정렬한다. 셀 값·서식·원문이 통째로 따라 움직인다.
+ *
+ * 기준은 여러 개를 받는다 — 앞의 키가 같을 때만 다음 키를 본다("부서 오름차순
+ * 다음 금액 내림차순"). 같은 값끼리의 원래 순서는 Array.prototype.sort가
+ * 명세상 안정 정렬이라 저절로 지켜진다.
+ *
  * 수식은 옮기지 않는다 — 정렬된 수식은 거의 언제나 틀린 참조를 가리키므로
  * 계산된 값으로 굳혀서 옮긴다.
  */
-export function sortArea(sheet: SheetDoc, area: Area, byCol: number, asc: boolean): void {
-  const rows: { cells: (Cell | undefined)[]; keyValue: Scalar }[] = [];
+export function sortArea(sheet: SheetDoc, area: Area, keys: SortKey[]): void {
+  if (keys.length === 0) return;
+
+  const rows: { cells: (Cell | undefined)[]; keyValues: Scalar[] }[] = [];
   for (let r = area.top; r <= area.bottom; r++) {
     const cells: (Cell | undefined)[] = [];
     for (let c = area.left; c <= area.right; c++) {
       const cell = sheet.cells.get(cellKey(r, c));
-      cells.push(cell ? { v: cell.v, ...(cell.s ? { s: cell.s } : {}) } : undefined);
+      cells.push(
+        cell
+          ? {
+              v: cell.v,
+              ...(cell.s ? { s: cell.s } : {}),
+              ...(cell.raw !== undefined ? { raw: cell.raw } : {}),
+            }
+          : undefined,
+      );
     }
-    rows.push({ cells, keyValue: sheet.cells.get(cellKey(r, byCol))?.v ?? null });
+    rows.push({
+      cells,
+      keyValues: keys.map((k) => sheet.cells.get(cellKey(r, k.col))?.v ?? null),
+    });
   }
 
-  rows.sort((x, y) => (asc ? 1 : -1) * compareScalar(x.keyValue, y.keyValue));
+  rows.sort((x, y) => {
+    for (let i = 0; i < keys.length; i++) {
+      const d = compareScalar(x.keyValues[i], y.keyValues[i]);
+      if (d !== 0) return keys[i].asc ? d : -d;
+    }
+    return 0;
+  });
 
   for (let i = 0; i < rows.length; i++) {
     const r = area.top + i;

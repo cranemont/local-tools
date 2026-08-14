@@ -24,18 +24,22 @@ import {
   DEFAULT_CSV_WRITE,
   readCsv,
   writeCsv,
+  type CsvReadResult,
   type CsvWriteOptions,
   type Delimiter,
 } from "../sheet/csv";
 import { exportText, readJson, type ExportFormat } from "../sheet/convert";
 import {
   applyStyle,
+  cellText,
   clearContents,
   clearStyles,
   colWidth,
   deleteCols,
   deleteRows,
+  forceText,
   getCell,
+  guessHeaderRows,
   insertCols,
   insertRows,
   mergeAt,
@@ -46,8 +50,11 @@ import {
   sortArea,
   unmergeCells,
   usedRange,
+  type ParsedInput,
+  type SortKey,
 } from "../sheet/model";
 import { formatValue } from "../sheet/numfmt";
+import { isDateFormat } from "../sheet/serial";
 import { downloadBlob, withExtension } from "../sheet/save";
 import {
   DEFAULT_COL_WIDTH,
@@ -121,6 +128,11 @@ export class EditorState {
   delimiter = $state<Delimiter>(",");
   dirty = $state(false);
 
+  /** 인코딩을 손으로 고른 값("auto"면 판별에 맡긴다). 다시 읽기가 이걸 쓴다. */
+  encodingChoice = $state("auto");
+  /** 원본 바이트를 들고 있는가 — CSV류만 참이고, 다시 읽기 메뉴가 이 값으로 뜬다. */
+  canReread = $state(false);
+
   cursor = $state<Pos>({ row: 0, col: 0 });
   anchor = $state<Pos>({ row: 0, col: 0 });
   editing = $state<EditBuffer | null>(null);
@@ -140,6 +152,8 @@ export class EditorState {
   private future: Snapshot[] = [];
   private clip: ClipBuffer | null = null;
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 마지막으로 연 CSV의 원본 바이트 — 인코딩·구분자를 바꿔 다시 읽으려면 필요하다. */
+  private lastBytes: Uint8Array | null = null;
 
   // ── 읽기 ──────────────────────────────────────────────────────
   // 전부 revision을 건드린 뒤 값을 돌려준다(위 반응성 규약 참고).
@@ -177,11 +191,9 @@ export class EditorState {
     return getCell(this.doc.sheets[this.doc.active], row, col);
   }
 
-  /** 화면에 보이는 문자열(표시 형식 적용 후). */
+  /** 화면에 보이는 문자열 — 원문이 남은 칸은 원문, 아니면 표시 형식을 적용한 값. */
   displayAt(row: number, col: number): string {
-    const cell = this.cellAt(row, col);
-    if (!cell) return "";
-    return formatValue(cell.v, cell.s?.numFmt);
+    return cellText(this.cellAt(row, col));
   }
 
   /** 수식 입력줄에 넣을 문자열 — 수식이면 원문, 아니면 편집 가능한 원값. */
@@ -192,6 +204,8 @@ export class EditorState {
     if (cell.v === null) return "";
     if (isError(cell.v)) return cell.v.code;
     if (typeof cell.v === "boolean") return cell.v ? "TRUE" : "FALSE";
+    // 파일에서 온 그대로인 칸은 그 글자를 고치게 한다 — 화면에 보이는 것과 같아야 한다.
+    if (cell.raw !== undefined) return cell.raw;
     if (typeof cell.v === "number") return formatValue(cell.v, cell.s?.numFmt);
     return cell.v;
   }
@@ -213,6 +227,35 @@ export class EditorState {
 
   /** 선택 영역의 대표 서식 — 툴바 토글 상태에 쓴다. */
   readonly cursorStyle = $derived.by((): CellStyle => this.cellAt(this.cursor.row, this.cursor.col)?.s ?? {});
+
+  /** 파일에서 온 그대로 들고 있는 칸 수 — 상태줄이 "원문 유지 N칸"으로 보여 준다. */
+  readonly preservedCount = $derived.by(() => {
+    void this.revision;
+    let n = 0;
+    for (const cell of this.doc.sheets[this.doc.active].cells.values()) {
+      if (cell.raw !== undefined) n++;
+    }
+    return n;
+  });
+
+  /** 첫 줄이 머리글로 보이는가 — 정렬 대화의 기본값. */
+  get headerRowsGuess(): number {
+    void this.revision;
+    return guessHeaderRows(this.doc.sheets[this.doc.active]);
+  }
+
+  /** 정렬 기준으로 고를 수 있는 열 — 머리글 글자가 있으면 함께 준다. */
+  sortableColumns(headerRows: number): { col: number; label: string }[] {
+    void this.revision;
+    const sheet = this.doc.sheets[this.doc.active];
+    const used = usedRange(sheet);
+    const out: { col: number; label: string }[] = [];
+    for (let c = used.left; c <= used.right; c++) {
+      const head = headerRows > 0 ? cellText(sheet.cells.get(cellKey(0, c))).trim() : "";
+      out.push({ col: c, label: head ? `${colName(c)} — ${head}` : colName(c) });
+    }
+    return out;
+  }
 
   /** 선택 영역 요약(합계·평균 등). */
   readonly summary = $derived.by(() => {
@@ -437,13 +480,16 @@ export class EditorState {
   setCellText(row: number, col: number, text: string): void {
     this.mutate(() => {
       const sheet = this.doc.sheets[this.doc.active];
-      const parsed = parseInput(text);
       const existing = getCell(sheet, row, col);
       const style = { ...existing?.s };
+      // 표시 형식이 "텍스트"(@)인 칸은 해석하지 않는다 — 전화번호 열에 010-…을
+      // 다시 쳐 넣었을 때 또 수가 되면 열을 텍스트로 바꾼 뜻이 없다.
+      const asText = style.numFmt === "@" && !text.trim().startsWith("=");
+      const parsed: ParsedInput = asText ? { value: text === "" ? null : text } : parseInput(text);
 
       if (parsed.numFmt && !style.numFmt) style.numFmt = parsed.numFmt;
       // 텍스트로 되돌아가면 남아 있던 날짜 형식을 떼어 준다(1이 1900-01-01로 보이는 사고 방지).
-      if (typeof parsed.value === "string" && style.numFmt && parsed.formula === undefined) {
+      if (typeof parsed.value === "string" && isDateFormat(style.numFmt) && parsed.formula === undefined) {
         delete style.numFmt;
       }
 
@@ -543,7 +589,7 @@ export class EditorState {
     for (let r = 0; r <= used.bottom; r++) {
       const cell = sheet.cells.get(cellKey(r, col));
       if (!cell) continue;
-      const text = formatValue(cell.v, cell.s?.numFmt);
+      const text = cellText(cell);
       // 한글은 폭이 대략 두 배다.
       let units = 0;
       for (const ch of text) units += ch.charCodeAt(0) > 0x2e80 ? 2 : 1;
@@ -552,20 +598,57 @@ export class EditorState {
     this.setColWidth(col, widest === 0 ? DEFAULT_COL_WIDTH : clamp(widest * 7.4 + 18, 48, 620));
   }
 
-  sortBySelection(asc: boolean): void {
-    const area = this.selection;
+  /**
+   * 정렬. **언제나 행 전체를 옮긴다** — 고른 열만 재배열하면 그 옆 열과 짝이
+   * 어긋나 표가 조용히 망가진다(열 머리글을 누르고 정렬하면 늘 그랬다).
+   *
+   * 선택이 여러 행을 덮으면 그 행들만, 아니면 머리글 아래 전체를 정렬한다.
+   */
+  sortRows(keys: SortKey[], headerRows: number): void {
     const sheet = this.doc.sheets[this.doc.active];
-    // 한 칸만 골랐으면 그 열이 속한 데이터 덩어리 전체를 정렬한다(머리글은 빼고).
-    const single = areaWidth(area) === 1 && areaHeight(area) === 1;
     const used = usedRange(sheet);
-    const target: Area = single
-      ? { top: sheet.frozenRows, left: 0, bottom: used.bottom, right: used.right }
-      : area;
-    if (target.bottom <= target.top) return;
+    const area = this.selection;
+    const valid = keys.filter((k) => k.col >= 0 && k.col <= used.right);
+    if (valid.length === 0) return;
+
+    // 한 행만 고른 상태(=한 칸·한 열)는 "표 전체"라는 뜻으로 읽는다.
+    const wholeTable = areaHeight(area) === 1 || (area.top <= headerRows && area.bottom >= used.bottom);
+    const top = wholeTable ? Math.min(headerRows, used.bottom) : area.top;
+    const bottom = wholeTable ? used.bottom : Math.min(area.bottom, used.bottom);
+    if (bottom <= top) return;
+
+    const target: Area = { top, left: 0, bottom, right: used.right };
+    const widened = !wholeTable && (area.left > 0 || area.right < used.right);
 
     this.mutate(() => {
-      sortArea(sheet, target, this.cursor.col, asc);
+      sortArea(sheet, target, valid);
     });
+    if (widened) this.flash(t.edit.sortWidened);
+  }
+
+  /** 도구줄의 빠른 정렬 — 커서가 놓인 열 하나를 기준으로 삼는다. */
+  sortBySelection(asc: boolean): void {
+    this.sortRows([{ col: this.cursor.col, asc }], this.headerRowsGuess);
+  }
+
+  /** 고른 열을 텍스트로 굳힌다 — 수로 읽혀 버린 전화번호·송장번호 열의 탈출구. */
+  forceSelectionText(): void {
+    const sheet = this.doc.sheets[this.doc.active];
+    const used = usedRange(sheet);
+    const area = this.selection;
+    const target: Area = {
+      top: Math.min(area.top, used.bottom),
+      left: area.left,
+      bottom: Math.min(area.bottom, used.bottom),
+      right: Math.min(area.right, used.right),
+    };
+
+    let changed = 0;
+    this.mutate(() => {
+      changed = forceText(sheet, target);
+      if (changed === 0) return false;
+    });
+    if (changed > 0) this.flash(t.edit.textDone(changed));
   }
 
   toggleMerge(): void {
@@ -673,8 +756,7 @@ export class EditorState {
     for (let r = area.top; r <= area.bottom; r++) {
       const fields: string[] = [];
       for (let c = area.left; c <= area.right; c++) {
-        const cell = sheet.cells.get(cellKey(r, c));
-        const text = formatValue(cell?.v ?? null, cell?.s?.numFmt);
+        const text = cellText(sheet.cells.get(cellKey(r, c)));
         fields.push(/[\t\n"]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text);
       }
       lines.push(fields.join("\t"));
@@ -818,6 +900,9 @@ export class EditorState {
 
   newBook(): void {
     this.doc = emptyWorkbook();
+    this.lastBytes = null;
+    this.canReread = false;
+    this.encodingChoice = "auto";
     this.past.length = 0;
     this.future.length = 0;
     this.canUndo = false;
@@ -835,6 +920,9 @@ export class EditorState {
 
   closeBook(): void {
     this.doc = emptyWorkbook();
+    this.lastBytes = null;
+    this.canReread = false;
+    this.encodingChoice = "auto";
     this.hasFile = false;
     this.dirty = false;
     this.filename = "";
@@ -874,19 +962,27 @@ export class EditorState {
         this.encoding = "UTF-8";
       } else if (lower.endsWith(".csv") || lower.endsWith(".tsv") || lower.endsWith(".txt")) {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const result = readCsv(bytes, "Sheet1", lower.endsWith(".tsv") ? "\t" : undefined);
+        this.lastBytes = bytes;
+        this.canReread = true;
+        this.encodingChoice = "auto";
+        const result = readCsv(bytes, "Sheet1", {
+          delimiter: lower.endsWith(".tsv") ? "\t" : undefined,
+        });
         this.doc = {
           sheets: [result.sheet],
           active: 0,
           filename: file.name,
           origin: lower.endsWith(".tsv") ? "tsv" : "csv",
         };
-        this.encoding = result.encoding;
-        this.delimiter = result.delimiter;
-        this.csvOptions = { ...this.csvOptions, delimiter: result.delimiter };
+        this.adoptCsv(result);
       } else {
         this.error = t.file.unsupported;
         return;
+      }
+
+      if (!lower.endsWith(".csv") && !lower.endsWith(".tsv") && !lower.endsWith(".txt")) {
+        this.lastBytes = null;
+        this.canReread = false;
       }
 
       recalculate(this.doc);
@@ -908,14 +1004,52 @@ export class EditorState {
     }
   }
 
+  /** 읽기 결과를 화면 상태에 반영한다. 여는 경로와 다시 읽는 경로가 함께 쓴다. */
+  private adoptCsv(result: CsvReadResult): void {
+    this.encoding = result.encoding;
+    this.delimiter = result.delimiter;
+    this.csvOptions = { ...this.csvOptions, delimiter: result.delimiter };
+    // 열이 하나뿐이면 구분자 추론이 빗나간 것이다 — 먼저 그 말을 해 준다.
+    if (result.columns <= 1) this.flash(t.file.oneColumn);
+    else if (result.preserved > 0) this.flash(t.file.preserved(result.preserved));
+  }
+
+  /**
+   * 같은 바이트를 인코딩·구분자만 바꿔 다시 읽는다.
+   * 판별이 한 번 빗나가면 파일을 열 방법이 아예 없어지므로 남겨 둔 손잡이다.
+   * 편집분은 사라지므로 부르는 쪽에서 먼저 확인을 받는다.
+   */
+  reread(options: { encoding?: string; delimiter?: Delimiter } = {}): void {
+    const bytes = this.lastBytes;
+    if (!bytes) return;
+
+    const encoding = options.encoding ?? this.encodingChoice;
+    const delimiter = options.delimiter ?? this.delimiter;
+    try {
+      const result = readCsv(bytes, this.doc.sheets[0]?.name ?? "Sheet1", { encoding, delimiter });
+      this.encodingChoice = encoding;
+      this.doc = { ...this.doc, sheets: [result.sheet], active: 0 };
+      this.adoptCsv(result);
+      recalculate(this.doc);
+      this.past.length = 0;
+      this.future.length = 0;
+      this.canUndo = false;
+      this.canRedo = false;
+      this.dirty = false;
+      this.cursor = { row: 0, col: 0 };
+      this.anchor = { row: 0, col: 0 };
+      this.error = "";
+      this.touch();
+    } catch (e) {
+      this.error = `${t.file.rereadFailed} — ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
   // ── 저장·내보내기 ────────────────────────────────────────────
 
   private renderer(): (row: number, col: number) => string {
     const sheet = this.doc.sheets[this.doc.active];
-    return (row, col) => {
-      const cell = sheet.cells.get(cellKey(row, col));
-      return cell ? formatValue(cell.v, cell.s?.numFmt) : "";
-    };
+    return (row, col) => cellText(sheet.cells.get(cellKey(row, col)));
   }
 
   saveCsv(delimiter: Delimiter = this.csvOptions.delimiter): void {
@@ -981,7 +1115,7 @@ export class EditorState {
     const needle = matchCase ? query : query.toLowerCase();
     const found: Pos[] = [];
     for (const [key, cell] of sheet.cells) {
-      const text = formatValue(cell.v, cell.s?.numFmt);
+      const text = cellText(cell);
       const hay = matchCase ? text : text.toLowerCase();
       if (hay.includes(needle)) found.push({ row: Math.floor(key / MAX_COLS), col: key % MAX_COLS });
     }
@@ -1003,7 +1137,7 @@ export class EditorState {
       for (const { row, col } of matches) {
         const cell = sheet.cells.get(cellKey(row, col));
         if (!cell || cell.f) continue; // 수식 원문은 건드리지 않는다
-        const text = formatValue(cell.v, cell.s?.numFmt);
+        const text = cellText(cell);
         const next = matchCase
           ? text.split(query).join(replacement)
           : replaceInsensitive(text, query, replacement);

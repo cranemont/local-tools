@@ -6,7 +6,6 @@ export const t = {
   brandName: "local-tools",
   appName: "시트",
   home: "홈",
-  privacyNote: "파일은 브라우저 밖으로 나가지 않아요",
 
   theme: {
     label: "테마",
@@ -34,6 +33,15 @@ export const t = {
     unsavedBody: "이 파일을 닫으면 편집한 내용이 사라져요.",
     discard: "버리고 닫기",
     cancel: "취소",
+    reread: "다시 읽기",
+    rereadHint: "인코딩·구분자를 바꿔 원본을 다시 읽어요",
+    rereadWarn: "다시 읽으면 편집한 내용이 사라져요.",
+    rereadFailed: "그 인코딩으로는 읽지 못했어요",
+    encoding: "인코딩",
+    delimiter: "구분자",
+    detected: (name: string) => `판별: ${name}`,
+    oneColumn: "열이 하나로 읽혔어요 — 구분자를 바꿔 보세요",
+    preserved: (n: number) => `${n}칸은 파일 원문 그대로 둬요`,
   },
 
   save: {
@@ -71,7 +79,16 @@ export const t = {
     sort: "정렬",
     sortAsc: "오름차순",
     sortDesc: "내림차순",
-    sortHint: "한 칸만 고르면 그 열 기준으로 표 전체를 정렬해요",
+    sortQuick: "커서가 놓인 열 기준",
+    sortKey: (n: number) => `${n}순위`,
+    sortKeyNone: "없음",
+    sortDirection: "방향",
+    sortHeader: "첫 줄은 머리글",
+    sortRun: "정렬",
+    sortWidened: "고르지 않은 열도 함께 옮겼어요",
+    asText: "선택한 열을 텍스트로",
+    asTextHint: "수로 읽힌 전화번호·송장번호를 글자로 되돌려요",
+    textDone: (n: number) => `${n}칸을 텍스트로 바꿨어요`,
     merge: "병합",
     mergeHint: "고른 칸을 하나로 합치기 (다시 누르면 해제)",
     unmerge: "병합 해제",
@@ -128,6 +145,9 @@ export const t = {
     cells: (n: number) => `${n}칸`,
     ready: "준비됨",
     calculating: "계산 중…",
+    preserved: (n: number) => `원문 유지 ${n}칸`,
+    preservedHint: "표시와 저장이 파일 원문과 같은 칸이에요",
+    unsaved: "저장 안 함 — 내보내야 파일로 남아요",
   },
 
   find: {

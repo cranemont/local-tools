@@ -31,10 +31,17 @@
   {#if editor.notice}
     <span class="notice">{editor.notice}</span>
   {/if}
+  {#if editor.dirty}
+    <span class="item muted">{t.status.unsaved}</span>
+  {/if}
+  {#if editor.preservedCount > 0}
+    <span class="item muted" title={t.status.preservedHint}>
+      {t.status.preserved(editor.preservedCount)}
+    </span>
+  {/if}
   {#if editor.encoding}
     <span class="item muted">{editor.encoding}</span>
   {/if}
-  <span class="item muted">{t.privacyNote}</span>
 </div>
 
 <style>
@@ -78,11 +85,5 @@
   .spacer {
     flex: 1;
     min-width: var(--space-lg);
-  }
-
-  @media (max-width: 900px) {
-    .item.muted:last-child {
-      display: none;
-    }
   }
 </style>

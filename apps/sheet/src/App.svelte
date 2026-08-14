@@ -58,14 +58,29 @@
     editor.closeBook();
   }
 
+  /** 편집분은 오직 메모리에만 있다 — 새로고침·창 닫기 전에 브라우저가 한 번 묻게 한다. */
+  function onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!editor.dirty) return;
+    event.preventDefault();
+  }
+
+  /** 로고(홈 링크)도 페이지를 떠난다. 닫기 버튼과 같은 확인을 받는다. */
+  function onLeave(event: MouseEvent): void {
+    if (!editor.dirty) return;
+    if (!confirm(`${t.file.unsavedTitle}\n${t.file.unsavedBody}`)) event.preventDefault();
+  }
+
   /** 표 전체 단축키. 편집 중이거나 입력란에 있을 때는 브라우저 기본 동작에 양보한다. */
   function onKeyDown(event: KeyboardEvent): void {
     if (!editor.hasFile) return;
 
     const target = event.target as HTMLElement | null;
+    // 선택 상자도 방향키·글자키를 자기 것으로 쓴다(정렬 기준 고르기) — 여기서 가로채면
+    // 목록이 안 넘어가고 커서만 움직인다.
     const typing =
       target instanceof HTMLInputElement ||
       target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
       target?.isContentEditable === true;
 
     const mod = event.metaKey || event.ctrlKey;
@@ -211,13 +226,13 @@
   }
 </script>
 
-<svelte:window onkeydown={onKeyDown} />
+<svelte:window onkeydown={onKeyDown} onbeforeunload={onBeforeUnload} />
 
 <svelte:body ondragenter={onDragEnter} ondragleave={onDragLeave} ondragover={(e) => e.preventDefault()} ondrop={onDrop} />
 
 <div class="app">
   <header class="bar">
-    <a class="brand" href="../">
+    <a class="brand" href="../" onclick={onLeave}>
       <Icon name="table" size={17} />
       <span class="name">{t.brandName}</span>
       <span class="tool">{t.appName}</span>

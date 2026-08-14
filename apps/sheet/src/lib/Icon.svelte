@@ -34,7 +34,8 @@
     | "type"
     | "chevron-down"
     | "hash"
-    | "check";
+    | "check"
+    | "refresh";
 </script>
 
 <script lang="ts">
@@ -137,6 +138,11 @@
     <path d="M10 3 8 21M16 3l-2 18M3.5 8.5h17M3 15.5h17" />
   {:else if name === "check"}
     <path d="m5 13 4 4 10-10" />
+  {:else if name === "refresh"}
+    <path d="M20 11a8 8 0 0 0-13.7-5.3L4 8" />
+    <path d="M4 4v4h4" />
+    <path d="M4 13a8 8 0 0 0 13.7 5.3L20 16" />
+    <path d="M20 20v-4h-4" />
   {/if}
 </svg>
 

@@ -276,7 +276,10 @@ function renderNumber(n: number, p: NumPattern): string {
 /** General — 엑셀 기본 표시. 정수는 그대로, 긴 소수는 유효자리로 줄인다. */
 function general(n: number): string {
   if (!Number.isFinite(n)) return n > 0 ? "#NUM!" : "#NUM!";
-  if (Number.isInteger(n) && Math.abs(n) < 1e15) return String(n);
+  // 정수는 자릿수를 줄이지 않는다. 예전엔 1e15부터 지수 표기로 떨어뜨렸는데,
+  // 그러면 16자리 주문번호가 "1.23457E+15"로 굳어 저장돼 되돌릴 수 없었다.
+  // (1e21부터는 JS의 String 자신이 지수로 적는다. 지수 표기가 필요하면 형식으로 고른다.)
+  if (Number.isInteger(n) && Math.abs(n) < 1e21) return String(n);
   const abs = Math.abs(n);
   if (abs !== 0 && (abs >= 1e11 || abs < 1e-10)) return n.toExponential(5).replace("e", "E");
   // 부동소수 잡음(0.1+0.2)을 없애되 유효자리는 보존한다.
