@@ -14,8 +14,7 @@
   }
   function onInputChange(e: Event) {
     const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) void editor.openFile(file);
+    void editor.openFiles(Array.from(input.files ?? []));
     input.value = "";
   }
 
@@ -29,13 +28,56 @@
     dragOver = false;
   }
   function onZoneDrop(e: DragEvent) {
-    const file = e.dataTransfer?.files[0];
-    if (!file) return;
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
     e.preventDefault();
     dragOver = false;
-    void editor.openFile(file);
+    void editor.openFiles(files);
+  }
+
+  // ── 단축키 (입력란 안에서는 브라우저 기본에 양보) ──
+  function typingIn(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el || typeof el.tagName !== "string") return false;
+    return (
+      el.tagName === "INPUT" ||
+      el.tagName === "TEXTAREA" ||
+      el.tagName === "SELECT" ||
+      el.isContentEditable
+    );
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (!editor.file || editor.busy) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || typingIn(e.target)) return;
+    // 한글 자판에서도 같은 자리를 쓰도록 key 대신 code로 본다.
+    switch (e.code) {
+      case "ArrowLeft":
+      case "ArrowRight": {
+        e.preventDefault(); // <video>의 기본 5초 점프를 막는다
+        const dir = e.code === "ArrowLeft" ? -1 : 1;
+        editor.nudge(dir * (e.shiftKey ? 1 : editor.frameStep));
+        break;
+      }
+      case "KeyI":
+        e.preventDefault();
+        editor.setTrimStart(editor.currentTime);
+        break;
+      case "KeyO":
+        e.preventDefault();
+        editor.setTrimEnd(editor.currentTime);
+        break;
+      case "Space":
+        // 버튼에 포커스가 있으면 그 버튼을 누르는 게 맞다.
+        if ((e.target as HTMLElement | null)?.tagName === "BUTTON") return;
+        e.preventDefault();
+        editor.togglePlayRange();
+        break;
+    }
   }
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 <div
   class="editor"
@@ -50,6 +92,7 @@
     bind:this={fileInput}
     type="file"
     accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mp4,.m4v,.mov,.webm,.mkv"
+    multiple
     hidden
     onchange={onInputChange}
   />
@@ -63,6 +106,16 @@
   {:else}
     <div class="toolbar">
       <span class="fileinfo" title={editor.file.name}>{editor.file.name}</span>
+      {#if editor.isBatch}
+        <span class="queue">{t.editor.queueCount(editor.queue.length)}</span>
+        <button
+          type="button"
+          class="btn small ghost"
+          onclick={() => editor.clearQueue()}
+        >
+          {t.editor.queueClear}
+        </button>
+      {/if}
       <span class="spacer"></span>
       <button type="button" class="btn ghost" onclick={pick}>
         <Icon name="plus" size={15} /> {t.editor.changeFile}
@@ -177,8 +230,15 @@
   .spacer {
     flex: 1;
   }
-
-
+  .queue {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent-weak);
+    color: var(--accent-ink);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
   /* 작업 공간 */
   .workspace {
     flex: 1;

@@ -4,8 +4,6 @@
   import { editor } from "./state.svelte";
 
   const STRIP_H = 56;
-  /** 키보드 조절 간격(초) — Shift는 1초. */
-  const KEY_STEP_S = 0.1;
 
   let container: HTMLDivElement | undefined = $state();
   let canvas: HTMLCanvasElement | undefined = $state();
@@ -88,11 +86,13 @@
     drag = null;
   }
 
+  /** 핸들에 포커스가 있을 때의 조절 — 보폭은 전역 단축키와 같다(한 프레임 / Shift는 1초). */
   function handleKey(e: KeyboardEvent, which: "start" | "end") {
     const dir = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
     if (!dir) return;
     e.preventDefault();
-    const step = (e.shiftKey ? 1 : KEY_STEP_S) * dir;
+    e.stopPropagation(); // 전역 단축키의 탐색과 겹치지 않게
+    const step = (e.shiftKey ? 1 : editor.frameStep) * dir;
     if (which === "start") editor.setTrimStart(editor.trimStart + step);
     else editor.setTrimEnd(editor.trimEnd + step);
   }

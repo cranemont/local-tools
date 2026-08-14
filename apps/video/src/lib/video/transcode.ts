@@ -4,6 +4,7 @@
 import {
   BlobSource,
   BufferTarget,
+  canEncodeAudio,
   Conversion,
   ConversionCanceledError,
   FlacOutputFormat,
@@ -18,8 +19,12 @@ import {
   QUALITY_MEDIUM,
   WavOutputFormat,
   WebMOutputFormat,
+  type AudioCodec,
+  type ConversionAudioOptions,
   type ConversionVideoOptions,
   type OutputFormat,
+  type Rotation,
+  type VideoSample,
 } from "mediabunny";
 import { t } from "../i18n";
 import { VIDEO_FORMATS } from "./probe";
@@ -28,6 +33,8 @@ export type CutMode = "exact" | "lossless";
 export type PresetId = "small" | "balanced" | "high";
 /** 출력 컨테이너. */
 export type ContainerId = "mp4" | "webm";
+/** 시계 방향 회전 각도. */
+export type { Rotation };
 
 /** 무손실(복사) 상태로 각 컨테이너에 담을 수 있는 비디오 코덱. */
 const CONTAINER_VIDEO_CODECS: Record<ContainerId, readonly string[]> = {
@@ -56,6 +63,32 @@ const MUX_OVERHEAD = 0.94;
 /** 화질이 무의미해지는 하한(bps). */
 const MIN_VIDEO_BPS = 100_000;
 
+/**
+ * 좌우·상하 반전 처리기 — mediabunny에 반전 옵션이 없어 프레임을 직접 그린다.
+ * 회전·크기 조정이 끝난 샘플이 들어오므로(rotate 옵션이 process와 함께 오면
+ * 엔진이 회전을 픽셀에 굽는다) 여기서는 뒤집기만 한다.
+ */
+function flipProcessor(
+  flipH: boolean,
+  flipV: boolean,
+): (sample: VideoSample) => OffscreenCanvas {
+  // 캔버스는 한 장을 재사용한다 — mediabunny가 반환 즉시 VideoFrame으로 복사한다.
+  let canvas: OffscreenCanvas | null = null;
+  let ctx: OffscreenCanvasRenderingContext2D | null = null;
+  return (sample) => {
+    const w = sample.displayWidth;
+    const h = sample.displayHeight;
+    if (!canvas || canvas.width !== w || canvas.height !== h) {
+      canvas = new OffscreenCanvas(w, h);
+      ctx = canvas.getContext("2d");
+    }
+    if (!ctx) throw new Error(t.errors.encodeFail);
+    ctx.setTransform(flipH ? -1 : 1, 0, 0, flipV ? -1 : 1, flipH ? w : 0, flipV ? h : 0);
+    sample.draw(ctx, 0, 0, w, h);
+    return canvas;
+  };
+}
+
 export interface TranscodeOptions {
   /** null이면 전체 구간. */
   trim: { start: number; end: number } | null;
@@ -68,6 +101,15 @@ export interface TranscodeOptions {
   height: number | null;
   /** 타깃 용량(바이트). null이면 프리셋 화질. 정확 컷에서만 적용. */
   targetBytes: number | null;
+  /** 지정 비트레이트(kbps). targetBytes가 없을 때만 프리셋을 대신한다. */
+  bitrateKbps: number | null;
+  /** 출력 프레임레이트(null = 원본). 정확 컷에서만 적용. */
+  fps: number | null;
+  /** 시계 방향 회전. 무손실 컷에선 메타데이터 회전(복사 유지). */
+  rotate: Rotation;
+  /** 좌우·상하 반전 — 픽셀을 다시 그리므로 정확 컷에서만 적용. */
+  flipH: boolean;
+  flipV: boolean;
   /** 인코딩되는 구간 길이(초) — 타깃 비트레이트 역산용. */
   clipDurationS: number;
   /** 원본 표시 크기 — 짝수 해상도 계산용. */
@@ -86,11 +128,24 @@ export interface TranscodeResult {
   audioDropped: boolean;
 }
 
+/** 회전을 반영한 원본 크기 — 90·270에선 가로세로가 바뀐다. */
+export function rotatedSize(
+  width: number,
+  height: number,
+  rotate: Rotation,
+): { w: number; h: number } {
+  return rotate % 180 === 0 ? { w: width, h: height } : { w: height, h: width };
+}
+
 function exactVideoOptions(opts: TranscodeOptions): ConversionVideoOptions {
   const video: ConversionVideoOptions = {
     forceTranscode: true,
     codec: opts.container === "webm" ? "vp9" : "avc",
   };
+
+  if (opts.rotate) video.rotate = opts.rotate;
+  if (opts.flipH || opts.flipV) video.process = flipProcessor(opts.flipH, opts.flipV);
+  if (opts.fps) video.frameRate = opts.fps;
 
   if (opts.targetBytes) {
     const totalBps = (opts.targetBytes * 8) / Math.max(0.1, opts.clipDurationS);
@@ -101,14 +156,20 @@ function exactVideoOptions(opts: TranscodeOptions): ConversionVideoOptions {
     );
     // CBR — VBR은 어려운 영상에서 타깃을 크게 넘길 수 있다(노이즈 영상 실측 +30%).
     video.quality = new Quality({ bitrate, bitrateMode: "constant" });
+  } else if (opts.bitrateKbps) {
+    video.quality = new Quality({
+      bitrate: Math.round(opts.bitrateKbps * 1000),
+      bitrateMode: "constant",
+    });
   } else {
     video.quality = PRESET_QUALITY[opts.preset];
   }
 
-  if (opts.height && opts.height < opts.sourceHeight) {
+  // 리사이즈는 회전이 끝난 크기를 기준으로 한다(엔진도 회전→크롭→리사이즈 순서다).
+  const src = rotatedSize(opts.sourceWidth, opts.sourceHeight, opts.rotate);
+  if (opts.height && opts.height < src.h) {
     // H.264는 짝수 해상도가 안전 — 가로를 직접 짝수로 계산해 넘긴다.
-    const w =
-      Math.round(((opts.sourceWidth / opts.sourceHeight) * opts.height) / 2) * 2;
+    const w = Math.round(((src.w / src.h) * opts.height) / 2) * 2;
     video.width = Math.max(2, w);
     video.height = opts.height;
     video.fit = "fill"; // 비율은 위에서 이미 유지됨
@@ -140,8 +201,14 @@ export async function transcodeMp4(
       output,
       tracks: "primary",
       trim: opts.trim ?? undefined,
-      // 무손실: 옵션 없음 = 가능하면 패킷 복사.
-      video: opts.mode === "exact" ? exactVideoOptions(opts) : {},
+      // 무손실: 회전 말고는 옵션 없음 = 가능하면 패킷 복사.
+      // (rotate만 있으면 엔진이 컨테이너 회전 메타데이터를 써서 복사를 유지한다.)
+      video:
+        opts.mode === "exact"
+          ? exactVideoOptions(opts)
+          : opts.rotate
+            ? { rotate: opts.rotate }
+            : {},
       audio,
       showWarnings: false,
     });
@@ -174,28 +241,97 @@ interface AudioContainer {
   makeFormat: () => OutputFormat;
   ext: string;
   mime: string;
+  /** 이 컨테이너에 담을 코덱 — 형식을 직접 고를 때 명시한다. */
+  codec: AudioCodec;
 }
 
-/** 원본 오디오 코덱 → 재인코딩 없이 담을 수 있는 컨테이너. */
-const AUDIO_CONTAINERS: Record<string, AudioContainer> = {
-  aac: { makeFormat: () => new Mp4OutputFormat(), ext: "m4a", mime: "audio/mp4" },
-  opus: { makeFormat: () => new OggOutputFormat(), ext: "ogg", mime: "audio/ogg" },
-  vorbis: { makeFormat: () => new OggOutputFormat(), ext: "ogg", mime: "audio/ogg" },
-  mp3: { makeFormat: () => new Mp3OutputFormat(), ext: "mp3", mime: "audio/mpeg" },
-  flac: { makeFormat: () => new FlacOutputFormat(), ext: "flac", mime: "audio/flac" },
+/** 소리 저장 형식. auto는 원본 코덱을 그대로 담을 수 있는 컨테이너를 고른다. */
+export type AudioFormatId = "auto" | "m4a" | "mp3" | "ogg" | "wav" | "flac";
+export const AUDIO_FORMAT_IDS = ["auto", "m4a", "mp3", "ogg", "wav", "flac"] as const;
+
+/** 형식 → 컨테이너·확장자·코덱. auto는 원본 코덱을 키로 이 표를 조회한다. */
+const AUDIO_CONTAINERS: Record<Exclude<AudioFormatId, "auto">, AudioContainer> = {
+  m4a: {
+    makeFormat: () => new Mp4OutputFormat(),
+    ext: "m4a",
+    mime: "audio/mp4",
+    codec: "aac",
+  },
+  ogg: {
+    makeFormat: () => new OggOutputFormat(),
+    ext: "ogg",
+    mime: "audio/ogg",
+    codec: "opus",
+  },
+  mp3: {
+    makeFormat: () => new Mp3OutputFormat(),
+    ext: "mp3",
+    mime: "audio/mpeg",
+    codec: "mp3",
+  },
+  flac: {
+    makeFormat: () => new FlacOutputFormat(),
+    ext: "flac",
+    mime: "audio/flac",
+    codec: "flac",
+  },
+  /** 무압축이지만 어떤 pcm이든 담긴다 — 모르는 코덱의 폴백이기도 하다. */
+  wav: {
+    makeFormat: () => new WavOutputFormat(),
+    ext: "wav",
+    mime: "audio/wav",
+    codec: "pcm-s16",
+  },
 };
 
-/** 그 외 코덱(pcm 등)의 폴백. wav는 무압축이지만 어떤 pcm이든 담긴다. */
-const AUDIO_FALLBACK: AudioContainer = {
-  makeFormat: () => new WavOutputFormat(),
-  ext: "wav",
-  mime: "audio/wav",
+/** 원본 오디오 코덱 → 재인코딩 없이 담을 수 있는 형식. */
+const CODEC_FORMAT: Record<string, Exclude<AudioFormatId, "auto">> = {
+  aac: "m4a",
+  opus: "ogg",
+  vorbis: "ogg",
+  mp3: "mp3",
+  flac: "flac",
 };
+
+/** auto가 고르는 형식 — pcm은 wav, 모르는 코덱은 m4a(재인코딩)로. */
+export function autoAudioFormat(
+  audioCodec: string | null,
+): Exclude<AudioFormatId, "auto"> {
+  if (audioCodec?.startsWith("pcm")) return "wav";
+  return CODEC_FORMAT[audioCodec ?? ""] ?? "m4a";
+}
+
+/** 형식이 실제로 쓰는 코덱. */
+export function audioFormatCodec(
+  format: AudioFormatId,
+  audioCodec: string | null,
+): AudioCodec {
+  return AUDIO_CONTAINERS[format === "auto" ? autoAudioFormat(audioCodec) : format]
+    .codec;
+}
+
+/** 브라우저가 인코딩할 수 있는 오디오 코덱만 남긴다(크롬엔 mp3 인코더가 없다). */
+export async function encodableAudioCodecs(): Promise<Set<AudioCodec>> {
+  const codecs = Object.values(AUDIO_CONTAINERS).map((c) => c.codec);
+  const flags = await Promise.all(codecs.map((c) => canEncodeAudio(c)));
+  return new Set(codecs.filter((_, i) => flags[i]));
+}
+
+/** 비트레이트 지정이 무의미한(무손실) 코덱. */
+export function isLosslessAudioCodec(codec: AudioCodec): boolean {
+  return codec === "flac" || codec.startsWith("pcm") || codec === "ulaw" || codec === "alaw";
+}
 
 export interface ExtractAudioOptions {
   /** null이면 전체 구간. */
   trim: { start: number; end: number } | null;
   audioCodec: string | null;
+  /** 저장 형식. auto면 원본 코덱에 맞춰 고른다. */
+  format: AudioFormatId;
+  /** 지정 비트레이트(kbps). null이면 엔진 기본값(복사 가능하면 복사). */
+  bitrateKbps: number | null;
+  /** true면 1채널로 합친다. */
+  mono: boolean;
   onProgress?: (progress: number) => void;
   registerCancel?: (cancel: () => void) => void;
 }
@@ -210,12 +346,16 @@ export async function extractAudio(
   file: File,
   opts: ExtractAudioOptions,
 ): Promise<ExtractAudioResult> {
-  const container =
-    opts.audioCodec && opts.audioCodec.startsWith("pcm")
-      ? AUDIO_FALLBACK
-      : (AUDIO_CONTAINERS[opts.audioCodec ?? ""] ??
-        // 모르는 코덱은 m4a로 — 복사가 안 되면 Conversion이 aac로 재인코딩한다.
-        AUDIO_CONTAINERS.aac);
+  const formatId =
+    opts.format === "auto" ? autoAudioFormat(opts.audioCodec) : opts.format;
+  const container = AUDIO_CONTAINERS[formatId];
+  // 코덱은 형식을 직접 고른 경우에만 못 박는다 — auto는 복사 가능성을 열어 둔다.
+  const audio: ConversionAudioOptions = {};
+  if (opts.format !== "auto") audio.codec = container.codec;
+  if (opts.mono) audio.numberOfChannels = 1;
+  if (opts.bitrateKbps && !isLosslessAudioCodec(container.codec)) {
+    audio.quality = new Quality({ bitrate: Math.round(opts.bitrateKbps * 1000) });
+  }
   const input = new Input({ source: new BlobSource(file), formats: VIDEO_FORMATS });
   try {
     const output = new Output({
@@ -228,6 +368,7 @@ export async function extractAudio(
       tracks: "primary",
       trim: opts.trim ?? undefined,
       video: { discard: true },
+      audio,
       showWarnings: false,
     });
     if (!conversion.isValid) throw new Error(t.errors.encodeFail);

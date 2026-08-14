@@ -26,7 +26,12 @@ export interface VideoMeta {
   videoCodec: string | null;
   audioCodec: string | null;
   hasAudio: boolean;
+  /** 평균 프레임레이트 — 프레임 단위 이동의 보폭. 잴 수 없으면 null. */
+  fps: number | null;
 }
+
+/** fps 추정에 쓸 패킷 수 — 앞부분만 훑어도 평균 프레임레이트는 충분히 정확하다. */
+const FPS_SAMPLE_PACKETS = 120;
 
 export async function probeVideo(file: File): Promise<VideoMeta> {
   const input = new Input({ source: new BlobSource(file), formats: VIDEO_FORMATS });
@@ -35,6 +40,13 @@ export async function probeVideo(file: File): Promise<VideoMeta> {
     if (!video) throw new Error(t.errors.noVideoTrack(file.name));
     const audio = await input.getPrimaryAudioTrack();
     const durationS = await input.computeDuration();
+    let fps: number | null = null;
+    try {
+      const stats = await video.computePacketStats(FPS_SAMPLE_PACKETS);
+      if (stats.averagePacketRate > 0) fps = stats.averagePacketRate;
+    } catch {
+      // fps는 보폭 계산용 부가 정보 — 못 재도 편집은 계속한다.
+    }
     return {
       width: video.displayWidth,
       height: video.displayHeight,
@@ -42,6 +54,7 @@ export async function probeVideo(file: File): Promise<VideoMeta> {
       videoCodec: video.codec,
       audioCodec: audio?.codec ?? null,
       hasAudio: audio !== null,
+      fps,
     };
   } catch (err) {
     throw err instanceof Error ? err : new Error(t.errors.decodeFail(file.name));

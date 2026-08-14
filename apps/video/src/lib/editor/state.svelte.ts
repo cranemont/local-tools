@@ -6,7 +6,13 @@ import {
   probeVideo,
   type VideoMeta,
 } from "../video/probe";
-import type { ContainerId, CutMode, PresetId } from "../video/transcode";
+import type {
+  AudioFormatId,
+  ContainerId,
+  CutMode,
+  PresetId,
+  Rotation,
+} from "../video/transcode";
 
 /** 트림 구간의 최소 길이(초). */
 export const MIN_RANGE_S = 0.1;
@@ -18,11 +24,21 @@ export const RESOLUTION_CHIPS = [1080, 720, 480];
 /** 타깃 용량 입력 한계(MB). */
 export const MIN_TARGET_MB = 1;
 export const MAX_TARGET_MB = 4000;
+/** 비트레이트 입력 한계(kbps) — 영상·소리 공용. */
+export const MIN_BITRATE_KBPS = 32;
+export const MAX_BITRATE_KBPS = 200_000;
+/** 프레임레이트 입력 한계. */
+export const MIN_FPS = 1;
+export const MAX_FPS = 240;
+/** fps를 못 잰 파일에서 쓰는 보폭 기준. */
+const FALLBACK_FPS = 30;
 
 export class EditorState {
   file = $state<File | null>(null);
   meta = $state<VideoMeta | null>(null);
   videoUrl = $state("");
+  /** 같은 설정으로 이어서 처리할 대기 파일들(활성 파일 제외). */
+  queue = $state<File[]>([]);
 
   trimStart = $state(0);
   trimEnd = $state(0);
@@ -39,6 +55,18 @@ export class EditorState {
   resHeight = $state<number | null>(null);
   targetEnabled = $state(false);
   targetMB = $state(25);
+  /** 지정 비트레이트(kbps). null이면 프리셋·타깃 용량을 따른다. */
+  bitrateKbps = $state<number | null>(null);
+  /** 출력 프레임레이트. null이면 원본. */
+  fps = $state<number | null>(null);
+  /** 시계 방향 회전. */
+  rotate = $state<Rotation>(0);
+  flipH = $state(false);
+  flipV = $state(false);
+  /** 소리만 저장 설정 — 영상 결과와 무관해 revision을 올리지 않는다. */
+  audioFormat = $state<AudioFormatId>("auto");
+  audioBitrateKbps = $state<number | null>(null);
+  audioMono = $state(false);
   /** 키프레임 시각(초) — 무손실 스냅·타임라인 눈금. 스캔 완료 전엔 빈 배열. */
   keyframes = $state<number[]>([]);
 
@@ -60,6 +88,11 @@ export class EditorState {
   readonly isTrimmed = $derived(
     this.trimStart > FULL_EPS_S || this.trimEnd < this.duration - FULL_EPS_S,
   );
+  /** 프레임 한 장의 길이(초) — 단축키·스텝 버튼의 보폭. */
+  readonly frameStep = $derived(1 / (this.meta?.fps || FALLBACK_FPS));
+  /** 활성 파일 + 대기 파일 — 큐 처리 순서 그대로. */
+  readonly batch = $derived(this.file ? [this.file, ...this.queue] : []);
+  readonly isBatch = $derived(this.queue.length > 0);
 
   touch(): void {
     this.revision++;
@@ -93,6 +126,25 @@ export class EditorState {
     }
   }
 
+  /** 여러 개를 받으면 첫 동영상을 열고 나머지는 큐에 쌓는다. */
+  async openFiles(files: File[]): Promise<void> {
+    if (files.length === 0) return;
+    const videos = files.filter(isVideoFile);
+    // 하나도 없으면 첫 파일로 열어 "동영상이 아니다"를 알린다.
+    const first = videos[0] ?? files[0];
+    await this.openFile(first);
+    if (this.file === first) this.setQueue(videos.slice(1));
+  }
+
+  setQueue(files: File[]): void {
+    this.queue = files.filter(isVideoFile);
+  }
+
+  clearQueue(): void {
+    if (this.queue.length === 0) return;
+    this.queue = [];
+  }
+
   clear(): void {
     this.#reset();
     this.touch();
@@ -103,12 +155,18 @@ export class EditorState {
     this.file = null;
     this.meta = null;
     this.videoUrl = "";
+    this.queue = [];
     this.trimStart = 0;
     this.trimEnd = 0;
     this.currentTime = 0;
     this.rangePlaying = false;
     this.keyframes = [];
-    this.resHeight = null; // 파일마다 원본 크기가 다르니 초기화 (모드·프리셋은 유지)
+    // 파일마다 원본이 다른 값만 초기화 (모드·프리셋·타깃 용량은 유지)
+    this.resHeight = null;
+    this.fps = null;
+    this.rotate = 0;
+    this.flipH = false;
+    this.flipV = false;
     this.error = "";
   }
 
@@ -148,7 +206,12 @@ export class EditorState {
   setCutMode(mode: CutMode): void {
     if (mode === this.cutMode) return;
     this.cutMode = mode;
-    if (mode === "lossless") this.setTrimStart(this.trimStart); // 기존 시작점도 스냅
+    if (mode === "lossless") {
+      this.setTrimStart(this.trimStart); // 기존 시작점도 스냅
+      // 반전은 픽셀을 다시 그려야 해서 복사 경로에 없다 — 켜 둔 채 무시하지 않는다.
+      this.flipH = false;
+      this.flipV = false;
+    }
     this.touch();
   }
 
@@ -179,6 +242,7 @@ export class EditorState {
   setTargetEnabled(on: boolean): void {
     if (on === this.targetEnabled) return;
     this.targetEnabled = on;
+    if (on) this.bitrateKbps = null; // 용량과 비트레이트는 둘 중 하나만
     this.touch();
   }
 
@@ -189,12 +253,86 @@ export class EditorState {
     this.touch();
   }
 
+  setBitrateKbps(v: number | null): void {
+    const next = v === null ? null : clampInt(v, MIN_BITRATE_KBPS, MAX_BITRATE_KBPS);
+    if (next === this.bitrateKbps) return;
+    this.bitrateKbps = next;
+    if (next !== null) this.targetEnabled = false;
+    this.touch();
+  }
+
+  setFps(v: number | null): void {
+    const next = v === null ? null : clampInt(v, MIN_FPS, MAX_FPS);
+    if (next === this.fps) return;
+    this.fps = next;
+    this.touch();
+  }
+
+  setRotate(deg: Rotation): void {
+    if (deg === this.rotate) return;
+    this.rotate = deg;
+    this.touch();
+  }
+
+  /** 지금 각도에서 시계 방향으로 90도. */
+  rotateBy90(): void {
+    this.setRotate(((this.rotate + 90) % 360) as Rotation);
+  }
+
+  setFlip(axis: "h" | "v", on: boolean): void {
+    if (axis === "h") {
+      if (on === this.flipH) return;
+      this.flipH = on;
+    } else {
+      if (on === this.flipV) return;
+      this.flipV = on;
+    }
+    this.touch();
+  }
+
+  setAudioFormat(f: AudioFormatId): void {
+    this.audioFormat = f;
+  }
+
+  setAudioBitrateKbps(v: number | null): void {
+    this.audioBitrateKbps =
+      v === null ? null : clampInt(v, MIN_BITRATE_KBPS, MAX_BITRATE_KBPS);
+  }
+
+  setAudioMono(on: boolean): void {
+    this.audioMono = on;
+  }
+
   /** 플레이어를 해당 시각으로 이동. */
   seek(tS: number): void {
     if (!this.videoEl) return;
     this.videoEl.currentTime = Math.min(Math.max(0, tS), this.duration);
     this.currentTime = this.videoEl.currentTime;
   }
+
+  /** 현재 위치에서 dS초만큼 이동 (단축키·스텝 버튼). */
+  nudge(dS: number): void {
+    this.seek(this.currentTime + dS);
+  }
+
+  /** 구간 재생 토글 — Player 바 버튼과 Space 단축키가 함께 쓴다. */
+  togglePlayRange(): void {
+    const el = this.videoEl;
+    if (!el) return;
+    if (this.rangePlaying || !el.paused) {
+      el.pause();
+      return;
+    }
+    if (el.currentTime < this.trimStart || el.currentTime >= this.trimEnd) {
+      el.currentTime = this.trimStart;
+    }
+    this.rangePlaying = true;
+    void el.play();
+  }
+}
+
+function clampInt(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.round(v)));
 }
 
 export const editor = new EditorState();
