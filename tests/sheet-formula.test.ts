@@ -544,6 +544,79 @@ describe("순환 참조", () => {
     expect(code(cellAt(book, "C1")?.v)).toBe("#CIRC!");
   });
 
+  it("자기 자신을 가리키는 셀은 #CIRC!다 — 이전 값이 남으면 안 된다", () => {
+    const book = emptyWorkbook();
+    put(book.sheets[0], "A1", { v: null, f: "A1" });
+    put(book.sheets[0], "B1", { v: null, f: "B1+1" });
+    recalculate(book);
+    expect(code(cellAt(book, "A1")?.v)).toBe("#CIRC!");
+    expect(code(cellAt(book, "B1")?.v)).toBe("#CIRC!");
+  });
+
+  it("멀쩡하던 셀을 자기참조로 고치면 옛 값이 남지 않고 #CIRC!로 바뀐다", () => {
+    const book = emptyWorkbook();
+    put(book.sheets[0], "A1", { v: 5 });
+    put(book.sheets[0], "B1", { v: null, f: "A1*2" });
+    recalculate(book);
+    expect(cellAt(book, "B1")?.v).toBe(10);
+
+    put(book.sheets[0], "B1", { v: null, f: "B1*2" });
+    recalculate(book);
+    expect(code(cellAt(book, "B1")?.v)).toBe("#CIRC!");
+  });
+
+  it("범위가 자기 칸을 품으면 순환이다 — SUM(D1:D3)이 D1에서 0을 내놓던 자리", () => {
+    const book = emptyWorkbook();
+    put(book.sheets[0], "D1", { v: null, f: "SUM(D1:D3)" });
+    put(book.sheets[0], "D2", { v: 1 });
+    put(book.sheets[0], "D3", { v: 2 });
+    recalculate(book);
+    expect(code(cellAt(book, "D1")?.v)).toBe("#CIRC!");
+  });
+
+  it("자기참조 셀을 참조하는 셀도 값을 지어내지 않는다", () => {
+    const book = emptyWorkbook();
+    put(book.sheets[0], "A1", { v: null, f: "A1+1" });
+    put(book.sheets[0], "B1", { v: null, f: "A1*10" });
+    recalculate(book);
+    expect(code(cellAt(book, "B1")?.v)).toBe("#CIRC!");
+  });
+
+  it("같은 셀을 두 번 가리키는 것은 순환이 아니다 — 간선이 겹쳐도 셈은 돈다", () => {
+    const book = emptyWorkbook();
+    put(book.sheets[0], "A1", { v: null, f: "1+1" });
+    put(book.sheets[0], "B1", { v: null, f: "A1+A1" });
+    put(book.sheets[0], "C1", { v: null, f: "SUM(A1:A3)+A1" });
+    recalculate(book);
+    expect(cellAt(book, "B1")?.v).toBe(4);
+    expect(cellAt(book, "C1")?.v).toBe(4);
+  });
+
+  it("시트 이름을 붙여 자기 자신을 가리켜도 순환이다", () => {
+    const book = emptyWorkbook();
+    put(book.sheets[0], "A1", { v: null, f: "Sheet1!A1" });
+    recalculate(book);
+    expect(code(cellAt(book, "A1")?.v)).toBe("#CIRC!");
+  });
+
+  it("다른 시트의 같은 주소는 자기참조가 아니다 — 주소만 보고 판단하면 안 된다", () => {
+    const book = emptyWorkbook();
+    book.sheets.push(emptySheet("Sheet2"));
+    put(book.sheets[0], "A1", { v: null, f: "Sheet2!A1" });
+    put(book.sheets[1], "A1", { v: 7 });
+    recalculate(book);
+    expect(cellAt(book, "A1")?.v).toBe(7);
+  });
+
+  it("자기 칸을 비껴간 범위는 멀쩡하다 — SUM(D2:D3)은 D1에서 정상이다", () => {
+    const book = emptyWorkbook();
+    put(book.sheets[0], "D1", { v: null, f: "SUM(D2:D3)" });
+    put(book.sheets[0], "D2", { v: 1 });
+    put(book.sheets[0], "D3", { v: 2 });
+    recalculate(book);
+    expect(cellAt(book, "D1")?.v).toBe(3);
+  });
+
   it("고리 밖의 셀은 멀쩡히 계산된다 — 하나가 썩어도 시트가 멈추지 않는다", () => {
     const book = emptyWorkbook();
     put(book.sheets[0], "A1", { v: null, f: "B1" });
@@ -688,6 +761,121 @@ describe("트리 → 수식 문자열(stringify)", () => {
     expect(stringify(parseFormula("Sheet1!A1"))).toBe("Sheet1!A1");
     expect(stringify(parseFormula("'My Sheet'!A1"))).toBe("'My Sheet'!A1");
   });
+
+  it("숫자 상수는 자릿수를 잃지 않는다 — 화면 표시가 아니라 원문이다", () => {
+    // 화면용 형식(General)은 12자리에서 반올림하고 1e11부터 지수로 적는다.
+    // 수식 원문에 그 값을 되쓰면 상수가 조용히 다른 수가 된다.
+    for (const src of [
+      "1.23456789012345",
+      "3.14159265358979",
+      "123456789012.5",
+      "0.1",
+      "2.5e-11",
+      "1234567890123456",
+    ]) {
+      expect(stringify(parseFormula(src))).toBe(String(Number(src)));
+      expect(Number(stringify(parseFormula(src)))).toBe(Number(src));
+    }
+  });
+
+  it("행을 넣어도 상수가 그대로다 — 보정이 값을 건드리면 안 된다", () => {
+    expect(adjustRows("A1*123456789012.5", 0, 1)).toBe("A2*123456789012.5");
+    expect(translateFormula("A1*1.23456789012345", 1, 0)).toBe("A2*1.23456789012345");
+  });
+});
+
+// ── 괄호 ────────────────────────────────────────────────────────────
+
+describe("stringify는 묶여 있던 것을 다시 묶는다", () => {
+  /** 트리를 글로 옮겼다가 다시 읽어도 같은 트리여야 한다. */
+  function reparses(src: string): void {
+    const once = stringify(parseFormula(src));
+    expect(stringify(parseFormula(once))).toBe(once);
+    expect(parseFormula(once)).toEqual(parseFormula(src));
+  }
+
+  it("자식이 부모보다 느슨하면 괄호를 씌운다", () => {
+    expect(stringify(parseFormula("(A1+A2)*2"))).toBe("(A1+A2)*2");
+    expect(stringify(parseFormula("2*(A1+A2)"))).toBe("2*(A1+A2)");
+    expect(stringify(parseFormula('("a"="b")&"c"'))).toBe('("a"="b")&"c"');
+    expect(stringify(parseFormula("(1+2)^2"))).toBe("(1+2)^2");
+  });
+
+  it("오른쪽이 같은 우선순위면 결합 방향 때문에 괄호가 필요하다", () => {
+    expect(stringify(parseFormula("1-(2-3)"))).toBe("1-(2-3)");
+    expect(stringify(parseFormula("10/(2*5)"))).toBe("10/(2*5)");
+    expect(stringify(parseFormula("2^(3^2)"))).toBe("2^(3^2)");
+    expect(stringify(parseFormula("1=(2=3)"))).toBe("1=(2=3)");
+  });
+
+  it("왼쪽이 같은 우선순위면 괄호가 없어도 같은 뜻이다", () => {
+    expect(stringify(parseFormula("(1-2)-3"))).toBe("1-2-3");
+    expect(stringify(parseFormula("(2^3)^2"))).toBe("2^3^2");
+  });
+
+  it("단항 부호와 백분율도 안쪽을 묶는다", () => {
+    expect(stringify(parseFormula("-(1+2)"))).toBe("-(1+2)");
+    expect(stringify(parseFormula("(1+2)%"))).toBe("(1+2)%");
+    expect(stringify(parseFormula("(-A1)%"))).toBe("(-A1)%");
+  });
+
+  it("필요 없는 괄호는 남기지 않는다 — 단항은 이 문법에서 ^보다 세게 붙는다", () => {
+    expect(stringify(parseFormula("(A1*2)+3"))).toBe("A1*2+3");
+    expect(stringify(parseFormula("(-2)^2"))).toBe("-2^2");
+    expect(stringify(parseFormula("(A1%)"))).toBe("A1%");
+  });
+
+  it("어떤 식이든 글로 옮겼다가 다시 읽으면 같은 트리다", () => {
+    for (const src of [
+      "(A1+A2)*2",
+      "2/(A1-A2)",
+      "-(A1+A2)%",
+      "(A1&A2)=\"ab\"",
+      "SUM((A1+A2)*2,3)",
+      "IF((A1+1)>2,(A1-1)*3,-(A1+1))",
+      "{(1+2)*3,4;5,6}",
+      "(A1:A3)",
+      "((1+2))*3",
+      "2^-(1+1)",
+    ]) {
+      reparses(src);
+    }
+  });
+
+  it("값이 바뀌지 않는다 — 이게 무너지면 시트가 조용히 틀려진다", () => {
+    const cells = { A1: 10, A2: 4 } as const;
+    for (const src of [
+      "(A1+A2)*2", // 28
+      "A1/(A2-2)", // 5
+      "A1-(A2-1)", // 7
+      "(A1-A2)/2", // 3
+      "2^(1^2)", // 2
+      "-(A1+A2)", // -14
+      "(A1+A2)%", // 0.14
+    ]) {
+      const again = stringify(parseFormula(src));
+      expect(calc(again, cells)).toBe(calc(src, cells));
+    }
+  });
+});
+
+describe("괄호가 든 수식을 옮겨도 괄호가 남는다", () => {
+  it("복사·채우기 — 이 경로가 괄호를 잃으면 되돌릴 근거도 안 남는다", () => {
+    expect(translateFormula("(A1+A2)*2", 1, 0)).toBe("(A2+A3)*2");
+    expect(translateFormula("A1/(B1-C1)", 0, 1)).toBe("B1/(C1-D1)");
+  });
+
+  it("행·열 삽입과 삭제", () => {
+    expect(adjustRows("(A1+A2)*2", 0, 1)).toBe("(A2+A3)*2");
+    expect(adjustRows("SUM(A1:A3)/(B1+B2)", 0, 1)).toBe("SUM(A2:A4)/(B2+B3)");
+    expect(adjustCols("(A1-B1)*2", 0, 1)).toBe("(B1-C1)*2");
+  });
+
+  it("행을 넣어도 계산 결과가 그대로다 — 손으로 센 값", () => {
+    // (A1+A2)*2 = (10+4)*2 = 28. 위에 행을 하나 넣으면 A2·A3을 가리켜야 28이 유지된다.
+    const moved = adjustRows("(A1+A2)*2", 0, 1);
+    expect(calc(moved, { A2: 10, A3: 4 })).toBe(28);
+  });
 });
 
 // ── 파서의 관례 ──────────────────────────────────────────────────────
@@ -714,5 +902,44 @@ describe("파서가 받아 주는 관례", () => {
     expect(formulaError("1+")).toBeTypeOf("string");
     expect(formulaError("1 2")).toBeTypeOf("string");
     expect(formulaError("(1+2")).toBeTypeOf("string");
+  });
+});
+
+// ── 주소처럼 생긴 함수 이름 ──────────────────────────────────────────
+
+describe("셀 주소 꼴의 함수 이름은 뒤에 (가 오는지로 가른다", () => {
+  it("LOG10은 함수다 — LOG열 10행이 아니다", () => {
+    expect(calc("LOG10(100)")).toBe(2);
+    expect(calc("LOG10(A1)", { A1: 10000 })).toBe(4);
+    // formulajs의 LOG10은 log(x)/LN10이라 1000에서 2.9999999999999996이 나온다.
+    // 엑셀은 3이다 — 자릿수 문제라 여기서는 근사로만 못 박는다.
+    expect(calc("LOG10(1000)")).toBeCloseTo(3, 12);
+    expect(tokenize("LOG10(100)")[0].kind).toBe("name");
+  });
+
+  it("괄호가 안 오면 여전히 셀 주소다 — LOG10은 실재하는 칸이다", () => {
+    expect(tokenize("LOG10")[0].kind).toBe("ref");
+    expect(calc("LOG10+1", { LOG10: 7 })).toBe(8);
+    expect(calc("SUM(LOG10:LOG11)", { LOG10: 1, LOG11: 2 })).toBe(3);
+  });
+
+  it("진짜 참조는 하나도 깨지지 않는다", () => {
+    for (const [src, kind] of [
+      ["A1", "ref"],
+      ["$B$2", "ref"],
+      ["A$1", "ref"],
+      ["XFD1048576", "ref"],
+      ["Sheet1!A1", "ref"],
+      ["'My Sheet'!A1", "ref"],
+    ] as const) {
+      expect(tokenize(src)[0].kind).toBe(kind);
+    }
+    expect(calc("SUM(A1)*(B1+1)", { A1: 2, B1: 3 })).toBe(8);
+    expect(calc("(A1)*(B1)", { A1: 2, B1: 3 })).toBe(6);
+    expect(calc("A1*(B1+1)", { A1: 2, B1: 3 })).toBe(8);
+  });
+
+  it("$가 붙으면 함수 이름일 수 없다 — 주소로 읽고 문법 오류로 끝난다", () => {
+    expect(tokenize("$LOG$10(100)")[0].kind).toBe("ref");
   });
 });

@@ -162,8 +162,11 @@ export function recalculate(book: WorkbookDoc): void {
     else bySheet.set(c.sheet, [i]);
   });
 
+  // 자기 자신으로 가는 간선(=A1을 A1에 쓴 것, SUM(D1:D3)을 D1에 쓴 것)도 버리지 않는다.
+  // 버리면 그 셀은 진입차수가 0이라 위상 정렬을 통과해 버리고, #CIRC! 대신 옛 값이
+  // 남거나(=A1) 자기 자리를 0으로 읽은 합계가 나온다(=SUM(D1:D3) → 0).
+  // 자기 간선을 남기면 진입차수가 절대 0이 되지 않아 ③의 위상 정렬이 그대로 순환으로 잡는다.
   const link = (from: number, to: number): void => {
-    if (from === to) return;
     outgoing[from].push(to);
     indegree[to]++;
   };

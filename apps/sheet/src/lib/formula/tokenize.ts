@@ -58,6 +58,21 @@ function isSpace(ch: string): boolean {
   return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
 }
 
+/**
+ * 셀 주소 꼴인데 실은 함수 이름인 경우를 가른다 — LOG10(100)이 대표다.
+ * (LOG10은 LOG열 10행이기도 해서 주소 규칙에 먼저 걸린다.)
+ *
+ * 판정은 위 주석대로 "뒤에 (가 오는가" 하나다. 단 함수 이름으로 읽으려면 그 글자들이
+ * 이름 규칙에도 그대로 맞아야 한다 — $B$2(처럼 $가 섞이면 이름일 수 없으니 주소로 둔다.
+ */
+function looksLikeCall(rest: string, ref: string): boolean {
+  const name = NAME_BODY.exec(rest);
+  if (!name || name[0] !== ref) return false;
+  let j = ref.length;
+  while (j < rest.length && isSpace(rest[j])) j++;
+  return rest[j] === "(";
+}
+
 export function tokenize(src: string): Token[] {
   const out: Token[] = [];
   let i = 0;
@@ -150,7 +165,7 @@ export function tokenize(src: string): Token[] {
       }
 
       const ref = REF_BODY.exec(rest);
-      if (ref) {
+      if (ref && !looksLikeCall(rest, ref[0])) {
         out.push({ kind: "ref", text: ref[0], pos: i });
         i += ref[0].length;
         continue;
