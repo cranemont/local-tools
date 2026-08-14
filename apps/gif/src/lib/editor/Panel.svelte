@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import Icon from "../Icon.svelte";
   import { t } from "../i18n";
   import { zipSync } from "fflate";
@@ -10,9 +11,10 @@
     MAX_DELAY_MS,
     GIF_COLOR_CHOICES,
     QUALITY_PRESETS,
+    type DelayMode,
     type PresetId,
   } from "./state.svelte";
-  import { encodeGif, type RenderPlan } from "../gif/encode";
+  import { encodeGif, isAbortError, type RenderPlan } from "../gif/encode";
   import { encodeWebp } from "../gif/webp";
   import { encodeMp4 } from "../gif/mp4";
   import { extractPngFrames } from "../gif/extract";
@@ -24,15 +26,63 @@
     high: t.panel.presetHigh,
   };
 
+  const DELAY_MODE_LABELS: Record<DelayMode, string> = {
+    set: t.panel.delayModeSet,
+    add: t.panel.delayModeAdd,
+    scale: t.panel.delayModeScale,
+  };
+  const DELAY_VALUE_LABELS: Record<DelayMode, string> = {
+    set: t.panel.delayValueSet,
+    add: t.panel.delayValueAdd,
+    scale: t.panel.delayValueScale,
+  };
+  const DELAY_MODES: DelayMode[] = ["set", "add", "scale"];
+
   let filename = $state("animation");
+  let delayMode = $state<DelayMode>("set");
   let delayInput = $state(100);
+  let rangeFrom = $state(1);
+  let rangeTo = $state(1);
   let result = $state<{ blob: Blob; revision: number; fmt: string } | null>(null);
   let status = $state("");
+  /** 지금 도는 인코딩·추출을 멈추는 손잡이. */
+  let aborter: AbortController | null = null;
 
   const stale = $derived(result !== null && result.revision !== editor.revision);
   const FORMAT_LABELS = { gif: "GIF", webp: "WebP", mp4: "MP4" } as const;
   const fmtLabel = $derived(FORMAT_LABELS[editor.exportFormat]);
   const ext = $derived(editor.exportFormat);
+
+  const currentFrame = $derived(
+    editor.frames[Math.min(editor.current, Math.max(0, editor.frames.length - 1))],
+  );
+  // 덮어쓰기 값은 지금 보고 있는 프레임의 실제 딜레이를 따라간다(가감·비율은 그대로 둔다).
+  $effect(() => {
+    const ms = currentFrame?.delayMs ?? 100;
+    untrack(() => {
+      if (delayMode === "set") delayInput = ms;
+    });
+  });
+
+  // 손대기 전까지 구간은 전체를 가리키고, 그 뒤로는 프레임 수 안으로만 잡아 둔다.
+  let rangeTouched = false;
+  $effect(() => {
+    const n = Math.max(1, editor.frames.length);
+    untrack(() => {
+      if (!rangeTouched) {
+        rangeFrom = 1;
+        rangeTo = n;
+        return;
+      }
+      rangeFrom = Math.min(Math.max(1, rangeFrom), n);
+      rangeTo = Math.min(Math.max(rangeTo, rangeFrom), n);
+    });
+  });
+
+  function setDelayMode(mode: DelayMode) {
+    delayMode = mode;
+    delayInput = mode === "set" ? (currentFrame?.delayMs ?? 100) : mode === "add" ? 10 : 100;
+  }
 
   function cleanName(fallback: string): string {
     const clean = filename.replace(/[\\/:*?"<>|]/g, "").trim();
@@ -46,7 +96,21 @@
       transform: $state.snapshot(editor.transform),
       baseW: editor.base.w,
       baseH: editor.base.h,
+      signal: aborter?.signal,
     };
+  }
+
+  /** 긴 작업 시작 — 오버레이의 취소 버튼이 여기서 만든 신호를 끊는다. */
+  function beginBusy() {
+    aborter = new AbortController();
+    editor.busy = true;
+    editor.busyCancel = () => aborter?.abort();
+  }
+  function endBusy() {
+    editor.busy = false;
+    editor.busyMsg = "";
+    editor.busyCancel = null;
+    aborter = null;
   }
 
   // ── 인코딩 → 용량 확인 → 저장 ─────────────────────
@@ -55,7 +119,7 @@
     editor.playing = false;
     editor.error = "";
     status = "";
-    editor.busy = true;
+    beginBusy();
     editor.busyMsg = t.panel.encoding(0, editor.frames.length);
     const revision = editor.revision;
     const onProgress = (done: number, total: number) =>
@@ -89,10 +153,10 @@
       }
       result = { blob, revision, fmt: fmtLabel };
     } catch (err) {
-      editor.error = err instanceof Error ? err.message : String(err);
+      if (isAbortError(err)) status = t.panel.canceled;
+      else editor.error = err instanceof Error ? err.message : String(err);
     } finally {
-      editor.busy = false;
-      editor.busyMsg = "";
+      endBusy();
     }
   }
 
@@ -107,7 +171,7 @@
     editor.playing = false;
     editor.error = "";
     status = "";
-    editor.busy = true;
+    beginBusy();
     try {
       const pngs = await extractPngFrames(plan(), (done, total) => {
         editor.busyMsg = t.panel.extracting(done, total);
@@ -133,16 +197,32 @@
         status = t.panel.savedZip(pngs.length);
       }
     } catch (err) {
-      editor.error = err instanceof Error ? err.message : String(err);
+      if (isAbortError(err)) status = t.panel.canceled;
+      else editor.error = err instanceof Error ? err.message : String(err);
     } finally {
-      editor.busy = false;
-      editor.busyMsg = "";
+      endBusy();
     }
   }
 
   // ── 입력 핸들러 ───────────────────────────────────
   function onDelayInput(e: Event) {
     delayInput = Number((e.target as HTMLInputElement).value);
+  }
+  /** 번호 입력은 1..프레임 수로 가둔다. 클램프한 값은 칸에 되써 준다 —
+   *  값이 그대로 남으면 화면에 보이는 번호와 실제로 자르는 구간이 갈린다. */
+  function takeFrameNo(e: Event): number {
+    rangeTouched = true;
+    const el = e.target as HTMLInputElement;
+    const n = Math.max(1, editor.frames.length);
+    const v = Math.min(Math.max(1, Math.round(Number(el.value)) || 1), n);
+    el.value = String(v);
+    return v;
+  }
+  function onRangeFrom(e: Event) {
+    rangeFrom = takeFrameNo(e);
+  }
+  function onRangeTo(e: Event) {
+    rangeTo = takeFrameNo(e);
   }
   function onWidthChange(e: Event) {
     const v = Number((e.target as HTMLInputElement).value);
@@ -183,14 +263,27 @@
         </button>
       {/each}
     </div>
+    <p class="sub">{t.panel.delayLabel}</p>
+    <div class="chips" role="group" aria-label={t.panel.delayLabel}>
+      {#each DELAY_MODES as mode (mode)}
+        <button
+          type="button"
+          class="chip"
+          class:active={delayMode === mode}
+          onclick={() => setDelayMode(mode)}
+        >
+          {DELAY_MODE_LABELS[mode]}
+        </button>
+      {/each}
+    </div>
     <div class="row">
-      <label class="lbl" for="delay-input">{t.panel.delayLabel}</label>
+      <label class="lbl" for="delay-input">{DELAY_VALUE_LABELS[delayMode]}</label>
       <input
         id="delay-input"
         class="num"
         type="number"
-        min={MIN_DELAY_MS}
-        max={MAX_DELAY_MS}
+        min={delayMode === "set" ? MIN_DELAY_MS : delayMode === "add" ? -MAX_DELAY_MS : 1}
+        max={delayMode === "scale" ? 1000 : MAX_DELAY_MS}
         step="10"
         value={delayInput}
         oninput={onDelayInput}
@@ -200,7 +293,7 @@
       <button
         type="button"
         class="btn small"
-        onclick={() => editor.setDelay(delayInput, true)}
+        onclick={() => editor.setDelay(delayInput, true, delayMode)}
         disabled={editor.selectedCount === 0}
       >
         {t.panel.delayApplySelected}
@@ -208,9 +301,58 @@
       <button
         type="button"
         class="btn small"
-        onclick={() => editor.setDelay(delayInput, false)}
+        onclick={() => editor.setDelay(delayInput, false, delayMode)}
       >
         {t.panel.delayApplyAll}
+      </button>
+    </div>
+  </section>
+
+  <!-- 프레임 구간 -->
+  <section class="sec">
+    <h3>{t.panel.range}</h3>
+    <div class="row">
+      <label class="lbl" for="range-from">{t.panel.rangeFrom}</label>
+      <input
+        id="range-from"
+        class="num"
+        type="number"
+        min="1"
+        max={Math.max(1, editor.frames.length)}
+        step="1"
+        value={rangeFrom}
+        onchange={onRangeFrom}
+      />
+    </div>
+    <div class="row">
+      <label class="lbl" for="range-to">{t.panel.rangeTo}</label>
+      <input
+        id="range-to"
+        class="num"
+        type="number"
+        min="1"
+        max={Math.max(1, editor.frames.length)}
+        step="1"
+        value={rangeTo}
+        onchange={onRangeTo}
+      />
+    </div>
+    <div class="row">
+      <button
+        type="button"
+        class="btn small"
+        onclick={() => editor.selectNumbers(rangeFrom, rangeTo)}
+        disabled={editor.frames.length === 0}
+      >
+        <Icon name="check" size={14} /> {t.panel.rangeSelect}
+      </button>
+      <button
+        type="button"
+        class="btn small"
+        onclick={() => editor.keepNumbers(rangeFrom, rangeTo)}
+        disabled={editor.frames.length === 0}
+      >
+        <Icon name="scissors" size={14} /> {t.panel.rangeKeep}
       </button>
     </div>
   </section>
@@ -512,6 +654,11 @@
     font-size: var(--text-sm);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+  }
+  .sub {
+    margin: 0;
+    font-size: var(--text-md);
+    color: var(--text-muted);
   }
 
   .chips {

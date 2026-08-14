@@ -3,6 +3,7 @@
 // 순수 TS로 RIFF 컨테이너(VP8X + ANIM + ANMF)를 조립한다.
 import { t } from "../i18n";
 import { getFrameBitmap } from "./decode";
+import { effectiveDelayMs } from "./timing";
 import { outputSize, renderFrame } from "./transform";
 import type { RenderPlan } from "./encode";
 
@@ -16,11 +17,9 @@ export interface WebpEncodeOptions extends RenderPlan {
   onProgress?: (done: number, total: number) => void;
 }
 
-/** WebP ANMF duration 하한 — 0에 가까우면 뷰어가 무시할 수 있어 안전값으로. */
-const MIN_DURATION_MS = 10;
-
 export async function encodeWebp(opts: WebpEncodeOptions): Promise<Blob> {
-  const { frames, sources, transform, baseW, baseH, speed, loop, quality, onProgress } = opts;
+  const { frames, sources, transform, baseW, baseH, speed, loop, quality, signal, onProgress } =
+    opts;
   const { w, h } = outputSize(baseW, baseH, transform);
 
   const canvas = new OffscreenCanvas(w, h);
@@ -29,6 +28,7 @@ export async function encodeWebp(opts: WebpEncodeOptions): Promise<Blob> {
 
   const encoded: { data: Uint8Array; durationMs: number; hasAlpha: boolean }[] = [];
   for (let i = 0; i < frames.length; i++) {
+    signal?.throwIfAborted();
     const frame = frames[i];
     const source = sources.get(frame.sourceId);
     if (!source) continue;
@@ -38,7 +38,7 @@ export async function encodeWebp(opts: WebpEncodeOptions): Promise<Blob> {
     const still = extractFrameData(new Uint8Array(await blob.arrayBuffer()));
     encoded.push({
       ...still,
-      durationMs: Math.max(MIN_DURATION_MS, Math.round(frame.delayMs / speed)),
+      durationMs: effectiveDelayMs(frame.delayMs, speed, "webp"),
     });
     onProgress?.(i + 1, frames.length);
   }

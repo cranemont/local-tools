@@ -22,7 +22,9 @@
     | "reverse"
     | "scissors"
     | "film"
-    | "image";
+    | "image"
+    | "undo"
+    | "redo";
 
   let { name, size = 18 }: { name: IconName; size?: number } = $props();
 </script>
@@ -107,6 +109,12 @@
     <rect x="3" y="4" width="18" height="16" rx="2" />
     <circle cx="8.5" cy="9.5" r="1.5" />
     <path d="m21 16-5-5L5 20" />
+  {:else if name === "undo"}
+    <path d="M9 14 4 9l5-5" />
+    <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+  {:else if name === "redo"}
+    <path d="m15 14 5-5-5-5" />
+    <path d="M20 9H10a6 6 0 0 0 0 12h3" />
   {/if}
 </svg>
 

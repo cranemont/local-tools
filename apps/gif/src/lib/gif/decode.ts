@@ -222,6 +222,22 @@ export async function getFrameBitmap(
   return bitmap;
 }
 
+/** 소스 하나의 디코더·비트맵 해제 (되돌리기 스택에서 밀려나 더는 참조되지 않는 소스).
+ *  디코더는 원본 바이트를 자기 안에 들고 있으므로 소스만 버려서는 회수되지 않는다. */
+export function releaseSource(sourceId: string): void {
+  const decoder = decoders.get(sourceId);
+  if (decoder) {
+    decoder.close();
+    decoders.delete(sourceId);
+  }
+  const prefix = `${sourceId}:`;
+  for (const [key, bitmap] of bitmaps) {
+    if (!key.startsWith(prefix)) continue;
+    bitmap.close();
+    bitmaps.delete(key);
+  }
+}
+
 /** 모든 디코더·비트맵 캐시 해제 (모두 비우기 시). */
 export function releaseAll(): void {
   for (const decoder of decoders.values()) decoder.close();

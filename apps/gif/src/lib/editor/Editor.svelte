@@ -34,7 +34,80 @@
     dragOver = false;
     editor.addFiles(e.dataTransfer.files);
   }
+
+  // ── 단축키 ────────────────────────────────────────
+  // 입력란 안에서는 브라우저 기본 동작(되돌리기·캐럿 이동)이 이겨야 하므로 비켜 준다.
+  function typingIn(el: EventTarget | null): boolean {
+    const node = el as HTMLElement | null;
+    if (!node) return false;
+    return node.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName);
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (typingIn(e.target) || editor.busy || editor.videoDialog) return;
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+
+    if (mod && key === "z") {
+      e.preventDefault();
+      if (e.shiftKey) editor.redo();
+      else editor.undo();
+      return;
+    }
+    if (mod && key === "y") {
+      e.preventDefault();
+      editor.redo();
+      return;
+    }
+    if (mod && key === "a") {
+      e.preventDefault();
+      editor.selectAll();
+      return;
+    }
+    if (!editor.frames.length) return;
+
+    if (e.key === "Escape") {
+      if (editor.cropMode) {
+        e.preventDefault();
+        editor.cropMode = false;
+      } else if (editor.selectedCount) {
+        e.preventDefault();
+        editor.selectNone();
+      }
+      return;
+    }
+    if (editor.cropMode) return;
+
+    if (e.key === " ") {
+      // 버튼에 포커스가 있으면 그 버튼을 누르는 게 맞다.
+      if ((e.target as HTMLElement | null)?.tagName === "BUTTON") return;
+      e.preventDefault();
+      editor.togglePlay();
+      return;
+    }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      const delta = e.key === "ArrowLeft" ? -1 : 1;
+      e.preventDefault();
+      if (e.altKey) editor.moveCurrent(delta);
+      else if (e.shiftKey) {
+        const from = editor.current;
+        editor.step(delta);
+        editor.selectRange(from, editor.current, true);
+      } else editor.step(delta);
+      return;
+    }
+    if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      if (editor.selectedCount) editor.deleteSelected();
+      else {
+        const id = editor.frames[Math.min(editor.current, editor.frames.length - 1)]?.id;
+        if (id) editor.deleteOne(id);
+      }
+    }
+  }
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 <div
   class="editor"
@@ -60,15 +133,53 @@
       <p class="dz-title">{t.editor.dropHint}</p>
       <p class="dz-sub">{t.editor.dropSub}</p>
     </button>
+    {#if editor.canUndo}
+      <!-- '모두 비우기'를 잘못 눌렀을 때 돌아오는 유일한 통로 — 툴바가 없는 화면이다. -->
+      <div class="toolbar">
+        <button
+          type="button"
+          class="btn"
+          title="{t.editor.undo} ({t.keys.undo})"
+          onclick={() => editor.undo()}
+        >
+          <Icon name="undo" size={15} /> {t.editor.undo}
+        </button>
+      </div>
+    {/if}
   {:else}
     <div class="toolbar">
       <button type="button" class="btn" onclick={pick}>
         <Icon name="plus" size={15} /> {t.editor.addFiles}
       </button>
 
+      <button
+        type="button"
+        class="btn"
+        disabled={!editor.canUndo}
+        title="{t.editor.undo} ({t.keys.undo})"
+        onclick={() => editor.undo()}
+      >
+        <Icon name="undo" size={15} /> {t.editor.undo}
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        disabled={!editor.canRedo}
+        aria-label={t.editor.redo}
+        title="{t.editor.redo} ({t.keys.redo})"
+        onclick={() => editor.redo()}
+      >
+        <Icon name="redo" size={15} />
+      </button>
+
       <span class="sep"></span>
 
-      <button type="button" class="btn ghost" onclick={() => editor.selectAll()}>
+      <button
+        type="button"
+        class="btn ghost"
+        title="{t.frames.selectAll} ({t.keys.selectAll})"
+        onclick={() => editor.selectAll()}
+      >
         {t.frames.selectAll}
       </button>
       <button
@@ -100,10 +211,15 @@
         class="btn ghost danger"
         onclick={() => editor.deleteSelected()}
         disabled={editor.selectedCount === 0}
+        title="{t.frames.deleteSelected} ({t.keys.del})"
       >
         <Icon name="trash" size={15} /> {t.frames.deleteSelected}
       </button>
-      <button type="button" class="btn ghost" onclick={() => editor.reverse()}>
+      <button
+        type="button"
+        class="btn ghost"
+        onclick={() => editor.reverse()}
+      >
         <Icon name="reverse" size={15} /> {t.frames.reverse}
       </button>
 
@@ -148,6 +264,11 @@
     <div class="overlay">
       <div class="spinner" aria-hidden="true"></div>
       <p>{editor.busyMsg}</p>
+      {#if editor.busyCancel}
+        <button type="button" class="btn" onclick={() => editor.busyCancel?.()}>
+          <Icon name="x" size={15} /> {t.editor.cancel}
+        </button>
+      {/if}
     </div>
   {/if}
 

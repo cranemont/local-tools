@@ -1,21 +1,38 @@
 <script lang="ts">
   import Icon from "../Icon.svelte";
   import { t } from "../i18n";
-  import { editor } from "./state.svelte";
+  import { editor, MIN_DELAY_MS, MAX_DELAY_MS } from "./state.svelte";
   import type { Frame } from "../gif/types";
 
   let { frame, index }: { frame: Frame; index: number } = $props();
 
   const isCurrent = $derived(index === editor.current);
 
-  function activate() {
+  /** 그냥 클릭은 이 프레임 보기, Shift·Ctrl은 선택 조작으로 간다. */
+  function activate(e: MouseEvent) {
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      editor.toggleSelect(frame.id, e.shiftKey);
+      return;
+    }
     editor.playing = false;
     editor.current = index;
+  }
+
+  function onDelayChange(e: Event) {
+    const el = e.target as HTMLInputElement;
+    editor.setFrameDelay(frame.id, Number(el.value));
+    // 하한·상한에 걸린 값은 반영되지 않는다 — 칸을 실제 딜레이로 되돌린다.
+    el.value = String(frame.delayMs);
   }
 </script>
 
 <div class="card" class:selected={frame.selected} class:current={isCurrent}>
-  <button type="button" class="thumb" onclick={activate} title={t.frames.activate}>
+  <button
+    type="button"
+    class="thumb"
+    onclick={activate}
+    title={t.frames.activate}
+  >
     <img src={frame.thumb} alt={`#${index + 1}`} draggable="false" />
   </button>
 
@@ -25,7 +42,7 @@
     class:on={frame.selected}
     title={t.frames.select}
     aria-pressed={frame.selected}
-    onclick={() => editor.toggleSelect(frame.id)}
+    onclick={(e) => editor.toggleSelect(frame.id, e.shiftKey)}
   >
     {#if frame.selected}<Icon name="check" size={12} />{/if}
   </button>
@@ -50,7 +67,19 @@
 
   <div class="meta">
     <span class="idx">{index + 1}</span>
-    <span class="delay">{t.frames.delayBadge(frame.delayMs)}</span>
+    <input
+      class="delay"
+      type="number"
+      min={MIN_DELAY_MS}
+      max={MAX_DELAY_MS}
+      step="10"
+      value={frame.delayMs}
+      onchange={onDelayChange}
+      draggable="false"
+      aria-label={t.frames.delayInput(index + 1)}
+      title={t.frames.delayInput(index + 1)}
+    />
+    <span class="unit">{t.frames.delayUnit}</span>
   </div>
 </div>
 
@@ -163,7 +192,7 @@
   .meta {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 2px;
     font-size: var(--text-2xs);
     color: var(--text-muted);
     padding: 0 2px;
@@ -172,7 +201,32 @@
     color: var(--accent-ink);
     font-weight: 700;
   }
+  .idx {
+    flex: 1;
+  }
+  /* 카드 폭이 88px이라 딜레이 입력은 숫자 네 자리만 들어가면 된다. */
   .delay {
+    width: 42px;
+    padding: 1px 3px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: var(--text-2xs);
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .delay:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  /* 스피너를 두면 42px 안에서 숫자가 잘린다 — 키보드 ↑↓는 그대로 동작한다. */
+  .delay::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+  .unit {
     font-variant-numeric: tabular-nums;
   }
 </style>

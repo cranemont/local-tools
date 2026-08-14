@@ -13,7 +13,7 @@ export async function extractPngFrames(
   plan: RenderPlan,
   onProgress?: (done: number, total: number) => void,
 ): Promise<PngFrame[]> {
-  const { frames, sources, transform, baseW, baseH } = plan;
+  const { frames, sources, transform, baseW, baseH, signal } = plan;
   const { w, h } = outputSize(baseW, baseH, transform);
 
   const canvas = new OffscreenCanvas(w, h);
@@ -23,6 +23,7 @@ export async function extractPngFrames(
   const pad = Math.max(2, String(frames.length).length);
   const out: PngFrame[] = [];
   for (let i = 0; i < frames.length; i++) {
+    signal?.throwIfAborted();
     const frame = frames[i];
     const source = sources.get(frame.sourceId);
     if (!source) continue;

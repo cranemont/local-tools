@@ -2,10 +2,23 @@
   import { editor } from "./state.svelte";
   import FrameCard from "./FrameCard.svelte";
 
+  let stripEl: HTMLDivElement;
   let dragFrom = $state<number | null>(null);
   let dragTo = $state<number | null>(null);
 
+  // 키보드로 프레임을 옮겨 다니면 보던 칸이 화면 밖으로 나간다 — 따라가게 한다.
+  $effect(() => {
+    const i = editor.current;
+    const slot = stripEl?.children[i] as HTMLElement | undefined;
+    slot?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
+
   function cardDragStart(e: DragEvent, index: number) {
+    // 딜레이 입력을 만지는 중이면 카드가 끌려가면 안 된다.
+    if ((e.target as HTMLElement | null)?.tagName === "INPUT") {
+      e.preventDefault();
+      return;
+    }
     dragFrom = index;
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = "move";
@@ -28,7 +41,7 @@
   }
 </script>
 
-<div class="strip" role="list">
+<div class="strip" role="list" bind:this={stripEl}>
   {#each editor.frames as frame, i (frame.id)}
     <div
       class="slot"

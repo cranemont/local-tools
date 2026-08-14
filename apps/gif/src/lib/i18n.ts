@@ -6,7 +6,6 @@ export const t = {
   brandName: "local-tools",
   appName: "GIF",
   home: "홈",
-  privacyNote: "파일은 브라우저 밖으로 나가지 않아요",
 
   theme: {
     label: "테마",
@@ -20,6 +19,9 @@ export const t = {
     dropSub: "GIF · PNG · JPG · WebP · MP4 · WebM",
     addFiles: "파일 추가",
     clearAll: "모두 비우기",
+    undo: "되돌리기",
+    redo: "다시 실행",
+    cancel: "취소",
     loading: (name: string, i: number, total: number) =>
       `불러오는 중… (${i}/${total}) ${name}`,
     decodingFrames: (name: string, i: number, total: number) =>
@@ -47,7 +49,8 @@ export const t = {
     keepSelected: "선택만 남기기",
     duplicateSelected: "선택 복제",
     reverse: "순서 뒤집기",
-    delayBadge: (ms: number) => `${ms}ms`,
+    delayInput: (i: number) => `${i}번 프레임 딜레이(ms)`,
+    delayUnit: "ms",
   },
 
   panel: {
@@ -56,6 +59,18 @@ export const t = {
     delayLabel: "프레임 딜레이(ms)",
     delayApplySelected: "선택에 적용",
     delayApplyAll: "전체에 적용",
+    delayModeSet: "덮어쓰기",
+    delayModeAdd: "가감",
+    delayModeScale: "비율",
+    delayValueSet: "값(ms)",
+    delayValueAdd: "증감(ms)",
+    delayValueScale: "비율(%)",
+
+    range: "프레임 구간",
+    rangeFrom: "시작 번호",
+    rangeTo: "끝 번호",
+    rangeSelect: "구간 선택",
+    rangeKeep: "구간만 남기기",
 
     size: "크기",
     outputSize: (w: number, h: number) => `출력 ${w}×${h}px`,
@@ -105,6 +120,17 @@ export const t = {
     zipping: "ZIP으로 묶는 중…",
     savedPng: "PNG 1장 저장됨",
     savedZip: (n: number) => `ZIP 저장됨 · ${n}장`,
+    canceled: "취소했어요",
+  },
+
+  keys: {
+    play: "Space",
+    step: "← →",
+    move: "Alt + ← →",
+    del: "Delete",
+    selectAll: "Ctrl+A",
+    undo: "Ctrl+Z",
+    redo: "Ctrl+Shift+Z",
   },
 
   video: {

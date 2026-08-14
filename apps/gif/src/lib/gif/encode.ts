@@ -1,6 +1,7 @@
 import { GIFEncoder, quantize, applyPalette, type WriteFrameOptions } from "gifenc";
 import { t } from "../i18n";
 import { getFrameBitmap } from "./decode";
+import { effectiveDelayMs } from "./timing";
 import { outputSize, renderFrame } from "./transform";
 import type { Frame, FrameSource, Transform } from "./types";
 
@@ -11,6 +12,13 @@ export interface RenderPlan {
   transform: Transform;
   baseW: number;
   baseH: number;
+  /** 중단 신호 — 네 인코더가 프레임 루프 머리에서 함께 확인한다. */
+  signal?: AbortSignal;
+}
+
+/** 사용자가 취소한 경우인가 (에러 배너 대신 조용히 넘길 것). */
+export function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
 }
 
 export interface EncodeOptions extends RenderPlan {
@@ -26,8 +34,6 @@ export interface EncodeOptions extends RenderPlan {
 }
 
 const ALPHA_THRESHOLD = 128;
-/** 브라우저가 20ms 미만 딜레이를 100ms로 되돌리므로 최솟값 20ms 강제. */
-const MIN_DELAY_MS = 20;
 
 const nextTick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
@@ -52,8 +58,19 @@ function orderedDither(data: Uint8ClampedArray, width: number, amount: number): 
 
 /** 프레임 목록을 GIF로 인코딩한다. 팔레트는 프레임별 최대 maxColors색(투명 시 한 칸 예약). */
 export async function encodeGif(opts: EncodeOptions): Promise<Blob> {
-  const { frames, sources, transform, baseW, baseH, speed, repeat, maxColors, dither, onProgress } =
-    opts;
+  const {
+    frames,
+    sources,
+    transform,
+    baseW,
+    baseH,
+    speed,
+    repeat,
+    maxColors,
+    dither,
+    signal,
+    onProgress,
+  } = opts;
   const { w, h } = outputSize(baseW, baseH, transform);
 
   const canvas = new OffscreenCanvas(w, h);
@@ -62,6 +79,7 @@ export async function encodeGif(opts: EncodeOptions): Promise<Blob> {
 
   const gif = GIFEncoder();
   for (let i = 0; i < frames.length; i++) {
+    signal?.throwIfAborted();
     const frame = frames[i];
     const source = sources.get(frame.sourceId);
     if (!source) continue;
@@ -87,7 +105,7 @@ export async function encodeGif(opts: EncodeOptions): Promise<Blob> {
     const index = applyPalette(mapSource, palette);
     const frameOpts: WriteFrameOptions = {
       palette,
-      delay: Math.max(MIN_DELAY_MS, Math.round(frame.delayMs / speed)),
+      delay: effectiveDelayMs(frame.delayMs, speed, "gif"),
     };
     if (i === 0) frameOpts.repeat = repeat;
     if (hasAlpha) {

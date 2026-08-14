@@ -10,6 +10,7 @@ import {
 } from "mediabunny";
 import { t } from "../i18n";
 import { getFrameBitmap } from "./decode";
+import { effectiveDelayMs } from "./timing";
 import { outputSize, renderFrame } from "./transform";
 import type { RenderPlan } from "./encode";
 
@@ -30,7 +31,7 @@ const QUALITY_MAP = {
 } as const;
 
 export async function encodeMp4(opts: Mp4EncodeOptions): Promise<Blob> {
-  const { frames, sources, transform, baseW, baseH, speed, quality, onProgress } = opts;
+  const { frames, sources, transform, baseW, baseH, speed, quality, signal, onProgress } = opts;
   const { w, h } = outputSize(baseW, baseH, transform);
   // H.264는 짝수 치수만 안전하다 — 렌더 캔버스를 짝수 캔버스로 한 번 더 그린다.
   const evenW = Math.max(2, w - (w % 2));
@@ -50,6 +51,7 @@ export async function encodeMp4(opts: Mp4EncodeOptions): Promise<Blob> {
   try {
     let timestampS = 0;
     for (let i = 0; i < frames.length; i++) {
+      signal?.throwIfAborted();
       const frame = frames[i];
       const frameSource = sources.get(frame.sourceId);
       if (!frameSource) continue;
@@ -66,7 +68,7 @@ export async function encodeMp4(opts: Mp4EncodeOptions): Promise<Blob> {
       exportCtx.fillRect(0, 0, evenW, evenH);
       exportCtx.drawImage(renderCanvas, 0, 0, evenW, evenH);
 
-      const durationS = Math.max(0.01, frame.delayMs / speed / 1000);
+      const durationS = effectiveDelayMs(frame.delayMs, speed, "mp4") / 1000;
       await source.add(timestampS, durationS);
       timestampS += durationS;
       onProgress?.(i + 1, frames.length);

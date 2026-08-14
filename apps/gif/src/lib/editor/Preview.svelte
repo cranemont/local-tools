@@ -4,6 +4,7 @@
   import { t } from "../i18n";
   import { editor } from "./state.svelte";
   import { getFrameBitmap } from "../gif/decode";
+  import { effectiveDelayMs } from "../gif/timing";
   import { outputSize, renderFrame } from "../gif/transform";
   import type { CropRect, Transform } from "../gif/types";
 
@@ -71,23 +72,13 @@
       await render();
       const frame = editor.frames[Math.min(editor.current, editor.frames.length - 1)];
       if (!frame) break;
-      const wait = frame.delayMs / editor.speed - (performance.now() - started);
+      // 내보낸 파일과 같은 속도로 돈다 — 하한·눈금까지 인코더와 같은 함수로 계산한다.
+      const delay = effectiveDelayMs(frame.delayMs, editor.speed, editor.exportFormat);
+      const wait = delay - (performance.now() - started);
       if (wait > 0) await sleep(wait);
       if (!isAlive() || !editor.playing || !editor.frames.length) break;
       editor.current = (editor.current + 1) % editor.frames.length;
     }
-  }
-
-  // ── 트랜스포트 ────────────────────────────────────
-  function togglePlay() {
-    if (!editor.frames.length) return;
-    editor.playing = !editor.playing;
-  }
-  function step(delta: number) {
-    const n = editor.frames.length;
-    if (!n) return;
-    editor.playing = false;
-    editor.current = (editor.current + delta + n) % n;
   }
 
   // ── 크롭 드래그 ───────────────────────────────────
@@ -99,6 +90,13 @@
   }
   let cropStart: { x: number; y: number } | null = null;
   let cropView = $state<ViewRect | null>(null);
+
+  // 크롭 모드를 떠나면 그리던 점선을 버린다 — Esc는 드래그 도중에도 들어온다.
+  $effect(() => {
+    if (editor.cropMode) return;
+    cropStart = null;
+    cropView = null;
+  });
 
   function clampToCanvas(clientX: number, clientY: number) {
     const r = canvasEl.getBoundingClientRect();
@@ -187,8 +185,9 @@
     <button
       type="button"
       class="tbtn"
-      onclick={() => step(-1)}
-      title={t.player.prevFrame}
+      onclick={() => editor.step(-1)}
+      aria-label={t.player.prevFrame}
+      title="{t.player.prevFrame} ({t.keys.step})"
       disabled={editor.cropMode}
     >
       <Icon name="stepBack" size={16} />
@@ -196,8 +195,9 @@
     <button
       type="button"
       class="tbtn primary"
-      onclick={togglePlay}
-      title={editor.playing ? t.player.pause : t.player.play}
+      onclick={() => editor.togglePlay()}
+      aria-label={editor.playing ? t.player.pause : t.player.play}
+      title="{editor.playing ? t.player.pause : t.player.play} ({t.keys.play})"
       disabled={editor.cropMode}
     >
       <Icon name={editor.playing ? "pause" : "play"} size={16} />
@@ -205,8 +205,9 @@
     <button
       type="button"
       class="tbtn"
-      onclick={() => step(1)}
-      title={t.player.nextFrame}
+      onclick={() => editor.step(1)}
+      aria-label={t.player.nextFrame}
+      title="{t.player.nextFrame} ({t.keys.step})"
       disabled={editor.cropMode}
     >
       <Icon name="stepForward" size={16} />
