@@ -1,8 +1,10 @@
 /** 엑셀 날짜 일련번호 ↔ JS Date.
  *
  * 엑셀은 1899-12-30을 0일로 세고, 소수부가 하루 안의 시각이다. 1900년 윤년 버그까지
- * 흉내 내야 파일이 왕복해도 하루가 안 밀린다(엑셀은 존재하지 않는 1900-02-29를 60번으로
- * 친다 — 그래서 60 미만 구간만 하루를 도로 더해 준다).
+ * 흉내 내야 파일이 왕복해도 하루가 안 밀린다: 1900은 윤년이 아닌데 엑셀은 존재하지 않는
+ * 1900-02-29를 60번으로 센다. 그래서 **1900-03-01 이전은 실제 경과일보다 하나 적게** 나간다
+ * (1900-01-01=1, 1900-02-28=59, 60=가짜 1900-02-29, 1900-03-01=61부터는 경과일과 같다).
+ * 부호를 뒤집지 말 것 — 예전엔 반대로 더해서 1900-02-27과 28이 둘 다 60이었다.
  */
 
 const MS_PER_DAY = 86_400_000;
@@ -21,12 +23,14 @@ export function toSerial(date: Date): number {
     date.getMilliseconds(),
   );
   const days = (local - EPOCH) / MS_PER_DAY;
-  return days < 60 ? days + 1 : days;
+  // 1900-03-01(경과일 61) 전이면 가짜 하루를 빼고 센다.
+  return days < 61 ? days - 1 : days;
 }
 
-/** 엑셀 일련번호 → JS Date(로컬). */
+/** 엑셀 일련번호 → JS Date(로컬).
+ *  60번(가짜 1900-02-29)은 실재하지 않으므로 1900-02-28에 겹쳐 그린다. */
 export function fromSerial(serial: number): Date {
-  const days = serial < 61 ? serial - 1 : serial;
+  const days = serial < 60 ? serial + 1 : serial;
   const ms = EPOCH + Math.round(days * MS_PER_DAY);
   const utc = new Date(ms);
   return new Date(
@@ -43,6 +47,8 @@ export function fromSerial(serial: number): Date {
 /** 표시 형식이 날짜/시간을 그리는가 — 색 코드와 따옴표 안 글자는 빼고 본다. */
 export function isDateFormat(fmt: string | undefined): boolean {
   if (!fmt) return false;
+  // [h]·[mm]·[ss]는 경과 시간이다 — 대괄호를 통째로 버리면 시간 형식인 걸 놓친다.
+  if (/\[(h+|m+|s+)\]/i.test(fmt)) return true;
   const bare = fmt
     .replace(/\[[^\]]*\]/g, "")
     .replace(/"[^"]*"/g, "")

@@ -242,6 +242,56 @@ describe("serial — 엑셀 날짜 일련번호", () => {
   });
 });
 
+describe("serial — 1900년 윤년 버그를 흉내 내는 방향", () => {
+  // 1900은 윤년이 아니지만 엑셀은 존재하지 않는 1900-02-29를 60번으로 센다.
+  // 그래서 1900-03-01 이전 날짜는 실제 경과일보다 하나 "적은" 번호를 받는다.
+  it("엑셀 1번은 1900-01-01이다", () => {
+    expect(toSerial(new Date(1900, 0, 1))).toBe(1);
+    const d = fromSerial(1);
+    expect([d.getFullYear(), d.getMonth() + 1, d.getDate()]).toEqual([1900, 1, 1]);
+  });
+
+  it("1900-02-28은 59이고 61이 1900-03-01이다 — 60은 가짜 1900-02-29의 자리다", () => {
+    expect(toSerial(new Date(1900, 1, 28))).toBe(59);
+    expect(toSerial(new Date(1900, 2, 1))).toBe(61);
+    const d = fromSerial(59);
+    expect([d.getFullYear(), d.getMonth() + 1, d.getDate()]).toEqual([1900, 2, 28]);
+  });
+
+  it("2월의 날들이 서로 다른 번호를 갖는다 — 27일과 28일이 같은 번호면 안 된다", () => {
+    expect(toSerial(new Date(1900, 1, 27))).toBe(58);
+    expect(toSerial(new Date(1900, 1, 27))).not.toBe(toSerial(new Date(1900, 1, 28)));
+    const seen = new Set<number>();
+    for (let day = 1; day <= 28; day++) seen.add(toSerial(new Date(1900, 1, day)));
+    expect(seen.size).toBe(28);
+  });
+
+  it("1900-01-01부터 1900-02-28까지 날짜→번호→날짜 왕복이 자기 자신이다", () => {
+    const broken: string[] = [];
+    for (const [m, d] of [
+      [0, 1],
+      [0, 31],
+      [1, 1],
+      [1, 27],
+      [1, 28],
+    ]) {
+      const src = new Date(1900, m, d);
+      if (fromSerial(toSerial(src)).getTime() !== src.getTime()) broken.push(`1900-${m + 1}-${d}`);
+    }
+    expect(broken).toEqual([]);
+  });
+
+  it("시각이 붙어도 같은 규칙이다 — 1900-01-01 정오는 1.5다", () => {
+    expect(toSerial(new Date(1900, 0, 1, 12, 0, 0))).toBe(1.5);
+  });
+
+  it("1900년대 초 날짜도 형식으로 그리면 엑셀과 같은 날이 나온다", () => {
+    expect(formatValue(1, "yyyy-mm-dd")).toBe("1900-01-01");
+    expect(formatValue(59, "yyyy-mm-dd")).toBe("1900-02-28");
+    expect(formatValue(61, "yyyy-mm-dd")).toBe("1900-03-01");
+  });
+});
+
 describe("serial — 사람이 친 날짜 읽기", () => {
   it("yyyy-mm-dd는 일련번호와 표시 형식을 함께 정해 준다", () => {
     expect(parseDateInput("2024-01-01")).toEqual({ serial: D2024_01_01, fmt: "yyyy-mm-dd" });
@@ -316,6 +366,13 @@ describe("serial — 이 형식이 날짜를 그리는가", () => {
     expect(isDateFormat("[Red]#,##0")).toBe(false);
     expect(isDateFormat("[$₩-412]#,##0")).toBe(false);
     expect(isDateFormat("[빨강]-₩#,##0")).toBe(false);
+  });
+
+  it("경과 시간 [h]·[mm]·[ss]는 대괄호 안에 있어도 시간 형식이다", () => {
+    expect(isDateFormat("[h]:mm")).toBe(true);
+    expect(isDateFormat("[mm]:ss")).toBe(true);
+    expect(isDateFormat("[ss]")).toBe(true);
+    expect(isDateFormat("[빨강]#,##0")).toBe(false); // 색 코드와 헷갈리지 않는다
   });
 
   it("따옴표 안 글자와 역슬래시로 이스케이프한 글자도 세지 않는다", () => {
@@ -492,10 +549,129 @@ describe("numfmt — General(기본 표시)", () => {
     expect(formatValue(0)).toBe("0");
   });
 
+  it("지수부의 0을 소수 자리처럼 잘라 먹지 않는다 — 1e-10이 0.1로 보이던 사고", () => {
+    expect(formatValue(1e-10)).toBe("1E-10");
+    expect(formatValue(1.5e-10)).toBe("1.5E-10");
+    expect(formatValue(-1.2e-10)).toBe("-1.2E-10");
+    // 크기가 아홉 자리 어긋나지 않는지 값으로도 확인한다.
+    expect(Number(formatValue(1e-10))).toBe(1e-10);
+    expect(Number(formatValue(1.5e-10))).toBe(1.5e-10);
+  });
+
   it("유한하지 않은 수는 #NUM!이다", () => {
     expect(formatValue(Infinity)).toBe("#NUM!");
     expect(formatValue(-Infinity)).toBe("#NUM!");
     expect(formatValue(NaN)).toBe("#NUM!");
+  });
+});
+
+describe("numfmt — 지수 표시형식", () => {
+  it("E 뒤의 자릿수는 지수 자리이지 소수 자리가 아니다", () => {
+    // "0.00E+00" = 가수 소수 두 자리 + 지수 두 자리. 엑셀은 1.23E+04로 그린다.
+    expect(formatValue(12345, "0.00E+00")).toBe("1.23E+04");
+    expect(formatValue(0.00012345, "0.00E+00")).toBe("1.23E-04");
+    expect(formatValue(0, "0.00E+00")).toBe("0.00E+00");
+  });
+
+  it("지수는 형식이 적은 자릿수만큼 채우되 넘치면 그대로 적는다", () => {
+    expect(formatValue(12345, "0E+0")).toBe("1E+4");
+    expect(formatValue(1.5e120, "0.0E+00")).toBe("1.5E+120");
+  });
+
+  it("E-00은 양의 지수에 +를 붙이지 않는다", () => {
+    expect(formatValue(12345, "0.00E-00")).toBe("1.23E04");
+    expect(formatValue(0.00012345, "0.00E-00")).toBe("1.23E-04");
+  });
+
+  it("음수는 가수 앞에 부호를 세운다", () => {
+    expect(formatValue(-12345, "0.00E+00")).toBe("-1.23E+04");
+  });
+
+  it("툴바의 '지수' 프리셋이 바로 이 형식이다", () => {
+    const sci = FORMAT_PRESETS.find((p) => p.id === "sci")!;
+    expect(sci.code).toBe("0.00E+00");
+    expect(formatValue(12345, sci.code)).toBe("1.23E+04");
+  });
+});
+
+describe("numfmt — 분(m)과 월(m)을 가르는 자리", () => {
+  const T13_45_05 = D2024_01_01 + (13 * 3600 + 45 * 60 + 5) / 86400;
+
+  it("s에 붙은 m은 분이다 — mm:ss는 45분 5초다", () => {
+    expect(formatValue(T13_45_05, "mm:ss")).toBe("45:05");
+    expect(formatValue(T13_45_05, "m:s")).toBe("45:5");
+  });
+
+  it("앞에 시도 없고 뒤에 초도 없으면 여전히 월이다", () => {
+    expect(formatValue(D2024_01_01, "mm")).toBe("01");
+    expect(formatValue(D2024_01_01, "mm-dd")).toBe("01-01");
+    expect(formatValue(D2024_01_01, "yyyy-mm-dd")).toBe("2024-01-01");
+  });
+
+  it("대괄호 [h]는 색 코드가 아니라 경과 시간이다 — 하루 반은 36시간이다", () => {
+    expect(formatValue(1.5, "[h]:mm")).toBe("36:00");
+    expect(formatValue(0.5, "[h]:mm")).toBe("12:00");
+    expect(formatValue((26 * 3600 + 5 * 60) / 86400, "[h]:mm")).toBe("26:05");
+  });
+
+  it("[mm]은 총 분, [ss]는 총 초이고 자릿수는 형식이 정한다", () => {
+    expect(formatValue((90 * 60 + 30) / 86400, "[mm]:ss")).toBe("90:30");
+    expect(formatValue(125 / 86400, "[ss]")).toBe("125");
+    expect(formatValue(5 / 86400, "[hh]:mm:ss")).toBe("00:00:05");
+  });
+});
+
+describe("numfmt — 글자만 있는 구역", () => {
+  const ACC = '#,##0;(#,##0);"-"';
+
+  it("셋째 구역이 글자뿐이면 0은 그 글자로 그린다(회계 형식)", () => {
+    expect(formatValue(0, ACC)).toBe("-");
+    expect(formatValue(1234, ACC)).toBe("1,234");
+    expect(formatValue(-1234, ACC)).toBe("(1,234)");
+  });
+
+  it("따옴표 없이 적은 글자도 그대로 나온다", () => {
+    expect(formatValue(0, "#,##0;-#,##0;–")).toBe("–");
+  });
+
+  it("엑셀이 실제로 쓰는 회계 형식도 그대로 읽는다 — 여백(_)·채움(*) 코드가 글자로 새지 않는다", () => {
+    // xlsx의 '회계' 서식은 언제나 이 꼴로 들어온다. _x는 x 폭만큼의 여백,
+    // *x는 칸을 채우는 반복이라 둘 다 화면 글자가 아니다.
+    const ACC = '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-';
+    expect(formatValue(1234.5, ACC)).toBe("1,234.50");
+    expect(formatValue(-1234.5, ACC)).toBe("-1,234.50");
+    expect(formatValue(0, ACC)).toBe("-");
+  });
+
+  it("General이라 적힌 구역은 글자가 아니라 기본 표시다", () => {
+    expect(formatValue(0, "#,##0;-#,##0;General")).toBe("0");
+  });
+
+  it("빈 구역은 여전히 값을 감추지 않는다", () => {
+    expect(formatValue(0, "#,##0;-#,##0;")).toBe("0");
+  });
+});
+
+describe("numfmt — 텍스트 구역(넷째 구역)", () => {
+  it("회계 서식이 걸린 칸에 글자를 넣어도 여백(_)·채움(*) 코드가 새지 않는다", () => {
+    // 넷째 구역 `_-@_-`는 xlsx '회계' 서식에 언제나 딸려 온다. 숫자 구역과 같은 규약이라
+    // _x·*x는 화면 글자가 아니다 — 예전엔 "_-미정_-"이 그대로 보였다.
+    const ACC = '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-';
+    expect(formatValue("미정", ACC)).toBe("미정");
+  });
+
+  it("따옴표 안 글자는 그대로, 역슬래시로 이스케이프한 글자는 그 글자만 남는다", () => {
+    expect(formatValue("미정", '#,##0;(#,##0);"-";"["@"]"')).toBe("[미정]");
+    expect(formatValue("미정", "#,##0;;;\\<@\\>")).toBe("<미정>");
+  });
+
+  it("색 코드는 글자가 아니다", () => {
+    expect(formatValue("미정", '#,##0;(#,##0);"-";[빨강]@')).toBe("미정");
+  });
+
+  it("넷째 구역이 없으면 글자는 원문 그대로다", () => {
+    expect(formatValue("미정", "#,##0")).toBe("미정");
+    expect(formatValue("미정", '#,##0;(#,##0);"-"')).toBe("미정");
   });
 });
 
