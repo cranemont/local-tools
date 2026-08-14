@@ -27,8 +27,12 @@ export const t = {
   player: {
     playRange: "구간 재생",
     stop: "정지",
-    stepBack: "이전 프레임",
-    stepForward: "다음 프레임",
+    // 단축키는 안내줄이 아니라 그 버튼의 title·aria-label로만 알린다.
+    // 버튼 글자가 재생/정지로 바뀌므로 title도 같이 바뀐다(안 그러면 정지 버튼이 "구간 재생"이라 말한다).
+    playRangeKey: "구간 재생 · Space",
+    stopKey: "정지 · Space",
+    stepBackKey: "이전 프레임 · ← (Shift+← 1초)",
+    stepForwardKey: "다음 프레임 · → (Shift+→ 1초)",
     saveFrame: "프레임 저장",
     savingFrame: "프레임 뽑는 중…",
     noFrame: "이 위치의 프레임을 뽑을 수 없어요",
@@ -40,6 +44,8 @@ export const t = {
     trim: "구간",
     trimStart: "시작",
     trimEnd: "끝",
+    trimStartKey: "시작 · I",
+    trimEndKey: "끝 · O",
     trimLength: (s: string) => `선택 ${s}`,
     trimReset: "전체 선택",
     cutMode: "컷 방식",
@@ -89,6 +95,19 @@ export const t = {
     encoding: (pct: number) => `인코딩 중… ${pct}%`,
     cancel: "취소",
     canceled: "취소됨",
+
+    // ── 배지 — 조건이 참일 때만 컨트롤 옆에 붙는 경고 ──
+    // 짧은 명사형이 화면에 보이고, 사정은 title(*Why)로만 보인다.
+    badgeRecode: "재인코딩됨",
+    badgeRecodeWhy: "원본 코덱을 이 형식에 담을 수 없어요",
+    badgeRotateRecode: "회전은 재인코딩",
+    badgeRotateRecodeWhy: "WebM은 회전 메타데이터를 쓰지 않아 픽셀을 다시 인코딩해요",
+    badgeExactOnly: "정확 컷에서만",
+    badgeExactOnlyWhy: "반전은 픽셀을 다시 그려야 해서 무손실 컷에는 없어요",
+    badgeApprox: "근사",
+    badgeApproxWhy: "1패스 역산이라 영상에 따라 오차가 있어요",
+    badgeQueueFull: "큐는 구간 무시",
+    badgeQueueFullWhy: "큐를 처리할 땐 구간 없이 파일 전체를 만들어요",
   },
 
   errors: {

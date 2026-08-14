@@ -36,9 +36,15 @@ export type ContainerId = "mp4" | "webm";
 /** 시계 방향 회전 각도. */
 export type { Rotation };
 
-/** 무손실(복사) 상태로 각 컨테이너에 담을 수 있는 비디오 코덱. */
+/**
+ * 무손실(복사) 상태로 각 컨테이너에 담을 수 있는 비디오 코덱.
+ * mediabunny의 출력 형식 표를 그대로 옮긴 것이다 — 복사냐 재인코딩이냐를 실제로 가르는 것이
+ * `!format.getSupportedVideoCodecs().includes(sourceCodec)`이라서, 여기가 더 좁으면
+ * 화면이 굽지도 않는데 "재인코딩됨"이라고 말하게 된다.
+ * MP4(ISOBMFF)는 여섯 코덱을 전부 담고(vp8은 vp08 박스), WebM은 셋만 담는다.
+ */
 const CONTAINER_VIDEO_CODECS: Record<ContainerId, readonly string[]> = {
-  mp4: ["avc", "hevc", "vp9", "av1"],
+  mp4: ["avc", "hevc", "vp9", "av1", "vp8", "prores"],
   webm: ["vp8", "vp9", "av1"],
 };
 
@@ -48,6 +54,18 @@ export function losslessCompatible(
   container: ContainerId,
 ): boolean {
   return videoCodec !== null && CONTAINER_VIDEO_CODECS[container].includes(videoCodec);
+}
+
+/**
+ * 회전을 컨테이너 메타데이터로 적을 수 있는지 — 적을 수 있으면 복사가 유지된다.
+ * Matroska에도 ProjectionPoseRoll이 있지만 무시하는 플레이어가 많아 mediabunny가
+ * 쓰지 않는다(`supportsVideoRotationMetadata === false`). 그래서 WebM은 굽는 쪽뿐이다.
+ */
+const ROTATION_METADATA: Record<ContainerId, boolean> = { mp4: true, webm: false };
+
+/** 무손실 컷인데 회전 때문에 패킷 복사가 깨지는지(= 조용히 재인코딩되는지). */
+export function rotationBreaksCopy(rotate: Rotation, container: ContainerId): boolean {
+  return rotate !== 0 && !ROTATION_METADATA[container];
 }
 
 const PRESET_QUALITY: Record<PresetId, Quality> = {

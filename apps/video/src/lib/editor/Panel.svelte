@@ -10,7 +10,9 @@
     encodableAudioCodecs,
     extractAudio,
     isLosslessAudioCodec,
+    losslessCompatible,
     rotatedSize,
+    rotationBreaksCopy,
     transcodeMp4,
     type AudioFormatId,
     type PresetId,
@@ -72,6 +74,20 @@
     const w = Math.max(2, Math.round(((s.w / s.h) * h) / 2) * 2);
     return { w, h };
   });
+
+  // ── "무손실"이라 적어 놓고 실제로는 굽는 경우 ─────
+  // 둘 다 조건이 참일 때만 배지로 뜬다. 화면이 조용히 거짓말하는 것을 막는 게 전부다.
+  /** 원본 코덱을 고른 컨테이너에 못 담아 재인코딩되는가. */
+  const losslessRecode = $derived(
+    editor.cutMode === "lossless" &&
+      editor.meta !== null &&
+      !losslessCompatible(editor.meta.videoCodec, editor.exportFormat),
+  );
+  /** 회전이 패킷 복사를 깨는가 (WebM은 회전 메타데이터를 안 쓴다). */
+  const rotateBreaksCopy = $derived(
+    editor.cutMode === "lossless" &&
+      rotationBreaksCopy(editor.rotate, editor.exportFormat),
+  );
 
   /** 원본보다 작은 해상도 칩만 노출. */
   const resChips = $derived(
@@ -332,7 +348,14 @@
 
   <!-- 구간 -->
   <section class="sec">
-    <h3>{t.panel.trim}</h3>
+    <div class="head">
+      <h3>{t.panel.trim}</h3>
+      {#if editor.isBatch}
+        <span class="badge warn" title={t.panel.badgeQueueFullWhy}>
+          {t.panel.badgeQueueFull}
+        </span>
+      {/if}
+    </div>
     <div class="row">
       <label class="lbl" for="trim-start">{t.panel.trimStart}</label>
       <input
@@ -342,6 +365,7 @@
         min="0"
         max={editor.duration}
         step="0.1"
+        title={t.panel.trimStartKey}
         value={Number(editor.trimStart.toFixed(1))}
         onchange={onStartChange}
       />
@@ -355,6 +379,7 @@
         min="0"
         max={editor.duration}
         step="0.1"
+        title={t.panel.trimEndKey}
         value={Number(editor.trimEnd.toFixed(1))}
         onchange={onEndChange}
       />
@@ -394,7 +419,14 @@
 
   <!-- 회전·반전 -->
   <section class="sec">
-    <h3>{t.panel.transform}</h3>
+    <div class="head">
+      <h3>{t.panel.transform}</h3>
+      {#if rotateBreaksCopy}
+        <span class="badge warn" title={t.panel.badgeRotateRecodeWhy}>
+          {t.panel.badgeRotateRecode}
+        </span>
+      {/if}
+    </div>
     <div class="chips">
       <button
         type="button"
@@ -429,6 +461,11 @@
         <Icon name="flipV" size={14} />
         {t.panel.flipV}
       </button>
+      {#if editor.cutMode !== "exact"}
+        <span class="badge" title={t.panel.badgeExactOnlyWhy}>
+          {t.panel.badgeExactOnly}
+        </span>
+      {/if}
     </div>
   </section>
 
@@ -472,6 +509,9 @@
           onchange={onTargetMBChange}
           aria-label={t.panel.targetSize}
         />
+        {#if editor.targetEnabled}
+          <span class="badge" title={t.panel.badgeApproxWhy}>{t.panel.badgeApprox}</span>
+        {/if}
       </label>
       <div class="row">
         <label class="lbl" for="v-bitrate">{t.panel.bitrate}</label>
@@ -535,23 +575,30 @@
   <!-- 내보내기 -->
   <section class="sec">
     <h3>{t.panel.export}</h3>
-    <div class="chips" role="group" aria-label={t.panel.format}>
-      <button
-        type="button"
-        class="chip"
-        class:active={editor.exportFormat === "mp4"}
-        onclick={() => editor.setExportFormat("mp4")}
-      >
-        MP4
-      </button>
-      <button
-        type="button"
-        class="chip"
-        class:active={editor.exportFormat === "webm"}
-        onclick={() => editor.setExportFormat("webm")}
-      >
-        WebM
-      </button>
+    <div class="chiprow">
+      <div class="chips" role="group" aria-label={t.panel.format}>
+        <button
+          type="button"
+          class="chip"
+          class:active={editor.exportFormat === "mp4"}
+          onclick={() => editor.setExportFormat("mp4")}
+        >
+          MP4
+        </button>
+        <button
+          type="button"
+          class="chip"
+          class:active={editor.exportFormat === "webm"}
+          onclick={() => editor.setExportFormat("webm")}
+        >
+          WebM
+        </button>
+      </div>
+      {#if losslessRecode}
+        <span class="badge warn" title={t.panel.badgeRecodeWhy}>
+          {t.panel.badgeRecode}
+        </span>
+      {/if}
     </div>
     {#if editor.meta?.hasAudio}
       <label class="row checkrow">
@@ -697,6 +744,14 @@
     letter-spacing: 0.02em;
   }
 
+  /* 제목 줄 — 배지는 오른쪽 끝에 붙어 아래를 밀지 않는다. */
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-xs);
+  }
+
   .row {
     display: flex;
     align-items: center;
@@ -715,6 +770,33 @@
     display: flex;
     gap: 4px;
     flex-wrap: wrap;
+    align-items: center;
+  }
+  /* 칩 무리 + 그 무리에 붙는 배지 (칩만 role=group 안에 두려고 한 겹 감쌌다). */
+  .chiprow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+  }
+
+  /* 조건이 참일 때만 나타나는 짧은 경고. 자세한 사정은 title에만 있다. */
+  .badge {
+    flex: none;
+    padding: var(--space-3xs) var(--space-xs);
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: help;
+  }
+  .badge.warn {
+    border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    color: var(--danger);
   }
   .chip {
     display: inline-flex;

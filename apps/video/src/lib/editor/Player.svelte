@@ -118,8 +118,8 @@
     <button
       type="button"
       class="icon-btn"
-      aria-label={t.player.stepBack}
-      title={t.player.stepBack}
+      aria-label={t.player.stepBackKey}
+      title={t.player.stepBackKey}
       onclick={() => editor.nudge(-editor.frameStep)}
     >
       <Icon name="stepBack" size={14} />
@@ -127,6 +127,7 @@
     <button
       type="button"
       class="btn small"
+      title={editor.rangePlaying ? t.player.stopKey : t.player.playRangeKey}
       onclick={() => editor.togglePlayRange()}
     >
       <Icon name={editor.rangePlaying ? "pause" : "play"} size={14} />
@@ -135,8 +136,8 @@
     <button
       type="button"
       class="icon-btn"
-      aria-label={t.player.stepForward}
-      title={t.player.stepForward}
+      aria-label={t.player.stepForwardKey}
+      title={t.player.stepForwardKey}
       onclick={() => editor.nudge(editor.frameStep)}
     >
       <Icon name="stepForward" size={14} />
