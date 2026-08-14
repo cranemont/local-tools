@@ -1,9 +1,16 @@
 <script lang="ts">
   import Icon from "../Icon.svelte";
   import { t } from "../i18n";
-  import { zipSync } from "fflate";
-  import { rasterizePdf, type RasterPage } from "../pdf/rasterize";
-  import { downloadBlob } from "../pdf/save";
+  import { PdfPasswordError } from "../pdf/engine";
+  import { isRangeSyntaxValid } from "../pdf/range";
+  import {
+    formatExt,
+    rasterizePdf,
+    type RasterFormat,
+    type RasterPage,
+  } from "../pdf/rasterize";
+  import { downloadBlob, saveZip } from "../pdf/save";
+  import { unlockPdf } from "../pdf/unlock.svelte";
 
   interface Doc {
     name: string;
@@ -12,7 +19,12 @@
   const docs: Doc[] = [];
 
   let pages = $state<RasterPage[]>([]);
-  let scale = $state(2);
+  /** 불러온 문서 수 — 대상 쪽이 하나도 안 걸려 장이 0개일 때도 도구 막대를 지킨다. */
+  let docCount = $state(0);
+  let format = $state<RasterFormat>("png");
+  let dpi = $state(144);
+  /** "1-5, 8, 12-" 표기. 비우면 전 쪽 — 문서마다 그 쪽수에 맞춰 해석된다. */
+  let pageSpec = $state("");
   let busy = $state(false);
   let busyMsg = $state("");
   let error = $state("");
@@ -21,11 +33,15 @@
   let fileInput: HTMLInputElement;
   let zipName = $state("images");
 
-  const scales = [
-    { label: t.toImg.q1, value: 1.5 },
-    { label: t.toImg.q2, value: 2 },
-    { label: t.toImg.q3, value: 3 },
+  const formats: { label: string; value: RasterFormat }[] = [
+    { label: "PNG", value: "png" },
+    { label: "JPG", value: "jpeg" },
+    { label: "WebP", value: "webp" },
   ];
+  // 예전의 배율 1.5·2·3을 dpi로 그대로 옮긴 값(72dpi가 배율 1).
+  const dpis = [108, 144, 216];
+
+  const ext = $derived(formatExt(format));
 
   function revokeAll() {
     for (const p of pages) URL.revokeObjectURL(p.url);
@@ -40,17 +56,43 @@
     try {
       const all: RasterPage[] = [];
       for (const doc of docs) {
-        const rendered = await rasterizePdf(doc.name, doc.bytes, scale, (i, total) => {
-          busyMsg = t.toImg.rendering(i, total, doc.name);
-        });
-        all.push(...rendered);
+        all.push(...(await renderDoc(doc)));
       }
       pages = all;
+      // 대상 쪽이 문서 밖만 가리키면 결과가 0장이다 — 조용히 비우지 않고 말한다.
+      if (!error && docs.length > 0 && all.length === 0) error = t.errors.rangeNoPages;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
       busy = false;
       busyMsg = "";
+    }
+  }
+
+  /** 문서 하나 — 암호가 걸려 있으면 비밀번호를 물어 풀고 나서 변환한다. */
+  async function renderDoc(doc: Doc): Promise<RasterPage[]> {
+    const options = { dpi, format, pageSpec };
+    const onProgress = (i: number, total: number) => {
+      busyMsg = t.toImg.rendering(i, total, doc.name);
+    };
+    try {
+      return await rasterizePdf(doc.name, doc.bytes, options, onProgress);
+    } catch (err) {
+      if (!(err instanceof PdfPasswordError)) throw err;
+      // 비밀번호 창이 떠 있는 동안에는 진행 오버레이를 걷는다.
+      busy = false;
+      const unlocked = await unlockPdf(err.fileName, err.bytes, (msg) => {
+        busy = msg !== "";
+        busyMsg = msg;
+      });
+      busy = true;
+      if (!unlocked) {
+        error = t.unlock.canceled(doc.name);
+        return [];
+      }
+      // 푼 바이트로 갈아 끼운다 — 형식·해상도를 바꿔 다시 변환할 때 또 묻지 않게.
+      doc.bytes = unlocked;
+      return await rasterizePdf(doc.name, doc.bytes, options, onProgress);
     }
   }
 
@@ -66,6 +108,7 @@
     for (const f of arr) {
       docs.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
     }
+    docCount = docs.length;
     await rasterizeAll();
   }
 
@@ -93,9 +136,24 @@
     addFiles(e.dataTransfer.files);
   }
 
-  function setScale(v: number) {
-    if (v === scale) return;
-    scale = v;
+  function setDpi(v: number) {
+    if (v === dpi) return;
+    dpi = v;
+    if (docs.length) rasterizeAll();
+  }
+  function setFormat(v: RasterFormat) {
+    if (v === format) return;
+    format = v;
+    if (docs.length) rasterizeAll();
+  }
+  /** 대상 쪽 표기가 바뀌었을 때(Enter·포커스 아웃) 다시 변환한다. */
+  function applyPageSpec() {
+    const spec = pageSpec.trim();
+    if (spec && !isRangeSyntaxValid(spec)) {
+      error = t.errors.rangeInvalid;
+      return;
+    }
+    error = "";
     if (docs.length) rasterizeAll();
   }
 
@@ -105,9 +163,9 @@
     status = "";
     const base = zipName.replace(/[\\/:*?"<>|]/g, "").trim() || "images";
 
-    // 1장이면 그냥 PNG 다운로드, 여러 장이면 ZIP 하나로 묶는다.
+    // 1장이면 그냥 이미지 다운로드, 여러 장이면 ZIP 하나로 묶는다.
     if (pages.length === 1) {
-      downloadBlob(pages[0].blob, `${base}.png`);
+      downloadBlob(pages[0].blob, `${base}.${ext}`);
       status = t.toImg.savedDl(1);
       return;
     }
@@ -119,11 +177,7 @@
       for (const p of pages) {
         files[p.name] = new Uint8Array(await p.blob.arrayBuffer());
       }
-      // PNG는 이미 압축돼 있으므로 저장(무압축) 모드로 빠르게 묶음.
-      const zipped = zipSync(files, { level: 0 });
-      const buf = new Uint8Array(zipped.byteLength);
-      buf.set(zipped);
-      downloadBlob(new Blob([buf], { type: "application/zip" }), `${base}.zip`);
+      saveZip(files, `${base}.zip`);
       status = t.toImg.savedZip(pages.length);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -137,6 +191,7 @@
     revokeAll();
     pages = [];
     docs.length = 0;
+    docCount = 0;
     error = "";
     status = "";
   }
@@ -160,7 +215,7 @@
     onchange={onInputChange}
   />
 
-  {#if pages.length === 0 && !busy}
+  {#if pages.length === 0 && !busy && docCount === 0}
     <button type="button" class="dropzone" onclick={pick}>
       <span class="dz-icon"><Icon name="image" size={30} /></span>
       <p class="dz-title">{t.toImg.dropHint}</p>
@@ -172,20 +227,49 @@
         <Icon name="plus" size={15} /> {t.toImg.addPdf}
       </button>
       <span class="sep"></span>
-      <span class="qlabel">{t.toImg.quality}</span>
-      <div class="seg" role="group" aria-label={t.toImg.quality}>
-        {#each scales as s (s.value)}
+      <span class="qlabel">{t.toImg.format}</span>
+      <div class="seg" role="group" aria-label={t.toImg.format}>
+        {#each formats as f (f.value)}
           <button
             type="button"
             class="segbtn"
-            class:active={scale === s.value}
-            aria-pressed={scale === s.value}
-            onclick={() => setScale(s.value)}
+            class:active={format === f.value}
+            aria-pressed={format === f.value}
+            onclick={() => setFormat(f.value)}
           >
-            {s.label}
+            {f.label}
           </button>
         {/each}
       </div>
+
+      <span class="qlabel">{t.toImg.resolution}</span>
+      <div class="seg" role="group" aria-label={t.toImg.resolution}>
+        {#each dpis as d (d)}
+          <button
+            type="button"
+            class="segbtn"
+            class:active={dpi === d}
+            aria-pressed={dpi === d}
+            onclick={() => setDpi(d)}
+          >
+            {t.toImg.dpi(d)}
+          </button>
+        {/each}
+      </div>
+
+      <span class="qlabel" id="toimg-pages">{t.toImg.pages}</span>
+      <input
+        class="range"
+        bind:value={pageSpec}
+        placeholder={t.toImg.pagesPlaceholder}
+        aria-labelledby="toimg-pages"
+        spellcheck="false"
+        autocomplete="off"
+        onchange={applyPageSpec}
+        onkeydown={(e) => {
+          if (e.key === "Enter") applyPageSpec();
+        }}
+      />
 
       <span class="spacer"></span>
 
@@ -199,7 +283,7 @@
           spellcheck="false"
           autocomplete="off"
         />
-        <span class="ext">{pages.length > 1 ? ".zip" : ".png"}</span>
+        <span class="ext">{pages.length > 1 ? ".zip" : `.${ext}`}</span>
       </span>
       <button
         type="button"
@@ -324,6 +408,20 @@
   .qlabel {
     font-size: var(--text-md);
     color: var(--text-muted);
+  }
+  .range {
+    width: 120px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: var(--text-md);
+    font-family: inherit;
+    padding: var(--space-2xs) var(--space-xs);
+  }
+  .range:focus {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
   }
   .status {
     font-size: var(--text-md);

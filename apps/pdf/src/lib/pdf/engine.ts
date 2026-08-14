@@ -11,6 +11,25 @@ const uid = (): string => crypto.randomUUID();
 
 const SUPPORTED_IMAGE = new Set(["image/png", "image/jpeg"]);
 
+/**
+ * 암호가 걸려 열 수 없다는 신호. 부르는 쪽이 비밀번호를 받아 푼 뒤
+ * loadPdf(name, 푼 바이트)로 다시 부르라고 원본을 함께 들려 보낸다.
+ */
+export class PdfPasswordError extends Error {
+  constructor(
+    readonly fileName: string,
+    readonly bytes: Uint8Array,
+  ) {
+    super("password required");
+    this.name = "PdfPasswordError";
+  }
+}
+
+/** pdf.js가 던진 것이 비밀번호 요구인가(영어 예외 문구를 화면에 내보내지 않기 위해). */
+export function isPasswordException(err: unknown): boolean {
+  return err instanceof Error && err.name === "PasswordException";
+}
+
 /** 파일 하나를 소스 + 페이지 목록으로 변환. */
 export async function loadFile(file: File): Promise<LoadResult> {
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -23,10 +42,16 @@ export async function loadFile(file: File): Promise<LoadResult> {
   throw new Error(`지원하지 않는 형식이에요: ${file.name}`);
 }
 
-async function loadPdf(name: string, bytes: Uint8Array): Promise<LoadResult> {
+export async function loadPdf(name: string, bytes: Uint8Array): Promise<LoadResult> {
   // pdf.js가 버퍼를 detach할 수 있으니 복사본을 넘기고 원본은 내보내기용으로 보존.
   const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
-  const doc: PDFDocumentProxy = await loadingTask.promise;
+  let doc: PDFDocumentProxy;
+  try {
+    doc = await loadingTask.promise;
+  } catch (err) {
+    if (isPasswordException(err)) throw new PdfPasswordError(name, bytes);
+    throw err;
+  }
 
   const sourceId = uid();
   const source: SourceDoc = {

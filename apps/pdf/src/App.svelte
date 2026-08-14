@@ -6,6 +6,7 @@
   import Canvas from "./lib/canvas/Canvas.svelte";
   import ToImage from "./lib/toimage/ToImage.svelte";
   import Password from "./lib/password/Password.svelte";
+  import PasswordPrompt from "./lib/PasswordPrompt.svelte";
 
   type TabId = "edit" | "toImage" | "password";
   type TabIcon = "merge" | "image" | "lock";
@@ -89,11 +90,10 @@
       {/if}
     </div>
   </main>
-
-  <footer class="footer">
-    <span class="privacy">{t.privacyNote}</span>
-  </footer>
 </div>
+
+<!-- 암호가 걸린 PDF를 만난 탭이 어디든 이 창 하나로 묻는다 -->
+<PasswordPrompt />
 
 <style>
   .app {
@@ -192,15 +192,6 @@
     min-width: 0;
     min-height: 0;
     display: flex;
-  }
-
-  .footer {
-    padding: 10px 18px;
-    border-top: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-muted);
-    font-size: var(--text-sm);
-    text-align: center;
   }
 
   /* 브랜드 + 탭 3개 + 토글이 한 줄에 안 들어가는 폭 — 탭을 둘째 줄로 내린다.

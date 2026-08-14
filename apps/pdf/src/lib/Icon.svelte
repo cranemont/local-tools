@@ -13,6 +13,7 @@
     | "trash"
     | "plus"
     | "download"
+    | "split"
     | "x";
 
   let { name, size = 18 }: { name: IconName; size?: number } = $props();
@@ -66,6 +67,10 @@
     <path d="M12 3v12" />
     <path d="M7 10l5 5 5-5" />
     <path d="M5 21h14" />
+  {:else if name === "split"}
+    <path d="M12 3v18" stroke-dasharray="3 3" />
+    <rect x="3" y="6" width="6" height="12" rx="1.5" />
+    <rect x="15" y="6" width="6" height="12" rx="1.5" />
   {:else if name === "x"}
     <path d="M18 6 6 18M6 6l12 12" />
   {/if}

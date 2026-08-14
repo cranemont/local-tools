@@ -2,18 +2,23 @@
   import Icon from "../Icon.svelte";
   import { t } from "../i18n";
   import PageCard from "./PageCard.svelte";
-  import { loadFile } from "../pdf/engine";
-  import { buildPdf } from "../pdf/exporter";
-  import { saveBytes } from "../pdf/save";
+  import { loadFile, loadPdf, PdfPasswordError, type LoadResult } from "../pdf/engine";
+  import { buildPdf, buildPdfParts } from "../pdf/exporter";
+  import { chunkEvery, parseRange } from "../pdf/range";
+  import { saveBytes, saveZip } from "../pdf/save";
+  import { unlockPdf } from "../pdf/unlock.svelte";
   import type { PageItem, Rotation, SourceDoc } from "../pdf/types";
 
   // 소스는 렌더에 직접 쓰이지 않으므로(썸네일은 page.thumb) 일반 Map으로 보관.
   const sources = new Map<string, SourceDoc>();
 
+  type SplitMode = "ranges" | "every" | "single";
+
   let pages = $state<PageItem[]>([]);
   let busy = $state(false);
   let busyMsg = $state("");
   let errorMsg = $state("");
+  let statusMsg = $state("");
   let dragOver = $state(false);
 
   let dragFrom = $state<number | null>(null);
@@ -22,25 +27,37 @@
   let fileInput: HTMLInputElement;
   let filename = $state("merged");
 
+  // 쪽 범위 — 선택과 분할이 같은 표기를 나눠 쓴다.
+  let rangeSpec = $state("");
+  let rangeError = $state("");
+  let splitMode = $state<SplitMode>("ranges");
+  let splitSize = $state(2);
+
+  const splitModes: { id: SplitMode; label: string }[] = [
+    { id: "ranges", label: t.canvas.splitByRange },
+    { id: "every", label: t.canvas.splitEvery },
+    { id: "single", label: t.canvas.splitSingle },
+  ];
+
   const selectedCount = $derived(pages.filter((p) => p.selected).length);
 
-  function outputName(): string {
+  function outputBase(): string {
     const clean = filename.replace(/[\\/:*?"<>|]/g, "").trim();
-    return `${clean || "merged"}.pdf`;
+    return clean || "merged";
   }
   const nextRotation = (r: Rotation): Rotation => (((r + 90) % 360) as Rotation);
 
   async function addFiles(files: FileList | File[]) {
     errorMsg = "";
+    statusMsg = "";
     busy = true;
     const arr = Array.from(files);
     try {
       for (let i = 0; i < arr.length; i++) {
-        busyMsg = t.canvas.loading(arr[i].name, i + 1, arr.length);
+        const label = t.canvas.loading(arr[i].name, i + 1, arr.length);
+        busyMsg = label;
         try {
-          const { source, pages: added } = await loadFile(arr[i]);
-          sources.set(source.id, source);
-          pages = [...pages, ...added];
+          await addOne(arr[i], label);
         } catch (err) {
           errorMsg = err instanceof Error ? err.message : String(err);
         }
@@ -49,6 +66,31 @@
       busy = false;
       busyMsg = "";
     }
+  }
+
+  /** 파일 하나 — 암호가 걸려 있으면 비밀번호를 물어 푼 뒤 얹는다. */
+  async function addOne(file: File, label: string) {
+    let result: LoadResult;
+    try {
+      result = await loadFile(file);
+    } catch (err) {
+      if (!(err instanceof PdfPasswordError)) throw err;
+      // 비밀번호 창이 떠 있는 동안에는 진행 오버레이를 걷는다.
+      busy = false;
+      const unlocked = await unlockPdf(err.fileName, err.bytes, (msg) => {
+        busy = msg !== "";
+        busyMsg = msg;
+      });
+      busy = true;
+      busyMsg = label;
+      if (!unlocked) {
+        errorMsg = t.unlock.canceled(file.name);
+        return;
+      }
+      result = await loadPdf(file.name, unlocked);
+    }
+    sources.set(result.source.id, result.source);
+    pages = [...pages, ...result.pages];
   }
 
   function pick() {
@@ -106,6 +148,80 @@
     pages = [];
     sources.clear();
     errorMsg = "";
+    statusMsg = "";
+    rangeError = "";
+  }
+
+  // ── 쪽 범위로 고르기 ─────────────────────────────
+  function applyPicked(picked: Set<number>) {
+    pages = pages.map((p, i) => ({ ...p, selected: picked.has(i) }));
+  }
+  function applyRange() {
+    const { indices, invalid } = parseRange(rangeSpec, pages.length);
+    if (invalid || indices.length === 0) {
+      rangeError = t.errors.rangeInvalid;
+      return;
+    }
+    rangeError = "";
+    applyPicked(new Set(indices));
+  }
+  /** 1쪽부터 세어 홀수·짝수를 고른다. */
+  function selectParity(odd: boolean) {
+    rangeError = "";
+    const picked = new Set<number>();
+    pages.forEach((_, i) => {
+      if ((i % 2 === 0) === odd) picked.add(i);
+    });
+    applyPicked(picked);
+  }
+
+  // ── 나누기 ───────────────────────────────────────
+  /** 규칙대로 페이지를 묶는다. 읽을 수 없는 범위면 null. */
+  function splitGroups(): PageItem[][] | null {
+    if (splitMode === "ranges") {
+      const { groups, invalid } = parseRange(rangeSpec, pages.length);
+      if (invalid || groups.length === 0) return null;
+      return groups.map((g) => g.map((i) => pages[i]));
+    }
+    const all = pages.map((_, i) => i);
+    const size = splitMode === "single" ? 1 : splitSize;
+    return chunkEvery(all, size)
+      .filter((g) => g.length > 0)
+      .map((g) => g.map((i) => pages[i]));
+  }
+
+  async function splitPdf() {
+    const groups = splitGroups();
+    if (!groups || groups.length === 0) {
+      rangeError = t.errors.rangeInvalid;
+      return;
+    }
+    rangeError = "";
+    errorMsg = "";
+    statusMsg = "";
+    busy = true;
+    busyMsg = t.canvas.splitting(1, groups.length);
+    try {
+      const base = outputBase();
+      if (groups.length === 1) {
+        // 묶음이 하나면 ZIP으로 감싸지 않는다.
+        const bytes = await buildPdf(groups[0], sources);
+        saveBytes(bytes, `${base}.pdf`);
+      } else {
+        const parts = await buildPdfParts(groups, sources, base, (done, total) => {
+          busyMsg = t.canvas.splitting(done, total);
+        });
+        const files: Record<string, Uint8Array> = {};
+        for (const part of parts) files[part.name] = part.bytes;
+        saveZip(files, `${base}.zip`);
+      }
+      statusMsg = t.canvas.splitDone(groups.length);
+    } catch (err) {
+      errorMsg = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = false;
+      busyMsg = "";
+    }
   }
 
   // ── 카드 드래그로 순서 변경 ───────────────────────
@@ -143,9 +259,10 @@
     busy = true;
     busyMsg = t.canvas.exporting;
     errorMsg = "";
+    statusMsg = "";
     try {
       const bytes = await buildPdf(items, sources);
-      await saveBytes(bytes, outputName());
+      saveBytes(bytes, `${outputBase()}.pdf`);
     } catch (err) {
       errorMsg = err instanceof Error ? err.message : String(err);
     } finally {
@@ -202,6 +319,7 @@
 
       <span class="spacer"></span>
 
+      {#if statusMsg}<span class="status">{statusMsg}</span>{/if}
       <span class="count">
         {t.canvas.pageCount(pages.length)}{#if selectedCount > 0}
           · {t.canvas.selectedCount(selectedCount)}{/if}
@@ -224,6 +342,54 @@
       <button type="button" class="btn primary" onclick={() => exportPdf(false)}>
         <Icon name="download" size={15} /> {t.canvas.exportAll}
       </button>
+    </div>
+
+    <div class="rangebar">
+      <span class="rlabel" id="range-label">{t.canvas.rangeLabel}</span>
+      <input
+        class="range"
+        bind:value={rangeSpec}
+        placeholder={t.canvas.rangePlaceholder}
+        aria-labelledby="range-label"
+        spellcheck="false"
+        autocomplete="off"
+        onkeydown={(e) => {
+          if (e.key === "Enter") applyRange();
+        }}
+      />
+      <button type="button" class="btn ghost small" onclick={applyRange}>
+        {t.canvas.rangeApply}
+      </button>
+      <button type="button" class="btn ghost small" onclick={() => selectParity(true)}>
+        {t.canvas.rangeOdd}
+      </button>
+      <button type="button" class="btn ghost small" onclick={() => selectParity(false)}>
+        {t.canvas.rangeEven}
+      </button>
+
+      <span class="sep"></span>
+
+      <span class="rlabel" id="split-label">{t.canvas.splitLabel}</span>
+      <select class="sel" bind:value={splitMode} aria-labelledby="split-label">
+        {#each splitModes as m (m.id)}
+          <option value={m.id}>{m.label}</option>
+        {/each}
+      </select>
+      {#if splitMode === "every"}
+        <input
+          class="num"
+          type="number"
+          min="1"
+          max={Math.max(1, pages.length)}
+          bind:value={splitSize}
+          aria-label={t.canvas.splitSize}
+        />
+      {/if}
+      <button type="button" class="btn small" onclick={splitPdf}>
+        <Icon name="split" size={15} /> {t.canvas.split}
+      </button>
+
+      {#if rangeError}<span class="rerror" role="alert">{rangeError}</span>{/if}
     </div>
 
     <div class="grid">
@@ -343,6 +509,54 @@
     font-size: var(--text-md);
     color: var(--text-muted);
     margin-right: 4px;
+  }
+  .status {
+    font-size: var(--text-md);
+    color: var(--accent-ink);
+    margin-right: 4px;
+  }
+
+  /* 쪽 범위 + 나누기 — 선택과 분할이 같은 표기를 나눠 쓰므로 한 줄에 둔다 */
+  .rangebar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+  }
+  .rlabel {
+    font-size: var(--text-md);
+    color: var(--text-muted);
+  }
+  .range,
+  .num,
+  .sel {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: var(--text-md);
+    font-family: inherit;
+    padding: var(--space-2xs) var(--space-xs);
+  }
+  .range {
+    width: 150px;
+  }
+  .num {
+    width: 64px;
+  }
+  .range:focus,
+  .num:focus,
+  .sel:focus {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+  .rerror {
+    font-size: var(--text-md);
+    color: var(--danger);
   }
 
   .namefield {

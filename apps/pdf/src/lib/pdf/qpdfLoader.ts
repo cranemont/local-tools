@@ -106,10 +106,20 @@ export async function runQpdf(
   return new Uint8Array(out);
 }
 
+/** 비밀번호 때문에 실패했음을 부르는 쪽이 알아보게 하는 표시(다시 물을지 정한다). */
+export const PASSWORD_ERROR_NAME = "QpdfPasswordError";
+
+/** 이 실패가 "비밀번호가 틀렸다"인가. */
+export function isPasswordError(err: unknown): boolean {
+  return err instanceof Error && err.name === PASSWORD_ERROR_NAME;
+}
+
 function classifyError(stderr: string[], fallbackMsg: string): Error {
   const msg = stderr.join("\n");
   if (/password/i.test(msg)) {
-    return new Error("비밀번호가 올바르지 않거나 필요해요.");
+    const err = new Error("비밀번호가 올바르지 않거나 필요해요.");
+    err.name = PASSWORD_ERROR_NAME;
+    return err;
   }
   return new Error(fallbackMsg);
 }

@@ -188,8 +188,6 @@
     {/if}
 
     {#if error}<p class="error" role="alert">{error}</p>{/if}
-
-    <p class="note">{t.pw.note}</p>
   </div>
 
   {#if busy}
@@ -351,13 +349,6 @@
     color: var(--danger);
     font-size: var(--text-base);
   }
-  .note {
-    margin: 8px 0 0;
-    font-size: var(--text-sm);
-    line-height: 1.6;
-    color: var(--text-muted);
-  }
-
   .overlay {
     position: absolute;
     inset: 0;
