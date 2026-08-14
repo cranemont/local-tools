@@ -1,12 +1,13 @@
 <script lang="ts">
   import { t } from "../i18n";
+  import { persisted } from "../persist.svelte";
 
   const FLAGS = ["g", "i", "m", "s", "u"] as const;
   const MAX_MATCHES = 1000;
 
-  let pattern = $state("");
-  let flags = $state<string[]>(["g"]);
-  let text = $state("");
+  const pattern = persisted("regex.pattern", "");
+  const flags = persisted<string[]>("regex.flags", ["g"]);
+  const text = persisted("regex.text", "");
 
   interface Segment {
     text: string;
@@ -14,21 +15,21 @@
   }
 
   const result = $derived.by(() => {
-    if (!pattern) return { segments: null, matches: [] as RegExpExecArray[], error: null };
+    if (!pattern.current) return { segments: null, matches: [] as RegExpExecArray[], error: null };
     try {
-      const flagStr = flags.includes("g") ? flags.join("") : flags.join("") + "g";
-      const re = new RegExp(pattern, flagStr);
+      const flagStr = flags.current.includes("g") ? flags.current.join("") : flags.current.join("") + "g";
+      const re = new RegExp(pattern.current, flagStr);
       const matches: RegExpExecArray[] = [];
       const segments: Segment[] = [];
       let last = 0;
-      for (const m of text.matchAll(re)) {
+      for (const m of text.current.matchAll(re)) {
         if (matches.length >= MAX_MATCHES) break;
-        if (m.index > last) segments.push({ text: text.slice(last, m.index), hit: false });
+        if (m.index > last) segments.push({ text: text.current.slice(last, m.index), hit: false });
         segments.push({ text: m[0], hit: true });
         matches.push(m);
         last = m.index + m[0].length;
       }
-      if (last < text.length) segments.push({ text: text.slice(last), hit: false });
+      if (last < text.current.length) segments.push({ text: text.current.slice(last), hit: false });
       return { segments, matches, error: null };
     } catch (e) {
       return {
@@ -40,7 +41,9 @@
   });
 
   function toggleFlag(f: string) {
-    flags = flags.includes(f) ? flags.filter((x) => x !== f) : [...flags, f];
+    flags.current = flags.current.includes(f)
+      ? flags.current.filter((x) => x !== f)
+      : [...flags.current, f];
   }
 </script>
 
@@ -50,25 +53,25 @@
     <input
       class="pattern"
       type="text"
-      bind:value={pattern}
+      bind:value={pattern.current}
       placeholder={t.regex.patternPlaceholder}
       spellcheck="false"
       aria-label={t.regex.pattern}
     />
-    <span class="slash">/{flags.join("")}</span>
+    <span class="slash">/{flags.current.join("")}</span>
     <div class="t-chiprow" role="group" aria-label="flags">
       {#each FLAGS as f (f)}
         <button
           class="t-chip mono"
-          class:active={flags.includes(f)}
-          aria-pressed={flags.includes(f)}
+          class:active={flags.current.includes(f)}
+          aria-pressed={flags.current.includes(f)}
           onclick={() => toggleFlag(f)}
         >
           {f}
         </button>
       {/each}
     </div>
-    {#if pattern && !result.error}
+    {#if pattern.current && !result.error}
       <span class="count" class:none={!result.matches.length}>
         {result.matches.length ? t.regex.matches(result.matches.length) : t.regex.noMatch}
       </span>
@@ -82,11 +85,11 @@
   <div class="t-panes">
     <div class="t-pane">
       <div class="t-pane-head"><span class="t-label">{t.regex.text}</span></div>
-      <textarea class="t-textarea" bind:value={text} spellcheck="false"></textarea>
+      <textarea class="t-textarea" bind:value={text.current} spellcheck="false"></textarea>
     </div>
     <div class="t-pane">
       <div class="t-pane-head"><span class="t-label">{t.common.output}</span></div>
-      {#if result.segments && text}
+      {#if result.segments && text.current}
         <pre class="highlight">{#each result.segments as seg, i (i)}<span
             class:hit={seg.hit}>{seg.text}</span>{/each}</pre>
       {:else}

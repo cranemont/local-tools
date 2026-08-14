@@ -1,6 +1,7 @@
 <script lang="ts">
   import { encode } from "uqr";
   import { t } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import Icon from "../Icon.svelte";
   import CopyButton from "../CopyButton.svelte";
   import { downloadBlob } from "../save";
@@ -8,13 +9,13 @@
   type Mode = "text" | "wifi" | "scan";
   const PNG_SIZES = [256, 512, 1024];
 
-  let mode = $state<Mode>("text");
-  let input = $state("");
-  let ssid = $state("");
+  const mode = persisted<Mode>("qr.mode", "text");
+  const input = persisted("qr.input", "");
+  const ssid = persisted("qr.ssid", "");
   let password = $state("");
-  let security = $state<"WPA" | "WEP" | "nopass">("WPA");
-  let hidden = $state(false);
-  let pngSize = $state(512);
+  const security = persisted<"WPA" | "WEP" | "nopass">("qr.security", "WPA");
+  const hidden = persisted("qr.hidden", false);
+  const pngSize = persisted("qr.pngSize", 512);
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let imageCopied = $state(false);
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -23,16 +24,16 @@
   const esc = (s: string) => s.replace(/[\\;,:"]/g, "\\$&");
 
   const payload = $derived.by(() => {
-    if (mode === "wifi") {
-      if (!ssid) return "";
-      const pass = security === "nopass" ? "" : `P:${esc(password)};`;
-      return `WIFI:T:${security};S:${esc(ssid)};${pass}${hidden ? "H:true;" : ""};`;
+    if (mode.current === "wifi") {
+      if (!ssid.current) return "";
+      const pass = security.current === "nopass" ? "" : `P:${esc(password)};`;
+      return `WIFI:T:${security.current};S:${esc(ssid.current)};${pass}${hidden.current ? "H:true;" : ""};`;
     }
-    return input.trim();
+    return input.current.trim();
   });
 
   const qr = $derived.by(() => {
-    if (!payload || mode === "scan") return null;
+    if (!payload || mode.current === "scan") return null;
     try {
       return { code: encode(payload, { border: 2 }), error: null };
     } catch {
@@ -61,7 +62,7 @@
 
   async function exportPng(): Promise<Blob> {
     const code = qr!.code!;
-    const scale = Math.max(1, Math.round(pngSize / code.size));
+    const scale = Math.max(1, Math.round(pngSize.current / code.size));
     const canvas = paint(document.createElement("canvas"), scale);
     return await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/png"));
   }
@@ -122,32 +123,32 @@
     <div class="t-chiprow" role="group">
       <button
         class="t-chip"
-        class:active={mode === "text"}
-        aria-pressed={mode === "text"}
-        onclick={() => (mode = "text")}
+        class:active={mode.current === "text"}
+        aria-pressed={mode.current === "text"}
+        onclick={() => (mode.current = "text")}
       >
         {t.qr.modeText}
       </button>
       <button
         class="t-chip"
-        class:active={mode === "wifi"}
-        aria-pressed={mode === "wifi"}
-        onclick={() => (mode = "wifi")}
+        class:active={mode.current === "wifi"}
+        aria-pressed={mode.current === "wifi"}
+        onclick={() => (mode.current = "wifi")}
       >
         {t.qr.modeWifi}
       </button>
       <button
         class="t-chip"
-        class:active={mode === "scan"}
-        aria-pressed={mode === "scan"}
-        onclick={() => (mode = "scan")}
+        class:active={mode.current === "scan"}
+        aria-pressed={mode.current === "scan"}
+        onclick={() => (mode.current = "scan")}
       >
         {t.qr.modeScan}
       </button>
     </div>
   </div>
 
-  {#if mode === "scan"}
+  {#if mode.current === "scan"}
     {#if !scanSupported}
       <p class="t-note">{t.qr.scanUnsupported}</p>
     {:else}
@@ -189,34 +190,34 @@
   {:else}
     <div class="gen">
       <div class="fields">
-        {#if mode === "text"}
+        {#if mode.current === "text"}
           <textarea
             class="t-textarea text"
-            bind:value={input}
+            bind:value={input.current}
             placeholder={t.qr.textPlaceholder}
             spellcheck="false"
           ></textarea>
         {:else}
           <label class="field">
             <span class="t-label">{t.qr.ssid}</span>
-            <input class="fin" type="text" bind:value={ssid} spellcheck="false" autocomplete="off" />
+            <input class="fin" type="text" bind:value={ssid.current} spellcheck="false" autocomplete="off" />
           </label>
           <label class="field">
             <span class="t-label">{t.qr.security}</span>
-            <select class="t-select" bind:value={security}>
+            <select class="t-select" bind:value={security.current}>
               <option value="WPA">WPA/WPA2</option>
               <option value="WEP">WEP</option>
               <option value="nopass">{t.qr.secNone}</option>
             </select>
           </label>
-          {#if security !== "nopass"}
+          {#if security.current !== "nopass"}
             <label class="field">
               <span class="t-label">{t.qr.password}</span>
               <input class="fin" type="text" bind:value={password} spellcheck="false" autocomplete="off" />
             </label>
           {/if}
           <label class="t-checkrow">
-            <input type="checkbox" bind:checked={hidden} />
+            <input type="checkbox" bind:checked={hidden.current} />
             {t.qr.hidden}
           </label>
         {/if}
@@ -229,7 +230,7 @@
           <canvas bind:this={canvasEl} class="qr"></canvas>
           <div class="actions">
             <label class="t-label" for="qr-size">{t.qr.pngSize}</label>
-            <select id="qr-size" class="t-select" bind:value={pngSize}>
+            <select id="qr-size" class="t-select" bind:value={pngSize.current}>
               {#each PNG_SIZES as s (s)}
                 <option value={s}>{s}px</option>
               {/each}

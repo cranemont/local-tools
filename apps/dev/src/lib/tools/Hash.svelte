@@ -1,13 +1,14 @@
 <script lang="ts">
   import { t } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import CopyButton from "../CopyButton.svelte";
   import { md5Hex, bytesToHex } from "./md5";
 
   type Mode = "text" | "file";
   const SHA_ALGOS = ["SHA-1", "SHA-256", "SHA-384", "SHA-512"] as const;
 
-  let mode = $state<Mode>("text");
-  let input = $state("");
+  const mode = persisted<Mode>("hash.mode", "text");
+  const input = persisted("hash.input", "");
   let file = $state<File | null>(null);
   let rows = $state<{ label: string; value: string }[]>([]);
   let computing = $state(false);
@@ -29,8 +30,8 @@
   }
 
   $effect(() => {
-    if (mode !== "text") return;
-    void compute(new TextEncoder().encode(input));
+    if (mode.current !== "text") return;
+    void compute(new TextEncoder().encode(input.current));
   });
 
   async function pickFile(f: File) {
@@ -63,27 +64,27 @@
     <div class="t-chiprow" role="group">
       <button
         class="t-chip"
-        class:active={mode === "text"}
-        aria-pressed={mode === "text"}
-        onclick={() => (mode = "text")}
+        class:active={mode.current === "text"}
+        aria-pressed={mode.current === "text"}
+        onclick={() => (mode.current = "text")}
       >
         {t.hash.modeText}
       </button>
       <button
         class="t-chip"
-        class:active={mode === "file"}
-        aria-pressed={mode === "file"}
-        onclick={() => (mode = "file")}
+        class:active={mode.current === "file"}
+        aria-pressed={mode.current === "file"}
+        onclick={() => (mode.current = "file")}
       >
         {t.hash.modeFile}
       </button>
     </div>
   </div>
 
-  {#if mode === "text"}
+  {#if mode.current === "text"}
     <textarea
       class="t-textarea text"
-      bind:value={input}
+      bind:value={input.current}
       placeholder={t.hash.textPlaceholder}
       spellcheck="false"
     ></textarea>
@@ -111,7 +112,7 @@
 
   {#if computing}
     <p class="t-note">{t.hash.computing}</p>
-  {:else if rows.length && (mode === "text" || file)}
+  {:else if rows.length && (mode.current === "text" || file)}
     <div class="rows">
       {#each rows as row (row.label)}
         <div class="row">

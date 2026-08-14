@@ -9,6 +9,7 @@
     | "x"
     | "search"
     | "swap"
+    | "chevron"
     | "braces"
     | "diff"
     | "code"
@@ -65,6 +66,8 @@
   {:else if name === "search"}
     <circle cx="11" cy="11" r="7" />
     <path d="m21 21-4-4" />
+  {:else if name === "chevron"}
+    <path d="m9 5 7 7-7 7" />
   {:else if name === "swap"}
     <path d="M8 3 4 7l4 4" />
     <path d="M4 7h16" />

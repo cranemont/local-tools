@@ -3,6 +3,7 @@
   import ThemeToggle from "./lib/ThemeToggle.svelte";
   import Icon from "./lib/Icon.svelte";
   import { TOOLS, type ToolDef } from "./lib/tools/registry";
+  import { searchTools } from "./lib/tools/search";
 
   // file://로 직접 연 단일 파일엔 돌아갈 홈이 없다
   const homeHref = location.protocol === "file:" ? null : "../";
@@ -43,11 +44,7 @@
     searchEl?.focus();
   }
 
-  const filtered = $derived.by(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return TOOLS;
-    return TOOLS.filter((tool) => `${tool.title} ${tool.keywords}`.toLowerCase().includes(q));
-  });
+  const filtered = $derived(searchTools(TOOLS, query));
 
   const groups = $derived.by(() => {
     const map = new Map<string, ToolDef[]>();
@@ -125,10 +122,6 @@
       {/key}
     </main>
   </div>
-
-  <footer class="footer">
-    <span class="privacy">{t.privacyNote}</span>
-  </footer>
 </div>
 
 <style>
@@ -296,15 +289,6 @@
     margin: 3px 0 0;
     font-size: var(--text-base);
     color: var(--text-muted);
-  }
-
-  .footer {
-    padding: 10px 18px;
-    border-top: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-muted);
-    font-size: var(--text-sm);
-    text-align: center;
   }
 
   @media (max-width: 760px) {

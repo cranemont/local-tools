@@ -1,8 +1,9 @@
 <script lang="ts">
   import { t, fmtDateTime, fmtRelative } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import CopyButton from "../CopyButton.svelte";
 
-  let input = $state("");
+  const input = persisted("time.input", "");
   let nowMs = $state(Date.now());
 
   $effect(() => {
@@ -22,7 +23,7 @@
     return Number.isNaN(ms) ? null : ms;
   }
 
-  const parsed = $derived(parseInput(input));
+  const parsed = $derived(parseInput(input.current));
 
   function rowsFor(ms: number) {
     return [
@@ -62,11 +63,11 @@
       id="ts-input"
       class="input"
       type="text"
-      bind:value={input}
+      bind:value={input.current}
       placeholder={t.time.placeholder}
       spellcheck="false"
     />
-    {#if input.trim() && parsed === null}
+    {#if input.current.trim() && parsed === null}
       <p class="t-error">{t.time.invalid}</p>
     {:else if parsed !== null}
       <div class="rows">

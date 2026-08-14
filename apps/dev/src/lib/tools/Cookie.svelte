@@ -1,8 +1,9 @@
 <script lang="ts">
   import { t, fmtDateTime, fmtRelative } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import CopyButton from "../CopyButton.svelte";
 
-  let input = $state("");
+  const input = persisted("cookie.input", "");
 
   const ATTR_KEYS = new Set([
     "domain",
@@ -97,7 +98,7 @@
   const parsed = $derived.by(() => {
     const setCookies: SetCookie[] = [];
     const pairs: Pair[] = [];
-    for (const rawLine of input.split("\n")) {
+    for (const rawLine of input.current.split("\n")) {
       const line = rawLine.trim();
       if (!line) continue;
       const setM = /^set-cookie\s*:\s*/i.exec(line);
@@ -124,14 +125,14 @@
 
   const pairTotal = $derived(parsed.pairs.reduce((sum, p) => sum + p.size, 0));
   const nothing = $derived(
-    input.trim() !== "" && !parsed.setCookies.length && !parsed.pairs.length,
+    input.current.trim() !== "" && !parsed.setCookies.length && !parsed.pairs.length,
   );
 </script>
 
 <div class="tool">
   <textarea
     class="t-textarea in"
-    bind:value={input}
+    bind:value={input.current}
     placeholder={t.cookie.placeholder}
     spellcheck="false"
   ></textarea>

@@ -2,9 +2,10 @@
   import { parse, oklch, formatHex, formatRgb, formatHsl, displayable, clampChroma } from "culori";
   import type { Color } from "culori";
   import { t } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import CopyButton from "../CopyButton.svelte";
 
-  let input = $state("oklch(0.62 0.158 240)");
+  const input = persisted("color.input", "oklch(0.62 0.158 240)");
 
   const round = (n: number, d: number) => {
     const p = 10 ** d;
@@ -19,7 +20,7 @@
   }
 
   const result = $derived.by(() => {
-    const s = input.trim();
+    const s = input.current.trim();
     if (!s) return null;
     const color = parse(s);
     if (!color) return { error: t.color.invalid, rows: [], swatch: "", outOfGamut: false };
@@ -40,7 +41,7 @@
     <input
       class="color-input"
       type="text"
-      bind:value={input}
+      bind:value={input.current}
       placeholder={t.color.placeholder}
       spellcheck="false"
       aria-label={t.color.title}

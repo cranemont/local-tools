@@ -1,16 +1,17 @@
 <script lang="ts">
   import { t } from "../i18n";
+  import { persisted } from "../persist.svelte";
 
-  let input = $state("");
+  const input = persisted("chars.input", "");
 
   const stats = $derived.by(() => {
-    const cps = [...input];
+    const cps = [...input.current];
     return {
       withSpace: cps.length,
-      withoutSpace: [...input.replace(/\s/g, "")].length,
-      words: (input.match(/\S+/g) ?? []).length,
-      lines: input ? input.split("\n").length : 0,
-      utf8: new TextEncoder().encode(input).length,
+      withoutSpace: [...input.current.replace(/\s/g, "")].length,
+      words: (input.current.match(/\S+/g) ?? []).length,
+      lines: input.current ? input.current.split("\n").length : 0,
+      utf8: new TextEncoder().encode(input.current).length,
       // 취업 사이트식: ASCII 1byte, 그 외(한글·전각) 2byte
       twoByte: cps.reduce((n, ch) => n + (ch.codePointAt(0)! > 0x7f ? 2 : 1), 0),
     };
@@ -38,12 +39,10 @@
 
   <textarea
     class="t-textarea main"
-    bind:value={input}
+    bind:value={input.current}
     placeholder={t.chars.placeholder}
     spellcheck="false"
   ></textarea>
-
-  <p class="t-note">{t.chars.twoByteNote}</p>
 </div>
 
 <style>

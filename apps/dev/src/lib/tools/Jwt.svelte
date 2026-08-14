@@ -1,8 +1,9 @@
 <script lang="ts">
   import { t, fmtDateTime, fmtRelative } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import CopyButton from "../CopyButton.svelte";
 
-  let input = $state("");
+  const input = persisted("jwt.input", "");
   let secret = $state("");
   let verified = $state<"ok" | "fail" | null>(null);
 
@@ -24,7 +25,7 @@
   }
 
   const decoded = $derived.by((): { jwt: Decoded | null; error: string | null } => {
-    const token = input.trim();
+    const token = input.current.trim();
     if (!token) return { jwt: null, error: null };
     const parts = token.split(".");
     if (parts.length !== 3) return { jwt: null, error: t.jwt.invalid };
@@ -64,7 +65,7 @@
   });
 
   async function verify() {
-    const token = input.trim();
+    const token = input.current.trim();
     const parts = token.split(".");
     if (!hsAlg || parts.length !== 3) return;
     const enc = new TextEncoder();
@@ -86,7 +87,7 @@
 
   $effect(() => {
     // 토큰이나 비밀키가 바뀌면 이전 검증 결과는 무효
-    void input;
+    void input.current;
     void secret;
     verified = null;
   });
@@ -97,7 +98,7 @@
 <div class="tool">
   <textarea
     class="t-textarea token"
-    bind:value={input}
+    bind:value={input.current}
     placeholder={t.jwt.placeholder}
     spellcheck="false"
   ></textarea>
@@ -151,7 +152,6 @@
         <button class="btn primary pill" onclick={verify} disabled={!secret}>{t.jwt.verify}</button>
         {#if verified === "ok"}<span class="status">{t.jwt.verifyOk}</span>{/if}
         {#if verified === "fail"}<span class="status bad">{t.jwt.verifyFail}</span>{/if}
-        <span class="muted note">{t.jwt.secretNote}</span>
       {:else if decoded.jwt.alg}
         <span class="muted note">{t.jwt.verifyUnsupported(decoded.jwt.alg)}</span>
       {/if}

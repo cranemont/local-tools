@@ -1,8 +1,9 @@
 <script lang="ts">
   import { t, fmtDateTime, fmtRelative } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import CopyButton from "../CopyButton.svelte";
 
-  let input = $state("");
+  const input = persisted("saml.input", "");
 
   interface KV {
     key: string;
@@ -25,7 +26,7 @@
   let seq = 0;
 
   $effect(() => {
-    const raw = input.trim();
+    const raw = input.current.trim();
     const id = ++seq;
     if (!raw) {
       result = null;
@@ -213,7 +214,7 @@
 <div class="tool">
   <textarea
     class="t-textarea in"
-    bind:value={input}
+    bind:value={input.current}
     placeholder={t.saml.placeholder}
     spellcheck="false"
   ></textarea>

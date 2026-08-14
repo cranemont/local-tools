@@ -1,14 +1,15 @@
 <script lang="ts">
   import { t } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import CopyButton from "../CopyButton.svelte";
 
-  let xml = $state("");
-  let expr = $state("");
+  const xml = persisted("xpath.xml", "");
+  const expr = persisted("xpath.expr", "");
 
   const CAP = 200;
 
   const parsed = $derived.by(() => {
-    const src = xml.trim();
+    const src = xml.current.trim();
     if (!src) return null;
     const doc = new DOMParser().parseFromString(src, "application/xml");
     if (doc.getElementsByTagName("parsererror").length)
@@ -48,11 +49,11 @@
 
   const result = $derived.by((): EvalResult => {
     const empty: EvalResult = { kind: null, nodes: [], capped: false, value: "", error: "" };
-    if (!parsed?.doc || !expr.trim()) return empty;
+    if (!parsed?.doc || !expr.current.trim()) return empty;
     const doc = parsed.doc;
     try {
       const r = doc.evaluate(
-        expr,
+        expr.current,
         doc,
         (prefix) => (prefix ? doc.documentElement.lookupNamespaceURI(prefix) : null),
         XPathResult.ANY_TYPE,
@@ -87,7 +88,7 @@
       id="xpath-expr"
       class="expr"
       type="text"
-      bind:value={expr}
+      bind:value={expr.current}
       placeholder={t.xpath.exprPlaceholder}
       spellcheck="false"
       autocomplete="off"
@@ -99,7 +100,7 @@
       <div class="t-pane-head"><span class="t-label">XML</span></div>
       <textarea
         class="t-textarea"
-        bind:value={xml}
+        bind:value={xml.current}
         placeholder={t.xpath.xmlPlaceholder}
         spellcheck="false"
       ></textarea>

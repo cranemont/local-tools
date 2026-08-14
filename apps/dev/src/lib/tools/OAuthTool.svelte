@@ -1,10 +1,11 @@
 <script lang="ts">
   import { t } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import CopyButton from "../CopyButton.svelte";
 
   type Mode = "url" | "pkce";
-  let mode = $state<Mode>("url");
-  let input = $state("");
+  const mode = persisted<Mode>("oauth.mode", "url");
+  const input = persisted("oauth.input", "");
 
   interface Param {
     key: string;
@@ -19,7 +20,7 @@
   }
 
   const parsed = $derived.by(() => {
-    const raw = input.trim();
+    const raw = input.current.trim();
     if (!raw) return null;
     let params: Param[] = [];
     try {
@@ -96,22 +97,22 @@
 <div class="tool">
   <div class="t-controls">
     <div class="t-chiprow" role="group">
-      <button class="t-chip" class:active={mode === "url"} onclick={() => (mode = "url")}>
+      <button class="t-chip" class:active={mode.current === "url"} onclick={() => (mode.current = "url")}>
         {t.oauth.modeUrl}
       </button>
-      <button class="t-chip" class:active={mode === "pkce"} onclick={() => (mode = "pkce")}>
+      <button class="t-chip" class:active={mode.current === "pkce"} onclick={() => (mode.current = "pkce")}>
         {t.oauth.modePkce}
       </button>
     </div>
-    {#if mode === "url" && parsed?.kind}
+    {#if mode.current === "url" && parsed?.kind}
       <span class="kind">{parsed.kind}</span>
     {/if}
   </div>
 
-  {#if mode === "url"}
+  {#if mode.current === "url"}
     <textarea
       class="t-textarea in"
-      bind:value={input}
+      bind:value={input.current}
       placeholder={t.oauth.placeholder}
       spellcheck="false"
     ></textarea>
@@ -168,7 +169,6 @@
     </div>
     <div class="actions">
       <button class="btn primary pill" onclick={generate}>{t.oauth.generate}</button>
-      <span class="t-note note">{t.oauth.pkceNote}</span>
     </div>
   {/if}
 </div>
@@ -297,8 +297,5 @@
     align-items: center;
     gap: 12px;
     margin-top: 16px;
-  }
-  .note {
-    margin: 0;
   }
 </style>

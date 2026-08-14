@@ -37,7 +37,7 @@ export const TOOLS: ToolDef[] = [
     title: t.format.title,
     desc: t.format.desc,
     group: t.groups.format,
-    keywords: "json yaml xml 변환 정리 압축 포맷 formatter convert minify pretty",
+    keywords: "json yaml xml 제이슨 변환 정리 압축 포맷 formatter convert minify pretty 트리 tree 접기 키 정렬 들여쓰기 beautify",
     component: Format,
   },
   {
@@ -46,7 +46,7 @@ export const TOOLS: ToolDef[] = [
     title: t.xpath.title,
     desc: t.xpath.desc,
     group: t.groups.format,
-    keywords: "xpath xml 쿼리 노드 선택 query selector 매칭",
+    keywords: "xpath 엑스패스 xml 쿼리 질의 노드 선택 경로 query selector 매칭",
     component: Xpath,
   },
   {
@@ -55,7 +55,7 @@ export const TOOLS: ToolDef[] = [
     title: t.color.title,
     desc: t.color.desc,
     group: t.groups.format,
-    keywords: "색 컬러 color hex rgb hsl oklch 변환",
+    keywords: "색 색상 색깔 컬러 color hex rgb rgba hsl oklch 변환 팔레트",
     component: Color,
   },
   {
@@ -64,7 +64,7 @@ export const TOOLS: ToolDef[] = [
     title: t.encode.title,
     desc: t.encode.desc,
     group: t.groups.sec,
-    keywords: "base64 url 인코딩 디코딩 encode decode percent 퍼센트",
+    keywords: "base64 베이스64 url 인코딩 디코딩 암호화 복호화 encode decode percent 퍼센트 이스케이프",
     component: Encode,
   },
   {
@@ -73,7 +73,7 @@ export const TOOLS: ToolDef[] = [
     title: t.jwt.title,
     desc: t.jwt.desc,
     group: t.groups.sec,
-    keywords: "jwt 토큰 token 디코드 decode 서명 검증 verify",
+    keywords: "jwt 토큰 token 디코드 decode 서명 검증 verify 클레임 claim bearer 만료 인증",
     component: Jwt,
   },
   {
@@ -82,7 +82,7 @@ export const TOOLS: ToolDef[] = [
     title: t.oauth.title,
     desc: t.oauth.desc,
     group: t.groups.sec,
-    keywords: "oauth oidc 인가 authorize pkce state nonce 콜백 callback redirect openid",
+    keywords: "oauth oidc 인가 인증 로그인 authorize pkce state nonce 콜백 callback redirect openid",
     component: OAuthTool,
   },
   {
@@ -91,7 +91,7 @@ export const TOOLS: ToolDef[] = [
     title: t.saml.title,
     desc: t.saml.desc,
     group: t.groups.sec,
-    keywords: "saml sso 싱글사인온 assertion authnrequest response 디코드 idp sp",
+    keywords: "saml sso 싱글사인온 인증 로그인 assertion authnrequest response 디코드 idp sp",
     component: Saml,
   },
   {
@@ -100,7 +100,7 @@ export const TOOLS: ToolDef[] = [
     title: t.cookie.title,
     desc: t.cookie.desc,
     group: t.groups.sec,
-    keywords: "쿠키 cookie set-cookie samesite secure httponly 헤더 세션 분석",
+    keywords: "쿠키 cookie set-cookie samesite secure httponly 헤더 세션 도메인 만료 분석",
     component: Cookie,
   },
   {
@@ -109,7 +109,7 @@ export const TOOLS: ToolDef[] = [
     title: t.hash.title,
     desc: t.hash.desc,
     group: t.groups.sec,
-    keywords: "해시 hash md5 sha 체크섬 checksum digest 파일",
+    keywords: "해시 hash md5 sha sha256 체크섬 checksum digest 지문 무결성 암호화 파일",
     component: Hash,
   },
   {
@@ -118,7 +118,7 @@ export const TOOLS: ToolDef[] = [
     title: t.uuid.title,
     desc: t.uuid.desc,
     group: t.groups.sec,
-    keywords: "uuid ulid guid 아이디 식별자 생성 generate",
+    keywords: "uuid 유아이디 ulid guid 아이디 식별자 랜덤 무작위 생성 generate",
     component: Uuid,
   },
   {
@@ -127,7 +127,7 @@ export const TOOLS: ToolDef[] = [
     title: t.qr.title,
     desc: t.qr.desc,
     group: t.groups.sec,
-    keywords: "qr 큐알 코드 생성 스캔 wifi 와이파이 barcode",
+    keywords: "qr 큐알 큐아르 코드 생성 스캔 스캐너 카메라 wifi 와이파이 barcode",
     component: Qr,
   },
   {
@@ -136,7 +136,7 @@ export const TOOLS: ToolDef[] = [
     title: t.time.title,
     desc: t.time.desc,
     group: t.groups.time,
-    keywords: "unix 타임스탬프 timestamp epoch 시간 날짜 변환 iso",
+    keywords: "unix 유닉스 타임스탬프 timestamp epoch 에포크 시간 시각 날짜 변환 iso utc",
     component: Timestamp,
   },
   {
@@ -145,7 +145,7 @@ export const TOOLS: ToolDef[] = [
     title: t.cron.title,
     desc: t.cron.desc,
     group: t.groups.time,
-    keywords: "cron 크론 스케줄 schedule 표현식",
+    keywords: "cron 크론 크론탭 crontab 스케줄 schedule 예약 주기 반복 표현식",
     component: CronTool,
   },
   {
@@ -154,7 +154,7 @@ export const TOOLS: ToolDef[] = [
     title: t.diff.title,
     desc: t.diff.desc,
     group: t.groups.text,
-    keywords: "diff 비교 차이 compare 텍스트",
+    keywords: "diff 디프 비교 차이 변경점 compare 텍스트 나란히 줄 단위",
     component: Diff,
   },
   {
@@ -163,7 +163,7 @@ export const TOOLS: ToolDef[] = [
     title: t.regex.title,
     desc: t.regex.desc,
     group: t.groups.text,
-    keywords: "정규식 regex regexp 패턴 매칭 test",
+    keywords: "정규식 정규표현식 표현식 regex regexp 패턴 매칭 검색 test",
     component: Regex,
   },
   {
@@ -172,7 +172,7 @@ export const TOOLS: ToolDef[] = [
     title: t.chars.title,
     desc: t.chars.desc,
     group: t.groups.text,
-    keywords: "글자수 바이트 자소서 단어 count byte characters",
+    keywords: "글자수 글자 수 세기 길이 바이트 자소서 단어 공백 count byte characters length",
     component: Chars,
   },
 ];

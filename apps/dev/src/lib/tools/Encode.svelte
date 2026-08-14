@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import Icon from "../Icon.svelte";
   import CopyButton from "../CopyButton.svelte";
 
@@ -12,9 +13,9 @@
     { id: "url", label: t.encode.modeUrl },
   ];
 
-  let mode = $state<Mode>("base64");
-  let dir = $state<Dir>("encode");
-  let input = $state("");
+  const mode = persisted<Mode>("encode.mode", "base64");
+  const dir = persisted<Dir>("encode.dir", "encode");
+  const input = persisted("encode.input", "");
 
   function b64encode(s: string, urlSafe: boolean): string {
     const bytes = new TextEncoder().encode(s);
@@ -42,7 +43,7 @@
 
   const result = $derived.by(() => {
     try {
-      return { text: run(input, mode, dir), error: null as string | null };
+      return { text: run(input.current, mode.current, dir.current), error: null as string | null };
     } catch {
       return { text: "", error: t.encode.invalid };
     }
@@ -50,8 +51,8 @@
 
   function swap() {
     if (!result.text) return;
-    input = result.text;
-    dir = dir === "encode" ? "decode" : "encode";
+    input.current = result.text;
+    dir.current = dir.current === "encode" ? "decode" : "encode";
   }
 </script>
 
@@ -61,9 +62,9 @@
       {#each MODES as m (m.id)}
         <button
           class="t-chip"
-          class:active={mode === m.id}
-          aria-pressed={mode === m.id}
-          onclick={() => (mode = m.id)}
+          class:active={mode.current === m.id}
+          aria-pressed={mode.current === m.id}
+          onclick={() => (mode.current = m.id)}
         >
           {m.label}
         </button>
@@ -72,17 +73,17 @@
     <div class="t-chiprow" role="group">
       <button
         class="t-chip"
-        class:active={dir === "encode"}
-        aria-pressed={dir === "encode"}
-        onclick={() => (dir = "encode")}
+        class:active={dir.current === "encode"}
+        aria-pressed={dir.current === "encode"}
+        onclick={() => (dir.current = "encode")}
       >
         {t.common.encode}
       </button>
       <button
         class="t-chip"
-        class:active={dir === "decode"}
-        aria-pressed={dir === "decode"}
-        onclick={() => (dir = "decode")}
+        class:active={dir.current === "decode"}
+        aria-pressed={dir.current === "decode"}
+        onclick={() => (dir.current = "decode")}
       >
         {t.common.decode}
       </button>
@@ -96,7 +97,7 @@
   <div class="t-panes">
     <div class="t-pane">
       <div class="t-pane-head"><span class="t-label">{t.common.input}</span></div>
-      <textarea class="t-textarea" bind:value={input} spellcheck="false"></textarea>
+      <textarea class="t-textarea" bind:value={input.current} spellcheck="false"></textarea>
     </div>
     <div class="t-pane">
       <div class="t-pane-head">
@@ -107,7 +108,7 @@
     </div>
   </div>
 
-  {#if result.error && input}
+  {#if result.error && input.current}
     <p class="t-error">{result.error}</p>
   {/if}
 </div>

@@ -3,13 +3,14 @@
   import "cronstrue/locales/ko";
   import { Cron } from "croner";
   import { t, fmtDateTime, fmtRelative } from "../i18n";
+  import { persisted } from "../persist.svelte";
 
   const PRESETS = ["* * * * *", "0 * * * *", "0 0 * * *", "0 9 * * 1-5"];
 
-  let input = $state("0 9 * * 1-5");
+  const input = persisted("cron.input", "0 9 * * 1-5");
 
   const result = $derived.by(() => {
-    const expr = input.trim();
+    const expr = input.current.trim();
     if (!expr) return null;
     try {
       const desc = cronstrue.toString(expr, { locale: "ko", use24HourTimeFormat: true });
@@ -27,7 +28,7 @@
     <input
       class="expr"
       type="text"
-      bind:value={input}
+      bind:value={input.current}
       placeholder={t.cron.placeholder}
       spellcheck="false"
       aria-label={t.cron.title}
@@ -36,8 +37,8 @@
       {#each PRESETS as preset (preset)}
         <button
           class="t-chip mono"
-          class:active={input.trim() === preset}
-          onclick={() => (input = preset)}
+          class:active={input.current.trim() === preset}
+          onclick={() => (input.current = preset)}
         >
           {preset}
         </button>

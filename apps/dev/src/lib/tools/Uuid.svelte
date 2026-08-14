@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from "../i18n";
+  import { persisted } from "../persist.svelte";
   import Icon from "../Icon.svelte";
   import CopyButton from "../CopyButton.svelte";
 
@@ -11,8 +12,8 @@
   ];
   const COUNTS = [1, 5, 10, 50];
 
-  let kind = $state<Kind>("v4");
-  let count = $state(5);
+  const kind = persisted<Kind>("uuid.kind", "v4");
+  const count = persisted("uuid.count", 5);
   let items = $state<string[]>([]);
 
   function uuidv7(): string {
@@ -58,13 +59,14 @@
   }
 
   function generate() {
-    const make = kind === "v4" ? () => crypto.randomUUID() : kind === "v7" ? uuidv7 : ulid;
-    items = Array.from({ length: count }, make);
+    const make =
+      kind.current === "v4" ? () => crypto.randomUUID() : kind.current === "v7" ? uuidv7 : ulid;
+    items = Array.from({ length: count.current }, make);
   }
 
   $effect(() => {
-    void kind;
-    void count;
+    void kind.current;
+    void count.current;
     generate();
   });
 
@@ -77,16 +79,16 @@
       {#each KINDS as k (k.id)}
         <button
           class="t-chip"
-          class:active={kind === k.id}
-          aria-pressed={kind === k.id}
-          onclick={() => (kind = k.id)}
+          class:active={kind.current === k.id}
+          aria-pressed={kind.current === k.id}
+          onclick={() => (kind.current = k.id)}
         >
           {k.label}
         </button>
       {/each}
     </div>
     <label class="t-label" for="uuid-count">{t.uuid.count}</label>
-    <select id="uuid-count" class="t-select" bind:value={count}>
+    <select id="uuid-count" class="t-select" bind:value={count.current}>
       {#each COUNTS as n (n)}
         <option value={n}>{n}</option>
       {/each}

@@ -6,7 +6,6 @@ export const t = {
   brandName: "local-tools",
   appName: "DEV",
   home: "홈",
-  privacyNote: "입력한 내용은 브라우저 밖으로 나가지 않아요",
 
   theme: {
     label: "테마",
@@ -48,7 +47,18 @@ export const t = {
     indent2: "2칸",
     indent4: "4칸",
     minify: "압축",
-    xmlLossy: "XML 변환은 속성·순서 표현이 형식마다 달라 결과가 조금 다를 수 있어요",
+    sortKeys: "키 정렬",
+    viewText: "텍스트",
+    viewTree: "트리",
+    treeSearch: "트리에서 찾기",
+    treeNoMatch: "일치 없음",
+    treeMatches: (n: number) => `${n}개 일치`,
+    treeCapped: "결과가 많아 일부만 표시돼요",
+    treeOnlyJson: "트리는 객체·배열일 때 보여요",
+    expand: "펴기",
+    collapse: "접기",
+    copyPath: "경로 복사",
+    more: (n: number) => `${n.toLocaleString("ko-KR")}개 더 보기`,
   },
 
   xpath: {
@@ -75,7 +85,10 @@ export const t = {
     ignoreWs: "공백 무시",
     same: "차이 없음",
     counts: (added: number, removed: number) => `+${added}줄 · −${removed}줄`,
-    hint: "왼쪽에 원본, 오른쪽에 바뀐 글을 붙여넣으면 바로 비교돼요",
+    viewSplit: "나란히",
+    viewInline: "한 줄로",
+    wrap: "줄바꿈",
+    capped: (n: number) => `${n.toLocaleString("ko-KR")}줄까지만 표시돼요`,
   },
 
   encode: {
@@ -97,7 +110,6 @@ export const t = {
     lines: "줄",
     utf8: "UTF-8 바이트",
     twoByte: "2바이트 기준",
-    twoByteNote: "2바이트 기준: 한글·전각 문자 2byte, 영문·숫자 1byte — 취업 사이트가 쓰는 계산식. UTF-8은 한글 한 글자가 3byte.",
   },
 
   jwt: {
@@ -116,7 +128,6 @@ export const t = {
     verifyOk: "서명 일치",
     verifyFail: "서명 불일치",
     verifyUnsupported: (alg: string) => `${alg} 서명은 여기서 확인할 수 없어요 (HS256·384·512만)`,
-    secretNote: "비밀키도 브라우저 밖으로 나가지 않아요",
   },
 
   cookie: {
@@ -186,7 +197,6 @@ export const t = {
       plainMethod: "code_challenge_method=plain — S256을 권장해요",
     },
     generate: "새로 생성",
-    pkceNote: "crypto.getRandomValues로 생성돼요 — 브라우저 밖으로 나가지 않아요",
   },
 
   saml: {
