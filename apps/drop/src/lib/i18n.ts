@@ -81,6 +81,16 @@ export const t = {
     drop: "파일을 끌어다 놓거나 클릭해서 선택",
     sending: "보내는 중",
     receiving: "받는 중",
+    waiting: "수락 대기",
+    accept: "받기",
+    decline: "거절",
+    /**
+     * 조건부 배지 — 디스크에 바로 못 쓸 때만 뜬다. 자세한 사정은 title로.
+     * 사정은 두 가지다(브라우저가 못 묻거나, 사용자가 위치 고르기를 취소했거나) —
+     * 문구가 둘 다에 참이어야 하므로 "이 브라우저는…"으로 못 박지 않는다.
+     */
+    memBadge: "메모리에 담김",
+    memNote: "저장 위치를 정하지 못해 메모리에 담아요 — 큰 파일은 탭이 멈출 수 있어요",
     done: "완료",
     error: "중단됨",
     cancelled: "취소됨",
@@ -97,6 +107,11 @@ export const t = {
     textLabel: "텍스트",
   },
 } as const;
+
+/** 상대가 보내겠다고 알려 온 묶음 한 줄 — "파일 3개 · 1.2 GB". */
+export function formatOffer(count: number, bytes: number): string {
+  return `파일 ${count}개 · ${formatBytes(bytes)}`;
+}
 
 /** 사람 읽는 용량 표기. */
 export function formatBytes(n: number): string {

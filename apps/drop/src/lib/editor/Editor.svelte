@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { t, formatBytes, formatEta, formatRate } from "../i18n";
+  import { t, formatBytes, formatEta, formatOffer, formatRate } from "../i18n";
+  import { canStreamToDisk } from "../rtc/sink";
   import { drop } from "./state.svelte";
   import CopyButton from "../CopyButton.svelte";
   import Icon from "../Icon.svelte";
@@ -71,11 +72,16 @@
         ? t.transfer.cancelled
         : item.status === "error"
           ? t.transfer.error
-          : item.stalled
-            ? t.transfer.stalled
-            : item.dir === "out"
-              ? t.transfer.sending
-              : t.transfer.receiving;
+          : item.status === "waiting"
+            ? t.transfer.waiting
+            : item.stalled
+              ? t.transfer.stalled
+              : item.dir === "out"
+                ? t.transfer.sending
+                : t.transfer.receiving;
+
+  // 저장 위치를 물을 수 없는 브라우저에서만 뜨는 경고 — 상시 노출이 아니다.
+  const noDisk = !canStreamToDisk();
 
   /** 남은 시간 — 속도가 0(정체·시작 직후)이면 아직 말할 수 없다. */
   const etaText = (rate: number, left: number) => (rate > 0 ? formatEta(left / rate) : "");
@@ -101,7 +107,9 @@
   const totalRate = $derived(
     files.reduce((s, x) => s + (x.status === "active" ? x.rate : 0), 0),
   );
-  const finishedCount = $derived(drop.transfers.filter((x) => x.status !== "active").length);
+  const finishedCount = $derived(
+    drop.transfers.filter((x) => x.status !== "active" && x.status !== "waiting").length,
+  );
 
   const summaryText = $derived.by(() => {
     const parts = [
@@ -285,8 +293,34 @@
     <div class="session">
       <div class="session-head">
         <span class="chip">{t.conn.connected}</span>
-        <button class="btn pill small" onclick={restart}>{t.common.back}</button>
+        <!-- 디스크로 흘려보내지 못하고 메모리에 담는 중일 때만 -->
+        {#if drop.memoryFallback}
+          <span class="badge" title={t.transfer.memNote}>{t.transfer.memBadge}</span>
+        {/if}
+        <button class="btn pill small back" onclick={restart}>{t.common.back}</button>
       </div>
+
+      {#if drop.incoming}
+        <div class="offer">
+          <span class="offer-line">
+            {formatOffer(
+              drop.incoming.files.length,
+              drop.incoming.files.reduce((s, f) => s + f.size, 0),
+            )}
+          </span>
+          {#if noDisk}
+            <span class="badge" title={t.transfer.memNote}>{t.transfer.memBadge}</span>
+          {/if}
+          <div class="offer-actions">
+            <button class="btn primary pill small" onclick={() => drop.acceptIncoming()}>
+              {t.transfer.accept}
+            </button>
+            <button class="btn pill small" onclick={() => drop.declineIncoming()}>
+              {t.transfer.decline}
+            </button>
+          </div>
+        </div>
+      {/if}
 
       <button
         class="dropzone"
@@ -369,7 +403,7 @@
                     <progress max={item.size} value={item.done}></progress>
                   {/if}
                 </div>
-                {#if item.status === "active"}
+                {#if item.status === "active" || item.status === "waiting"}
                   <button
                     class="save icon-btn"
                     title={t.transfer.cancel}
@@ -607,7 +641,39 @@
   .session-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: var(--space-sm);
+  }
+  .back {
+    margin-left: auto;
+  }
+  /* 조건이 참일 때만 나타나는 경고 배지 — 레이아웃을 밀지 않게 한 줄에 얹는다 */
+  .badge {
+    flex: none;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    color: var(--danger);
+    background: color-mix(in oklab, var(--danger) 10%, transparent);
+    cursor: help;
+  }
+  .offer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 10px 14px;
+    background: var(--accent-weak);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+  }
+  .offer-line {
+    font-size: var(--text-base);
+    font-weight: 600;
+  }
+  .offer-actions {
+    margin-left: auto;
+    display: flex;
+    gap: var(--space-sm);
   }
   .chip {
     padding: 3px 11px;

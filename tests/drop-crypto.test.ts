@@ -6,6 +6,9 @@
 //    어긋나면 상호운용이 깨지고, 더 나쁘게는 조용히 약해진다. 그래서 정답은 우리가
 //    계산한 값이 아니라 RFC 9382 Appendix B의 테스트 벡터다.
 //  · 시그널 코덱이 틀리면 SDP가 조용히 망가져 연결이 안 된다(원인을 화면에서 볼 수 없다).
+//  · 수신 경로가 틀리면 상대가 보낸 바이트가 묻지도 않고 디스크에 앉는다. 그래서
+//    "수락 전에는 한 바이트도 쓰지 않는다"와 "상대가 준 파일 이름을 그대로 믿지 않는다"도
+//    여기서 못 박는다(tests/는 앱마다 한 파일이라 같은 자리에 둔다).
 //
 // 벡터 출처: RFC 9382 §4(P-256용 M·N), Appendix B(P256-SHA256-HKDF-HMAC 4개 벡터).
 
@@ -22,6 +25,14 @@ import {
   runGuestSpake,
 } from "../apps/drop/src/lib/rtc/spake2";
 import { encodeSignal, decodeSignal } from "../apps/drop/src/lib/rtc/signal";
+import {
+  FlowGate,
+  Receiver,
+  type FileMeta,
+  type FileSink,
+  type ReceiverEvents,
+} from "../apps/drop/src/lib/rtc/transfer";
+import { safeName } from "../apps/drop/src/lib/rtc/sink";
 
 // ── 도우미 ──────────────────────────────────────────────────────────
 
@@ -441,9 +452,6 @@ describe("시그널 코덱 — SDP ↔ 한 줄 문자열", () => {
     await expect(decodeSignal(code.slice(0, Math.floor(code.length / 2)))).rejects.toThrow();
   });
 
-  // 주의: deflate-raw에는 체크섬이 없다(gzip·zlib과 다르다). 한 글자 오타의 대부분은
-  // 예외 없이 "다른 SDP"로 풀린다 — 실측 6714/11025. 그래서 여기서 못 박을 수 있는 것은
-  // "원본이 나오지 않는다"까지고, "반드시 거부한다"는 지금 구조로는 참이 아니다.
   it("가운데 한 글자가 바뀌면 원본과 같은 SDP가 나오지 않는다", async () => {
     const code = await encodeSignal(SDP);
     const i = Math.floor(code.length / 2);
@@ -456,5 +464,496 @@ describe("시그널 코덱 — SDP ↔ 한 줄 문자열", () => {
       out = null; // 거부도 정답이다
     }
     expect(out).not.toBe(SDP);
+  });
+});
+
+// ── 시그널 코덱의 무결성 검사 ────────────────────────────────────────
+//
+// deflate-raw에는 체크섬이 없다(gzip·zlib과 다르다). 그대로 두면 한 글자 오타의
+// 61%가 예외 없이 "다른 SDP"로 풀렸다(실측 6714/11025) — 사용자는 원인을 볼 수 없는
+// 연결 실패만 보게 된다. 그래서 압축 전 바이트의 해시 앞부분을 코드 머리에 붙인다.
+//
+// 아래 테스트가 못 박는 것: 한 글자라도 어긋난 코드는 **반드시 거부된다**.
+
+const B64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+/**
+ * base64url 한 글자를 "반드시 의미가 바뀌게" 뒤집는다.
+ * 6비트 중 최상위 비트(값 32)를 뒤집는 이유: 코드 길이가 4의 배수가 아니면 마지막
+ * 글자의 아래 비트는 버려지는 패딩이라, 그걸 건드리면 같은 바이트열이 나온다.
+ */
+const flipChar = (c: string): string => B64URL[B64URL.indexOf(c) ^ 32];
+
+describe("시그널 코덱 — 무결성", () => {
+  it("어느 자리든 한 글자만 바뀌면 거부한다 — 통과한다면 원본과 똑같을 때뿐이다", async () => {
+    const code = await encodeSignal(SDP);
+    const survived: number[] = [];
+    for (let i = 0; i < code.length; i++) {
+      const broken = code.slice(0, i) + flipChar(code[i]) + code.slice(i + 1);
+      let out: string | null = null;
+      try {
+        out = await decodeSignal(broken);
+      } catch {
+        continue; // 거부 — 원하는 결과
+      }
+      // 통과했다면 반드시 원본이어야 한다. "다른 SDP"가 조용히 나오는 일이 없다는 것이
+      // 이 검사의 전부다(고치기 전에는 61%가 여기로 빠졌다).
+      expect(out, `${i}번째 글자`).toBe(SDP);
+      survived.push(i);
+    }
+    // 살아남는 자리는 마지막 글자 하나뿐이다 — deflate 스트림 끝의 남는 비트라
+    // 풀면 같은 바이트가 나온다(그래서 해시도 같다). 그 앞은 전부 거부된다.
+    expect(survived).toEqual([code.length - 1]);
+  }, 30_000);
+
+  it("두 글자를 맞바꿔도 거부한다 (전사할 때 잘 생기는 오류)", async () => {
+    const code = await encodeSignal(SDP);
+    const i = Math.floor(code.length / 3);
+    // 서로 다른 글자를 골라 자리를 바꾼다
+    let j = i + 1;
+    while (j < code.length && code[j] === code[i]) j++;
+    const swapped =
+      code.slice(0, i) + code[j] + code.slice(i + 1, j) + code[i] + code.slice(j + 1);
+    await expect(decodeSignal(swapped)).rejects.toThrow();
+  });
+
+  it("헤더 없는 옛 형식(맨 deflate-raw)은 조용히 실패하지 않고 거부한다", async () => {
+    const raw = new Uint8Array(
+      await new Response(
+        new Blob([new TextEncoder().encode(SDP)])
+          .stream()
+          .pipeThrough(new CompressionStream("deflate-raw")),
+      ).arrayBuffer(),
+    );
+    let bin = "";
+    for (const b of raw) bin += String.fromCharCode(b);
+    const old = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    await expect(decodeSignal(old)).rejects.toThrow();
+  });
+
+  it("검사값만 고쳐 앞뒤를 맞춰 놓아도 거부한다", async () => {
+    const code = await encodeSignal(SDP);
+    // 머리 네 글자(버전+검사값 앞부분)를 통째로 다른 값으로 바꾼다
+    const broken = flipChar(code[0]) + flipChar(code[1]) + code.slice(2);
+    await expect(decodeSignal(broken)).rejects.toThrow();
+  });
+
+  it("무결성 헤더가 코드를 여덟 자 넘게 불리지는 않는다 (QR 한 장에 그대로 남는다)", async () => {
+    const withCheck = (await encodeSignal(SDP)).length;
+    // 같은 SDP를 헤더 없이 압축했을 때의 길이
+    const raw = new Uint8Array(
+      await new Response(
+        new Blob([new TextEncoder().encode(SDP)])
+          .stream()
+          .pipeThrough(new CompressionStream("deflate-raw")),
+      ).arrayBuffer(),
+    );
+    const bare = Math.ceil((raw.length * 4) / 3);
+    expect(withCheck - bare).toBeLessThanOrEqual(8);
+  });
+
+  it("무결성 검사가 붙어도 왕복은 그대로다", async () => {
+    for (const s of ["", "v", SDP, "한글 🙂"]) {
+      expect(await decodeSignal(await encodeSignal(s))).toBe(s);
+    }
+  });
+});
+
+// ── 수신 경로 ────────────────────────────────────────────────────────
+//
+// 받는 쪽은 상대가 보낸 바이트를 디스크에 쓴다. 그러니 여기서 지켜야 하는 것은
+// 암호만큼이나 분명하다:
+//  · 사용자가 "받기"를 누르기 전에는 어떤 싱크도 열리지 않는다.
+//  · 취소·끊김이면 쓰다 만 파일을 남기지 않는다.
+//  · 디스크가 밀리면 상대를 세운다(큐에 쌓으면 메모리로 되돌아간다).
+//  · 파일 이름은 상대가 준 문자열이다 — 경로로 읽히지 않게 다듬는다.
+//
+// 실제 File System Access는 node에서 돌지 않으므로 싱크를 가짜로 끼운다.
+// 디스크에 정말 쓰이는지는 브라우저에서 확인할 몫이고, 여기서 재는 것은 프로토콜이다.
+
+/** 호출 기록을 남기는 가짜 싱크. */
+function fakeSink() {
+  const writes: number[] = [];
+  let closed = false;
+  let aborted = false;
+  let gate: (() => void) | null = null;
+  const sink: FileSink = {
+    async write(chunk) {
+      if (gate) await new Promise<void>((r) => (gate = r)); // 막아 둔 동안 대기
+      writes.push(chunk.byteLength);
+    },
+    async close() {
+      closed = true;
+      return null;
+    },
+    async abort() {
+      aborted = true;
+    },
+  };
+  return {
+    sink,
+    writes,
+    get closed() {
+      return closed;
+    },
+    get aborted() {
+      return aborted;
+    },
+    /** 디스크가 느린 상황을 만든다 */
+    block() {
+      gate = () => {};
+    },
+    release() {
+      const g = gate;
+      gate = null;
+      g?.();
+    },
+    get total() {
+      return writes.reduce((a, b) => a + b, 0);
+    },
+  };
+}
+
+interface Log {
+  offers: string[];
+  verdicts: { batch: string; ok: boolean }[];
+  withdrawn: string[];
+  started: string[];
+  done: { id: string; blob: Blob | null }[];
+  cancelled: string[];
+  errors: string[];
+  congest: boolean[];
+  flow: boolean[];
+  texts: string[];
+  progress: number[];
+}
+
+function harness(opts: { accept?: boolean } = {}) {
+  const log: Log = {
+    offers: [],
+    verdicts: [],
+    withdrawn: [],
+    started: [],
+    done: [],
+    cancelled: [],
+    errors: [],
+    congest: [],
+    flow: [],
+    texts: [],
+    progress: [],
+  };
+  const sinks: ReturnType<typeof fakeSink>[] = [];
+  const events: ReceiverEvents = {
+    onOffer: (offer) => log.offers.push(offer.batch),
+    onVerdict: (batch, ok) => log.verdicts.push({ batch, ok }),
+    onWithdraw: (batch) => log.withdrawn.push(batch),
+    onStart: (meta) => log.started.push(meta.id),
+    onProgress: (_id, written) => log.progress.push(written),
+    onDone: (id, blob) => log.done.push({ id, blob }),
+    onCancel: (id) => log.cancelled.push(id),
+    onError: (id) => log.errors.push(id),
+    onCongest: (paused) => log.congest.push(paused),
+    onFlow: (paused) => log.flow.push(paused),
+    onText: (body) => log.texts.push(body),
+  };
+  const rx = new Receiver(events);
+  const factory = async () => {
+    const s = fakeSink();
+    sinks.push(s);
+    return s.sink;
+  };
+  if (opts.accept !== false) rx.accept("batch-1", factory);
+  return { rx, log, sinks, factory };
+}
+
+const META: FileMeta = { id: "f1", name: "photo.jpg", size: 300, mime: "image/jpeg" };
+
+const offerFrame = JSON.stringify({ v: 1, t: "offer", batch: "batch-1", files: [META] });
+const fileFrame = JSON.stringify({ v: 1, t: "file", batch: "batch-1", ...META });
+const eofFrame = JSON.stringify({ v: 1, t: "eof", id: "f1" });
+const chunk = (n: number) => new ArrayBuffer(n);
+
+describe("수신 — 수락 전에는 한 바이트도 저장하지 않는다", () => {
+  it("묶음 알림은 화면으로 올라가고, 그것만으로는 싱크가 열리지 않는다", async () => {
+    const { rx, log, sinks } = harness({ accept: false });
+    rx.handle(offerFrame);
+    await rx.idle();
+    expect(log.offers).toEqual(["batch-1"]);
+    expect(sinks.length).toBe(0);
+  });
+
+  it("수락하지 않은 묶음의 파일·청크는 전부 버려진다", async () => {
+    const { rx, log, sinks } = harness({ accept: false });
+    rx.handle(offerFrame);
+    rx.handle(fileFrame);
+    rx.handle(chunk(100));
+    rx.handle(chunk(200));
+    rx.handle(eofFrame);
+    await rx.idle();
+    expect(sinks.length).toBe(0);
+    expect(log.started).toEqual([]);
+    expect(log.done).toEqual([]);
+  });
+
+  it("수락한 묶음이라도 다른 묶음 이름표를 단 파일은 받지 않는다", async () => {
+    const { rx, sinks } = harness();
+    rx.handle(JSON.stringify({ v: 1, t: "file", batch: "batch-2", ...META }));
+    rx.handle(chunk(100));
+    await rx.idle();
+    expect(sinks.length).toBe(0);
+  });
+
+  it("수락·거절은 보내는 쪽으로 그대로 올라간다 (거절이 조용히 묻히지 않는다)", async () => {
+    const { rx, log } = harness();
+    rx.handle(JSON.stringify({ v: 1, t: "accept", batch: "b1" }));
+    rx.handle(JSON.stringify({ v: 1, t: "decline", batch: "b2" }));
+    await rx.idle();
+    expect(log.verdicts).toEqual([
+      { batch: "b1", ok: true },
+      { batch: "b2", ok: false },
+    ]);
+  });
+
+  it("보내는 쪽이 묶음을 거두면 물어보던 것이 내려간다", async () => {
+    const { rx, log } = harness({ accept: false });
+    rx.handle(offerFrame);
+    rx.handle(JSON.stringify({ v: 1, t: "withdraw", batch: "batch-1" }));
+    await rx.idle();
+    expect(log.withdrawn).toEqual(["batch-1"]);
+  });
+
+  it("거둬들인 묶음은 뒤늦게 파일이 와도 저장하지 않는다", async () => {
+    const { rx, sinks } = harness(); // 이미 수락한 묶음
+    rx.handle(JSON.stringify({ v: 1, t: "withdraw", batch: "batch-1" }));
+    rx.handle(fileFrame);
+    rx.handle(chunk(100));
+    await rx.idle();
+    expect(sinks.length).toBe(0);
+  });
+
+  it("수락한 뒤에는 청크가 도착 순서대로 싱크에 쓰인다", async () => {
+    const { rx, log, sinks } = harness();
+    rx.handle(fileFrame);
+    rx.handle(chunk(100));
+    rx.handle(chunk(150));
+    rx.handle(chunk(50));
+    rx.handle(eofFrame);
+    await rx.idle();
+    expect(sinks.length).toBe(1);
+    expect(sinks[0].writes).toEqual([100, 150, 50]);
+    expect(sinks[0].closed).toBe(true);
+    expect(log.done).toEqual([{ id: "f1", blob: null }]);
+  });
+
+  it("진행률은 디스크에 쓰인 만큼만 센다 (도착한 만큼이 아니라)", async () => {
+    const { rx, log, sinks } = harness();
+    rx.handle(fileFrame);
+    sinks; // 싱크는 첫 청크 전에 열린다
+    rx.handle(chunk(100));
+    rx.handle(chunk(150));
+    await rx.idle();
+    expect(log.progress).toEqual([100, 250]);
+  });
+});
+
+describe("수신 — 쓰다 만 파일을 남기지 않는다", () => {
+  it("상대의 취소 프레임은 싱크를 abort한다", async () => {
+    const { rx, log, sinks } = harness();
+    rx.handle(fileFrame);
+    rx.handle(chunk(100));
+    rx.handle(JSON.stringify({ v: 1, t: "cancel", id: "f1" }));
+    await rx.idle();
+    expect(sinks[0].aborted).toBe(true);
+    expect(sinks[0].closed).toBe(false);
+    expect(log.cancelled).toEqual(["f1"]);
+    expect(log.done).toEqual([]);
+  });
+
+  it("내 쪽에서 중단해도(discard) 싱크가 abort된다", async () => {
+    const { rx, sinks } = harness();
+    rx.handle(fileFrame);
+    rx.handle(chunk(100));
+    rx.discard("f1");
+    await rx.idle();
+    expect(sinks[0].aborted).toBe(true);
+  });
+
+  it("중단한 뒤 늦게 도착한 청크는 다음 파일에 섞이지 않는다", async () => {
+    const { rx, sinks } = harness();
+    rx.handle(fileFrame);
+    rx.handle(chunk(100));
+    rx.handle(JSON.stringify({ v: 1, t: "cancel", id: "f1" }));
+    rx.handle(chunk(999)); // 취소 뒤에 도착한 잔여 청크
+    await rx.idle();
+    rx.handle(JSON.stringify({ v: 1, t: "file", batch: "batch-1", ...META, id: "f2" }));
+    rx.handle(chunk(70));
+    rx.handle(JSON.stringify({ v: 1, t: "eof", id: "f2" }));
+    await rx.idle();
+    expect(sinks.length).toBe(2);
+    expect(sinks[1].writes).toEqual([70]);
+  });
+
+  it("eof 없이 다음 파일이 시작되면 앞 파일은 abort된다 (반쪽 파일을 남기지 않는다)", async () => {
+    const { rx, sinks } = harness();
+    rx.handle(fileFrame);
+    rx.handle(chunk(100));
+    rx.handle(JSON.stringify({ v: 1, t: "file", batch: "batch-1", ...META, id: "f2" }));
+    await rx.idle();
+    expect(sinks[0].aborted).toBe(true);
+    expect(sinks[0].closed).toBe(false);
+  });
+
+  it("연결이 끊기면(close) 열려 있던 싱크가 abort된다", async () => {
+    const { rx, sinks } = harness();
+    rx.handle(fileFrame);
+    rx.handle(chunk(100));
+    await rx.close();
+    expect(sinks[0].aborted).toBe(true);
+  });
+
+  it("싱크를 열지 못하면 오류로 알린다 — 조용히 버리지 않는다", async () => {
+    const { log } = harness();
+    const rx = new Receiver({
+      onOffer: () => {},
+      onVerdict: () => {},
+      onWithdraw: () => {},
+      onStart: () => log.started.push("x"),
+      onProgress: () => {},
+      onDone: () => {},
+      onCancel: () => {},
+      onError: (id) => log.errors.push(id),
+      onCongest: () => {},
+      onFlow: () => {},
+      onText: () => {},
+    });
+    rx.accept("batch-1", async () => {
+      throw new Error("사용자가 폴더를 지웠다");
+    });
+    rx.handle(fileFrame);
+    rx.handle(chunk(10));
+    await rx.idle();
+    expect(log.errors).toEqual(["f1"]);
+  });
+
+  it("쓰다가 디스크가 거부하면 반쪽을 지우고, 남은 청크는 다음 파일에 섞이지 않는다", async () => {
+    const { rx, log, sinks } = harness();
+    rx.handle(fileFrame);
+    await rx.idle(); // 싱크가 열릴 때까지
+    let aborted = false;
+    // 첫 청크는 받고 그 다음부터 거부한다(디스크가 차는 순간).
+    let n = 0;
+    sinks[0].sink.write = async () => {
+      if (n++ > 0) throw new Error("QuotaExceededError");
+    };
+    sinks[0].sink.abort = async () => {
+      aborted = true;
+    };
+    rx.handle(chunk(100));
+    rx.handle(chunk(100)); // 여기서 실패
+    rx.handle(chunk(100)); // 실패 뒤에 도착한 잔여 청크
+    rx.handle(eofFrame);
+    await rx.idle();
+    expect(aborted).toBe(true);
+    expect(log.errors).toEqual(["f1"]);
+    // 실패한 파일은 완료되지 않는다 — "받았다"고 말하면 안 된다.
+    expect(log.done).toEqual([]);
+    // 그리고 다음 파일은 앞 파일의 잔여와 섞이지 않는다.
+    rx.handle(JSON.stringify({ v: 1, t: "file", batch: "batch-1", ...META, id: "f2" }));
+    rx.handle(chunk(70));
+    rx.handle(JSON.stringify({ v: 1, t: "eof", id: "f2" }));
+    await rx.idle();
+    expect(sinks[1].writes).toEqual([70]);
+  });
+});
+
+describe("수신 — 디스크가 느리면 상대를 세운다", () => {
+  it("쓰기가 밀려 쌓이면 멈추라고 알리고, 빠지면 다시 보내라고 한다", async () => {
+    const { rx, log, sinks } = harness();
+    rx.handle(fileFrame);
+    await rx.idle(); // 싱크가 열릴 때까지
+    sinks[0].block();
+    // 8MB — 어떤 합리적인 상한을 잡아도 넘는 양
+    for (let i = 0; i < 128; i++) rx.handle(chunk(64 * 1024));
+    expect(log.congest).toEqual([true]); // 한 번만, 도착 즉시
+    sinks[0].release();
+    await rx.idle();
+    expect(log.congest).toEqual([true, false]);
+    expect(sinks[0].total).toBe(8 * 1024 * 1024);
+  });
+
+  it("한두 청크로는 상대를 세우지 않는다", async () => {
+    const { rx, log } = harness();
+    rx.handle(fileFrame);
+    rx.handle(chunk(64 * 1024));
+    rx.handle(chunk(64 * 1024));
+    await rx.idle();
+    expect(log.congest).toEqual([]);
+  });
+
+  it("상대가 보낸 흐름 제어는 게이트로 전달된다", async () => {
+    const { rx, log } = harness();
+    rx.handle(JSON.stringify({ v: 1, t: "flow", paused: true }));
+    rx.handle(JSON.stringify({ v: 1, t: "flow", paused: false }));
+    await rx.idle();
+    expect(log.flow).toEqual([true, false]);
+  });
+});
+
+describe("보내는 쪽 게이트 — 상대가 멈추라면 멈춘다", () => {
+  it("멈춘 동안 wait은 풀리지 않고, 재개하면 풀린다", async () => {
+    const gate = new FlowGate();
+    expect(gate.paused).toBe(false);
+    gate.pause();
+    expect(gate.paused).toBe(true);
+    let resumed = false;
+    const waiting = gate.wait().then(() => (resumed = true));
+    await Promise.resolve();
+    expect(resumed).toBe(false);
+    gate.resume();
+    await waiting;
+    expect(resumed).toBe(true);
+    expect(gate.paused).toBe(false);
+  });
+
+  it("중단 신호가 오면 멈춘 채로 기다리지 않는다 (취소가 즉시 먹힌다)", async () => {
+    const gate = new FlowGate();
+    gate.pause();
+    const ctl = new AbortController();
+    const waiting = gate.wait(ctl.signal);
+    ctl.abort();
+    await expect(waiting).resolves.toBeUndefined();
+  });
+});
+
+describe("받은 파일 이름 — 상대가 준 문자열을 그대로 믿지 않는다", () => {
+  it("경로 구분자가 든 이름은 마지막 조각만 남는다 (디렉터리 탈출 차단)", () => {
+    expect(safeName("../../.ssh/authorized_keys")).toBe("authorized_keys");
+    expect(safeName("C:\\Windows\\System32\\drivers\\etc\\hosts")).toBe("hosts");
+    expect(safeName("/etc/passwd")).toBe("passwd");
+  });
+
+  it("'.'과 '..'만 남는 이름은 쓸 수 있는 이름으로 바뀐다", () => {
+    for (const raw of ["..", ".", "../", "/", ""]) {
+      const name = safeName(raw);
+      expect(name.length).toBeGreaterThan(0);
+      expect(name).not.toBe(".");
+      expect(name).not.toBe("..");
+    }
+  });
+
+  it("제어문자와 파일시스템 예약문자는 지운다", () => {
+    expect(safeName("a\u0000b\nc")).toBe("a_b_c");
+    expect(safeName('re<p>o:rt"?*|.txt')).toBe("re_p_o_rt____.txt");
+  });
+
+  it("멀쩡한 이름은 한 글자도 건드리지 않는다 (한글·공백·점 포함)", () => {
+    for (const name of ["photo.jpg", "회의록 2026-08.pdf", "v1.2.3.tar.gz", ".gitignore"]) {
+      expect(safeName(name)).toBe(name);
+    }
+  });
+
+  it("아주 긴 이름은 잘라 낸다 (파일시스템 상한)", () => {
+    const long = "가".repeat(400) + ".txt";
+    expect(safeName(long).length).toBeLessThanOrEqual(200);
   });
 });
