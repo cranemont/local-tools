@@ -29,6 +29,10 @@
     "dev:lab": "pnpm --filter @local-tools/lab dev",
     "preview:lab": "pnpm --filter @local-tools/lab preview",
     "build": "pnpm -r build",
-    "check": "node scripts/check-site-assets.mjs && pnpm -r check"
+    "test": "vitest run",
+    "check": "node scripts/check-site-assets.mjs && pnpm -r check && vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }
