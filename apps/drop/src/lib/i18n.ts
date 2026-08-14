@@ -6,7 +6,6 @@ export const t = {
   brandName: "local-tools",
   appName: "드롭",
   home: "홈",
-  privacyNote: "파일은 두 기기 사이에서만 직접 이동해요 — 중간 서버가 없어요",
 
   theme: {
     label: "테마",
@@ -23,13 +22,10 @@ export const t = {
 
   intro: {
     title: "두 기기를 직접 연결해 파일을 보내요",
-    sub: "연결 코드를 주고받으면 파일이 서버 없이 기기 간에 바로 이동해요",
     create: "연결 만들기",
     createDesc: "먼저 여는 쪽 — 코드를 만들어 상대에게 보여줘요",
     join: "연결 참여",
     joinDesc: "받은 코드를 붙여넣어 응답해요",
-    stunNote:
-      "같은 네트워크면 외부 접속이 없어요. 다른 네트워크 간에는 주소 확인용 STUN 서버(구글)에 IP만 전달돼요 — 파일은 언제나 기기 간 직접 이동",
   },
 
   host: {
@@ -52,8 +48,6 @@ export const t = {
   rz: {
     hostLabel: "① 상대 기기에서 드롭을 열고 이 코드를 입력하세요",
     hostWaiting: "상대가 코드를 입력하면 자동으로 연결돼요 · 코드는 5분간 유효",
-    relayNote:
-      "짧은 코드는 공개 릴레이가 만남만 주선해요 — 연결 정보는 암호화되고 파일은 기기 간 직접 이동",
     hostFailed: "짧은 코드를 쓸 수 없어요(릴레이 연결 실패) — 아래 QR·링크로 연결하세요",
     altHost: "QR·링크로도 연결할 수 있어요",
     guestLabel: "받은 코드 6자리를 입력하세요",
@@ -77,20 +71,27 @@ export const t = {
     connecting: "연결하는 중…",
     connected: "연결됨",
     failed: "연결에 실패했어요 — 두 기기를 같은 네트워크에 두고 다시 시도해 보세요",
+    timeout: "상대가 응답하지 않아요 — 코드를 새로 만들어 다시 시도해 주세요",
     closed: "연결이 끊어졌어요",
     badCode: "코드를 해석할 수 없어요 — 전체가 복사됐는지 확인해 주세요",
+    cancel: "연결 그만두기",
   },
 
   transfer: {
     drop: "파일을 끌어다 놓거나 클릭해서 선택",
-    limitNote: "받은 파일은 메모리에 모였다가 저장돼요 — 수백 MB까지가 안정적이에요",
     sending: "보내는 중",
     receiving: "받는 중",
     done: "완료",
     error: "중단됨",
+    cancelled: "취소됨",
+    stalled: "정체됨",
+    cancel: "전송 중단",
+    remain: "남음",
     save: "저장",
     dirIn: "받음",
     dirOut: "보냄",
+    total: "전체",
+    clear: "끝난 항목 비우기",
     textPlaceholder: "텍스트·링크 보내기",
     textSend: "보내기",
     textLabel: "텍스트",
@@ -103,4 +104,21 @@ export function formatBytes(n: number): string {
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
   if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/** 초당 속도. 0이면 표기하지 않는다(빈 문자열). */
+export function formatRate(bytesPerSec: number): string {
+  if (!(bytesPerSec > 0)) return "";
+  return `${formatBytes(Math.round(bytesPerSec))}/s`;
+}
+
+/** 남은 시간. 알 수 없으면 빈 문자열. */
+export function formatEta(sec: number): string {
+  if (!Number.isFinite(sec) || sec <= 0) return "";
+  // 초로 먼저 올림한 뒤 나눈다 — 분과 초를 따로 반올림하면 "1분 60초"가 나온다.
+  const total = Math.ceil(sec);
+  if (total < 60) return `${total}초`;
+  const min = Math.floor(total / 60);
+  if (min < 60) return `${min}분 ${total % 60}초`;
+  return `${Math.floor(min / 60)}시간 ${min % 60}분`;
 }

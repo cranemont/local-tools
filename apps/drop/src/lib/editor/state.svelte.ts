@@ -1,7 +1,7 @@
 import { DropPeer } from "../rtc/peer";
 import { encodeSignal, decodeSignal } from "../rtc/signal";
 import { generateCode, hostRendezvous, joinRendezvous } from "../rtc/rendezvous";
-import { Receiver, sendFile, sendText } from "../rtc/transfer";
+import { Receiver, sendCancel, sendFile, sendText } from "../rtc/transfer";
 import { downloadBlob } from "../rtc/save";
 import { t } from "../i18n";
 
@@ -14,9 +14,35 @@ export interface TransferItem {
   name: string;
   size: number;
   done: number;
-  status: "active" | "done" | "error";
+  status: "active" | "done" | "error" | "cancelled";
+  /** 최근 구간 이동평균 속도(B/s). 정체 중이면 0. */
+  rate: number;
+  /** 몇 초째 한 바이트도 안 늘었다 */
+  stalled: boolean;
   blob: Blob | null;
   body: string;
+}
+
+/** 화면 갱신 주기 — 64KB 청크마다 그리면 1GB 파일에 1만 6천 번이다. */
+const TICK_MS = 250;
+/** 이 시간 동안 진척이 없으면 정체로 본다. */
+const STALL_MS = 3000;
+/** 이동평균에서 새 표본이 갖는 몫 — 청크 단위로 재면 값이 튄다. */
+const RATE_ALPHA = 0.3;
+/** 연결이 붙기를 기다려 주는 시간. 넘으면 화면을 실패로 굳혀 탈출구를 준다. */
+const CONNECT_TIMEOUT_MS = 30_000;
+
+/** 항목별 진행 계량기. $state 밖(일반 객체)에 두어 청크마다 반응성을 건드리지 않는다. */
+interface Meter {
+  /** 콜백이 마지막으로 알려 온 값 */
+  pending: number;
+  /** 화면에 이미 반영한 값 */
+  shown: number;
+  /** 마지막 계산 시각 */
+  at: number;
+  /** 마지막으로 값이 늘어난 시각 */
+  movedAt: number;
+  rate: number;
 }
 
 class DropState {
@@ -33,18 +59,37 @@ class DropState {
   transfers = $state<TransferItem[]>([]);
 
   private peer: DropPeer | null = null;
+  private receiver: Receiver | null = null;
   private rzCancel: (() => void) | null = null;
   /** 한 채널에 파일 프레임이 섞이지 않도록 송신을 직렬화 */
   private sendChain: Promise<void> = Promise.resolve();
+  /** 보내는 중인 파일의 중단 스위치 — 취소는 여기를 끊는 것으로 시작한다 */
+  private aborts = new Map<string, AbortController>();
+  private meters = new Map<string, Meter>();
+  private ticker: number | null = null;
+  private connectTimer: number | null = null;
+  private lock: WakeLockSentinel | null = null;
+  private lockPending = false;
+
+  constructor() {
+    // 화면 잠금이 풀리며 wake lock도 함께 풀린다 — 돌아오면 다시 잡아야 한다.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && this.hasActive()) void this.acquireLock();
+    });
+  }
 
   private find(id: string): TransferItem | null {
     return this.transfers.find((x) => x.id === id) ?? null;
   }
 
+  private hasActive(): boolean {
+    return this.transfers.some((x) => x.status === "active");
+  }
+
   private makePeer(): DropPeer {
-    const receiver = new Receiver({
+    this.receiver = new Receiver({
       onStart: (meta) => {
-        this.transfers.push({
+        this.push({
           id: meta.id,
           kind: "file",
           dir: "in",
@@ -52,25 +97,31 @@ class DropState {
           size: meta.size,
           done: 0,
           status: "active",
+          rate: 0,
+          stalled: false,
           blob: null,
           body: "",
         });
       },
-      onProgress: (id, received) => {
-        const item = this.find(id);
-        if (item) item.done = received;
-      },
+      onProgress: (id, received) => this.meter(id, received),
       onDone: (id, blob) => {
         const item = this.find(id);
         if (!item) return;
         item.done = item.size;
-        item.status = "done";
         item.blob = blob;
+        this.finish(item, "done");
         // 자동 수락 — 받는 즉시 표준 다운로드로 저장
         downloadBlob(blob, item.name);
       },
+      onCancel: (id) => {
+        // 상대가 끊었다. 내가 보내던 것이면 내 루프도 멈춘다(그 루프가 되돌려 보내는
+        // 취소 프레임은 이미 정리된 상대 쪽에서 무시된다).
+        this.aborts.get(id)?.abort();
+        const item = this.find(id);
+        if (item && item.status === "active") this.finish(item, "cancelled");
+      },
       onText: (body) => {
-        this.transfers.push({
+        this.push({
           id: crypto.randomUUID(),
           kind: "text",
           dir: "in",
@@ -78,25 +129,164 @@ class DropState {
           size: 0,
           done: 0,
           status: "done",
+          rate: 0,
+          stalled: false,
           blob: null,
           body,
         });
       },
     });
+    const receiver = this.receiver;
     return new DropPeer({
       onOpen: () => {
         this.rzCancel?.();
         this.rzCancel = null;
+        this.clearConnectTimeout();
         this.joining = false;
         this.stage = "connected";
       },
       onDown: (wasConnected) => {
+        this.clearConnectTimeout();
         if (wasConnected || this.stage === "connected") this.stage = "closed";
-        else if (this.stage === "connecting") this.stage = "failed";
-        for (const item of this.transfers) if (item.status === "active") item.status = "error";
+        else if (this.stage === "connecting" || this.joining) {
+          // 응답을 올리고 기다리던 게스트는 stage가 아직 "guest"다 — 여기서 끊지 않으면
+          // 시한까지 방금 지운 뒤라 "연결하는 중…"에 갇힌다. 사유는 따로 없으니 비운다.
+          this.joining = false;
+          this.error = null;
+          this.stage = "failed";
+        }
+        for (const item of this.transfers) if (item.status === "active") this.finish(item, "error");
       },
       onMessage: (data) => receiver.handle(data),
     });
+  }
+
+  // ── 진행 계량 ────────────────────────────────────────────────
+  // 청크 콜백은 계량기에 값만 남기고, 화면에 쓰는 것은 250ms 타이머 한 곳이다.
+  // 속도·남은 시간·정체 판정이 모두 같은 자리에서 나온다.
+
+  private push(item: TransferItem): void {
+    this.transfers.push(item);
+    if (item.status === "active") {
+      const now = performance.now();
+      this.meters.set(item.id, { pending: 0, shown: 0, at: now, movedAt: now, rate: 0 });
+    }
+    this.syncActivity();
+  }
+
+  private meter(id: string, done: number): void {
+    const m = this.meters.get(id);
+    if (m) m.pending = done;
+  }
+
+  private finish(item: TransferItem, status: TransferItem["status"]): void {
+    item.status = status;
+    item.rate = 0;
+    item.stalled = false;
+    this.meters.delete(item.id);
+    this.aborts.delete(item.id);
+    this.syncActivity();
+  }
+
+  private tick(): void {
+    const now = performance.now();
+    for (const item of this.transfers) {
+      if (item.status !== "active") continue;
+      const m = this.meters.get(item.id);
+      if (!m) continue;
+      const moved = m.pending - m.shown;
+      const dt = (now - m.at) / 1000;
+      if (moved > 0 && dt > 0) {
+        const inst = moved / dt;
+        m.rate = m.rate === 0 ? inst : m.rate * (1 - RATE_ALPHA) + inst * RATE_ALPHA;
+        m.shown = m.pending;
+        m.movedAt = now;
+        item.done = m.pending;
+      }
+      m.at = now;
+      // 큐에서 순서를 기다리는 파일은 아직 한 바이트도 안 움직인 게 정상이다 —
+      // 정체 판정은 첫 바이트가 나간 뒤부터 센다.
+      if (m.pending === 0) m.movedAt = now;
+      const stalled = now - m.movedAt > STALL_MS;
+      if (stalled) m.rate = 0;
+      if (item.stalled !== stalled) item.stalled = stalled;
+      if (item.rate !== m.rate) item.rate = m.rate;
+    }
+  }
+
+  /** 전송이 도는 동안에만 타이머·화면 잠금·이탈 경고를 켠다. */
+  private syncActivity(): void {
+    const active = this.hasActive();
+    if (active && this.ticker === null) {
+      this.ticker = window.setInterval(() => this.tick(), TICK_MS);
+    } else if (!active && this.ticker !== null) {
+      window.clearInterval(this.ticker);
+      this.ticker = null;
+    }
+    if (active) {
+      void this.acquireLock();
+      window.addEventListener("beforeunload", this.onBeforeUnload);
+    } else {
+      void this.releaseLock();
+      window.removeEventListener("beforeunload", this.onBeforeUnload);
+    }
+  }
+
+  /** 탭을 닫으면 양쪽 전송이 함께 죽는다 — 문구는 브라우저가 고른다. */
+  private onBeforeUnload = (e: BeforeUnloadEvent): void => {
+    e.preventDefault();
+  };
+
+  private async acquireLock(): Promise<void> {
+    if (this.lock || this.lockPending || !navigator.wakeLock) return;
+    this.lockPending = true;
+    try {
+      const lock = await navigator.wakeLock.request("screen");
+      lock.addEventListener("release", () => {
+        if (this.lock === lock) this.lock = null;
+      });
+      this.lock = lock;
+      // 기다리는 동안 전송이 끝났으면 곧바로 놓는다.
+      if (!this.hasActive()) void this.releaseLock();
+    } catch {
+      // 정책·권한으로 거부될 수 있다. 전송은 그대로 진행한다.
+    } finally {
+      this.lockPending = false;
+    }
+  }
+
+  private async releaseLock(): Promise<void> {
+    const lock = this.lock;
+    this.lock = null;
+    try {
+      await lock?.release();
+    } catch {
+      // 이미 풀린 경우
+    }
+  }
+
+  // ── 연결 ────────────────────────────────────────────────────
+
+  /** 연결이 붙기를 기다리는 구간마다 시한을 건다. */
+  private armConnectTimeout(): void {
+    this.clearConnectTimeout();
+    this.connectTimer = window.setTimeout(() => {
+      this.connectTimer = null;
+      if (this.stage === "connected") return;
+      this.rzCancel?.();
+      this.rzCancel = null;
+      this.peer?.close();
+      this.peer = null;
+      this.joining = false;
+      this.busy = false;
+      this.error = t.conn.timeout;
+      this.stage = "failed";
+    }, CONNECT_TIMEOUT_MS);
+  }
+
+  private clearConnectTimeout(): void {
+    if (this.connectTimer !== null) window.clearTimeout(this.connectTimer);
+    this.connectTimer = null;
   }
 
   /** 호스트: 청약 생성 + 짧은 코드 랑데부 개시 */
@@ -139,10 +329,12 @@ class DropState {
         this.peer = this.makePeer();
         const answer = await this.peer.answer(offerSdp);
         this.joining = true;
+        this.armConnectTimeout();
         return answer;
       });
     } catch (e) {
       this.joining = false;
+      this.clearConnectTimeout();
       this.error = (e as Error).message === "no relay" ? t.rz.noRelay : t.rz.notFound;
       this.peer?.close();
       this.peer = null;
@@ -155,6 +347,7 @@ class DropState {
     try {
       await this.peer.accept(sdp);
       this.stage = "connecting";
+      this.armConnectTimeout();
     } catch {
       this.error = t.conn.badCode;
     }
@@ -209,12 +402,16 @@ class DropState {
     this.busy = false;
   }
 
+  // ── 전송 ────────────────────────────────────────────────────
+
   sendFiles(files: File[]): void {
     const ch = this.peer?.channel;
     if (!ch) return;
     for (const file of files) {
       const id = crypto.randomUUID();
-      this.transfers.push({
+      const ctl = new AbortController();
+      this.aborts.set(id, ctl);
+      this.push({
         id,
         kind: "file",
         dir: "out",
@@ -222,25 +419,43 @@ class DropState {
         size: file.size,
         done: 0,
         status: "active",
+        rate: 0,
+        stalled: false,
         blob: null,
         body: "",
       });
       this.sendChain = this.sendChain
-        .then(() =>
-          sendFile(ch, file, id, (sent) => {
-            const item = this.find(id);
-            if (item) item.done = sent;
-          }),
-        )
-        .then(() => {
+        .then(() => sendFile(ch, file, id, (sent) => this.meter(id, sent), ctl.signal))
+        .then((result) => {
           const item = this.find(id);
-          if (item) item.status = "done";
+          if (!item || item.status !== "active") return;
+          if (result === "done") item.done = item.size;
+          this.finish(item, result === "done" ? "done" : "cancelled");
         })
         .catch(() => {
           const item = this.find(id);
-          if (item && item.status === "active") item.status = "error";
+          if (item && item.status === "active") this.finish(item, "error");
         });
     }
+  }
+
+  /** 전송 중단 — 양쪽이 같이 정리해야 상대가 영원히 기다리지 않는다. */
+  cancelTransfer(id: string): void {
+    const item = this.find(id);
+    if (!item || item.status !== "active") return;
+    const ctl = this.aborts.get(id);
+    if (ctl) {
+      // 보내는 중 — 루프가 빠져나오며 cancel 프레임을 보낸다. 큐에서 순서를 기다리는
+      // 파일은 그 루프가 한참 뒤에 돌므로 화면은 지금 바로 바꾼다.
+      ctl.abort();
+      this.finish(item, "cancelled");
+      return;
+    }
+    // 받는 중 — 내 조각을 버리고 상대 루프를 멈춘다
+    const ch = this.peer?.channel;
+    if (ch) sendCancel(ch, id);
+    this.receiver?.discard(id);
+    this.finish(item, "cancelled");
   }
 
   sendTextMsg(body: string): void {
@@ -248,7 +463,7 @@ class DropState {
     const text = body.trim();
     if (!ch || !text) return;
     sendText(ch, text);
-    this.transfers.push({
+    this.push({
       id: crypto.randomUUID(),
       kind: "text",
       dir: "out",
@@ -256,6 +471,8 @@ class DropState {
       size: 0,
       done: 0,
       status: "done",
+      rate: 0,
+      stalled: false,
       blob: null,
       body: text,
     });
@@ -265,11 +482,21 @@ class DropState {
     if (item.blob) downloadBlob(item.blob, item.name);
   }
 
+  /** 끝난 항목만 목록에서 걷어낸다 — 받은 파일은 이미 저장된 뒤다. */
+  clearFinished(): void {
+    this.transfers = this.transfers.filter((x) => x.status === "active");
+  }
+
   reset(): void {
     this.rzCancel?.();
     this.rzCancel = null;
+    this.clearConnectTimeout();
+    for (const ctl of this.aborts.values()) ctl.abort();
+    this.aborts.clear();
+    this.meters.clear();
     this.peer?.close();
     this.peer = null;
+    this.receiver = null;
     this.sendChain = Promise.resolve();
     this.stage = "idle";
     this.myCode = "";
@@ -279,6 +506,7 @@ class DropState {
     this.error = null;
     this.busy = false;
     this.transfers = [];
+    this.syncActivity();
   }
 }
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, formatBytes } from "../i18n";
+  import { t, formatBytes, formatEta, formatRate } from "../i18n";
   import { drop } from "./state.svelte";
   import CopyButton from "../CopyButton.svelte";
   import Icon from "../Icon.svelte";
@@ -62,21 +62,66 @@
     pickFiles(e.dataTransfer?.files ?? null);
   }
 
-  const statusLabel = (item: (typeof drop.transfers)[number]) =>
+  type Item = (typeof drop.transfers)[number];
+
+  const statusLabel = (item: Item) =>
     item.status === "done"
       ? t.transfer.done
-      : item.status === "error"
-        ? t.transfer.error
-        : item.dir === "out"
-          ? t.transfer.sending
-          : t.transfer.receiving;
+      : item.status === "cancelled"
+        ? t.transfer.cancelled
+        : item.status === "error"
+          ? t.transfer.error
+          : item.stalled
+            ? t.transfer.stalled
+            : item.dir === "out"
+              ? t.transfer.sending
+              : t.transfer.receiving;
+
+  /** 남은 시간 — 속도가 0(정체·시작 직후)이면 아직 말할 수 없다. */
+  const etaText = (rate: number, left: number) => (rate > 0 ? formatEta(left / rate) : "");
+
+  function detailText(item: Item): string {
+    if (item.status !== "active") return `${formatBytes(item.size)} · ${statusLabel(item)}`;
+    const parts = [`${formatBytes(item.done)} / ${formatBytes(item.size)}`, statusLabel(item)];
+    const rate = formatRate(item.rate);
+    if (rate) parts.push(rate);
+    const eta = etaText(item.rate, item.size - item.done);
+    if (eta) parts.push(`${eta} ${t.transfer.remain}`);
+    return parts.join(" · ");
+  }
+
+  // 파일이 여러 개면 막대도 여러 개가 된다 — 묶음 상태는 한 줄로 먼저 말한다.
+  const files = $derived(drop.transfers.filter((x) => x.kind === "file"));
+  const doneCount = $derived(files.filter((x) => x.status === "done").length);
+  const activeCount = $derived(files.filter((x) => x.status === "active").length);
+  const totalSize = $derived(files.reduce((s, x) => s + x.size, 0));
+  const totalDone = $derived(
+    files.reduce((s, x) => s + (x.status === "done" ? x.size : x.done), 0),
+  );
+  const totalRate = $derived(
+    files.reduce((s, x) => s + (x.status === "active" ? x.rate : 0), 0),
+  );
+  const finishedCount = $derived(drop.transfers.filter((x) => x.status !== "active").length);
+
+  const summaryText = $derived.by(() => {
+    const parts = [
+      `${t.transfer.total} ${doneCount}/${files.length}`,
+      `${formatBytes(totalDone)} / ${formatBytes(totalSize)}`,
+    ];
+    if (activeCount) {
+      const rate = formatRate(totalRate);
+      if (rate) parts.push(rate);
+      const eta = etaText(totalRate, totalSize - totalDone);
+      if (eta) parts.push(`${eta} ${t.transfer.remain}`);
+    }
+    return parts.join(" · ");
+  });
 </script>
 
 <div class="editor">
   {#if drop.stage === "idle"}
     <div class="intro">
       <h2>{t.intro.title}</h2>
-      <p class="sub">{t.intro.sub}</p>
       <div class="roles">
         <button class="role" onclick={() => drop.startHost()}>
           <Icon name="link" size={22} />
@@ -89,7 +134,6 @@
           <span class="role-desc">{t.intro.joinDesc}</span>
         </button>
       </div>
-      <p class="note">{t.intro.stunNote}</p>
     </div>
   {:else if drop.stage === "host"}
     <div class="panel">
@@ -100,7 +144,6 @@
         {:else if drop.shortCode}
           <div class="bigcode">{drop.shortCode.slice(0, 3)}&nbsp;{drop.shortCode.slice(3)}</div>
           <p class="waiting center-text">{t.rz.hostWaiting}</p>
-          <p class="limit">{t.rz.relayNote}</p>
         {:else}
           <p class="waiting">{t.host.making}</p>
         {/if}
@@ -153,6 +196,7 @@
       {#if drop.joining}
         <div class="center">
           <p class="waiting">{t.conn.connecting}</p>
+          <button class="btn pill" onclick={restart}>{t.conn.cancel}</button>
         </div>
       {:else if !drop.myCode}
         <div class="step">
@@ -228,10 +272,13 @@
   {:else if drop.stage === "connecting"}
     <div class="center">
       <p class="waiting">{t.conn.connecting}</p>
+      <button class="btn pill" onclick={restart}>{t.conn.cancel}</button>
     </div>
   {:else if drop.stage === "failed" || drop.stage === "closed"}
     <div class="center">
-      <p class="error">{drop.stage === "failed" ? t.conn.failed : t.conn.closed}</p>
+      <p class="error">
+        {drop.stage === "failed" ? (drop.error ?? t.conn.failed) : t.conn.closed}
+      </p>
       <button class="btn primary pill" onclick={restart}>{t.common.back}</button>
     </div>
   {:else}
@@ -241,30 +288,27 @@
         <button class="btn pill small" onclick={restart}>{t.common.back}</button>
       </div>
 
-      <div class="dropgroup">
-        <button
-          class="dropzone"
-          class:over={dragOver}
-          onclick={() => fileInput?.click()}
-          ondragover={(e) => {
-            e.preventDefault();
-            dragOver = true;
-          }}
-          ondragleave={() => (dragOver = false)}
-          ondrop={onDrop}
-        >
-          <Icon name="file" size={22} />
-          <span>{t.transfer.drop}</span>
-        </button>
-        <input
-          class="hidden-input"
-          type="file"
-          multiple
-          bind:this={fileInput}
-          onchange={(e) => pickFiles(e.currentTarget.files)}
-        />
-        <p class="limit">{t.transfer.limitNote}</p>
-      </div>
+      <button
+        class="dropzone"
+        class:over={dragOver}
+        onclick={() => fileInput?.click()}
+        ondragover={(e) => {
+          e.preventDefault();
+          dragOver = true;
+        }}
+        ondragleave={() => (dragOver = false)}
+        ondrop={onDrop}
+      >
+        <Icon name="file" size={22} />
+        <span>{t.transfer.drop}</span>
+      </button>
+      <input
+        class="hidden-input"
+        type="file"
+        multiple
+        bind:this={fileInput}
+        onchange={(e) => pickFiles(e.currentTarget.files)}
+      />
 
       <form
         class="textrow"
@@ -288,6 +332,23 @@
       </form>
 
       {#if drop.transfers.length}
+        {#if files.length > 1 || finishedCount}
+          <div class="summary">
+            <div class="summary-line">
+              {#if files.length > 1}
+                <span class="size">{summaryText}</span>
+              {/if}
+              {#if finishedCount}
+                <button class="btn pill small clear" onclick={() => drop.clearFinished()}>
+                  {t.transfer.clear}
+                </button>
+              {/if}
+            </div>
+            {#if files.length > 1 && activeCount}
+              <progress max={totalSize} value={totalDone}></progress>
+            {/if}
+          </div>
+        {/if}
         <ul class="list">
           {#each drop.transfers as item (item.id)}
             <li class="item">
@@ -303,17 +364,21 @@
               {:else}
                 <div class="meta">
                   <span class="name">{item.name}</span>
-                  <span class="size">
-                    {item.status === "active"
-                      ? `${formatBytes(item.done)} / ${formatBytes(item.size)}`
-                      : formatBytes(item.size)}
-                    · {statusLabel(item)}
-                  </span>
+                  <span class="size" class:stalled={item.stalled}>{detailText(item)}</span>
                   {#if item.status === "active"}
                     <progress max={item.size} value={item.done}></progress>
                   {/if}
                 </div>
-                {#if item.dir === "in" && item.blob}
+                {#if item.status === "active"}
+                  <button
+                    class="save icon-btn"
+                    title={t.transfer.cancel}
+                    aria-label={t.transfer.cancel}
+                    onclick={() => drop.cancelTransfer(item.id)}
+                  >
+                    <Icon name="x" size={16} />
+                  </button>
+                {:else if item.dir === "in" && item.blob}
                   <button class="save icon-btn" title={t.transfer.save} onclick={() => drop.saveItem(item)}>
                     <Icon name="download" size={16} />
                   </button>
@@ -340,19 +405,14 @@
   }
 
   .intro {
-    /* 중앙 정렬은 제목·부제까지만. 카드와 주석은 왼쪽 기준으로 축을 깬다. */
+    /* 중앙 정렬은 제목까지만. 카드는 왼쪽 기준으로 축을 깬다. */
     text-align: center;
     margin-top: var(--space-3xl);
   }
   h2 {
-    margin: 0 0 8px;
+    margin: 0 0 28px;
     font-size: var(--text-5xl);
     letter-spacing: -0.02em;
-  }
-  .sub {
-    margin: 0 0 28px;
-    color: var(--text-muted);
-    font-size: var(--text-xl);
   }
   .roles {
     display: grid;
@@ -388,15 +448,6 @@
     font-size: var(--text-md);
     color: var(--text-muted);
   }
-  .note {
-    margin: var(--space-2xl) 0 0;
-    max-width: 520px;
-    font-size: var(--text-sm);
-    color: var(--text-muted);
-    line-height: 1.6;
-    text-align: left;
-  }
-
   .panel {
     display: flex;
     flex-direction: column;
@@ -586,17 +637,6 @@
   .hidden-input {
     display: none;
   }
-  .dropgroup {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-  }
-  .limit {
-    margin: 0;
-    font-size: var(--text-xs);
-    color: var(--text-muted);
-    text-align: center;
-  }
   .textrow {
     display: flex;
     gap: 8px;
@@ -619,6 +659,20 @@
     font-size: var(--text-lg);
     word-break: break-all;
     white-space: pre-wrap;
+  }
+
+  .summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+  .summary-line {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+  .clear {
+    margin-left: auto;
   }
 
   .list {
@@ -671,6 +725,10 @@
     font-size: var(--text-sm);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+  }
+  /* 몇 초째 진척이 없는 항목 — 느린 것과 멈춘 것을 눈으로 가른다 */
+  .size.stalled {
+    color: var(--danger);
   }
   progress {
     width: 100%;

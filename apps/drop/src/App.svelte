@@ -30,10 +30,6 @@
   <main class="content">
     <Editor />
   </main>
-
-  <footer class="footer">
-    <span class="privacy">{t.privacyNote}</span>
-  </footer>
 </div>
 
 <style>
@@ -102,14 +98,5 @@
     /* 안쪽 스크롤이 끝에 닿아도 페이지 전체가 딸려 올라가지 않게 한다.
      * 도구 아래 설명(section#intro)으로 스크롤이 넘어가면 화면이 잘린 것처럼 보인다. */
     overscroll-behavior: contain;
-  }
-
-  .footer {
-    padding: 10px 18px;
-    border-top: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-muted);
-    font-size: var(--text-sm);
-    text-align: center;
   }
 </style>
