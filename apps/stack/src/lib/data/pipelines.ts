@@ -66,7 +66,7 @@ export const PIPELINES: Pipeline[] = [
     id: "pdf-merge",
     label: "여러 PDF → 한 개",
     input: ".pdf 여러 개 · .png · .jpg",
-    output: ".pdf",
+    output: ".pdf · 나누면 .zip",
     steps: [
       {
         label: "워커에서 문서 열기",
@@ -86,14 +86,14 @@ export const PIPELINES: Pipeline[] = [
       {
         label: "순서·회전·삭제",
         tech: "canvas2d",
-        note: "원본 바이트는 그대로 두고 목록만 고친다. 되돌리기가 싼 이유.",
+        note: "원본 바이트는 그대로 두고 목록만 고친다. 되돌리기가 싼 이유. 쪽 범위 표기도 여기서 목록 위 선택으로 바뀐다.",
         src: "apps/pdf/src/lib/canvas/Canvas.svelte",
         cargo: { count: 6, scale: 0.3, form: "고른 페이지만" },
       },
       {
         label: "새 PDF로 굽기",
         tech: "pdflib",
-        note: "페이지를 복사해 새 문서에 얹는다. 이미지는 이 단계에서 페이지로 임베드된다.",
+        note: "페이지를 복사해 새 문서에 얹는다. 이미지는 이 단계에서 페이지로 임베드된다. 나누기면 묶음 수만큼 반복하고 원본 파싱은 한 번만 한다.",
         src: "apps/pdf/src/lib/pdf/exporter.ts",
         cargo: { count: 1, scale: 0.8, form: "PDF 하나" },
       },
@@ -104,7 +104,7 @@ export const PIPELINES: Pipeline[] = [
     id: "pdf-to-image",
     label: "PDF → 이미지",
     input: ".pdf",
-    output: ".png · .zip",
+    output: ".png · .jpg · .webp · .zip",
     steps: [
       {
         label: "워커에서 문서 파싱",
@@ -117,16 +117,16 @@ export const PIPELINES: Pipeline[] = [
       {
         label: "페이지 래스터화",
         tech: "pdfjs",
-        note: "선택한 배율로 페이지를 캔버스에 그린다.",
+        note: "고른 쪽만, 지정한 dpi(72dpi가 배율 1)로 캔버스에 그린다.",
         src: "apps/pdf/src/lib/pdf/rasterize.ts",
         cargo: { count: 6, scale: 0.5, form: "페이지마다 한 장" },
       },
       {
-        label: "PNG 인코딩",
+        label: "이미지 인코딩",
         tech: "canvas2d",
-        note: "캔버스를 그대로 PNG blob으로 굽는다.",
+        note: "캔버스를 고른 형식(PNG·JPG·WebP)의 blob으로 굽는다 — 전부 브라우저 기본 인코더다.",
         src: "apps/pdf/src/lib/pdf/rasterize.ts",
-        cargo: { count: 6, scale: 0.42, form: "PNG 여러 장" },
+        cargo: { count: 6, scale: 0.42, form: "이미지 여러 장" },
       },
       {
         label: "ZIP 묶기",
@@ -185,16 +185,16 @@ export const PIPELINES: Pipeline[] = [
         cargo: { count: 1, scale: 1, form: "픽셀로 펼침" },
       },
       {
-        label: "회전·크롭",
+        label: "회전·반전·크롭",
         tech: "canvas2d",
-        note: "EXIF 방향을 픽셀에 반영해 중립화한 뒤 크롭을 적용한다.",
+        note: "EXIF 방향을 픽셀에 반영해 중립화하고, 회전·반전 뒤 크롭을 적용한다.",
         src: "apps/image/src/lib/image/pipeline.ts",
         cargo: { count: 1, scale: 0.78, form: "잘린 픽셀" },
       },
       {
         label: "리샘플",
         tech: "pica",
-        note: "canvas 기본 축소보다 결과가 나은 고품질 필터.",
+        note: "canvas 기본 축소보다 결과가 나은 고품질 필터. 목표 치수와 비율이 어긋나면 여백을 두거나 채운 뒤 잘라 낸다.",
         src: "apps/image/src/lib/image/pipeline.ts",
         cargo: { count: 1, scale: 0.52, form: "작아진 픽셀" },
       },
@@ -404,7 +404,7 @@ export const PIPELINES: Pipeline[] = [
       {
         label: "정확 컷이면 재인코딩",
         tech: "webcodecs",
-        note: "지정 지점에서 정확히 자르되 비디오를 다시 굽는다. 오디오는 가능하면 복사한다.",
+        note: "지정 지점에서 정확히 자르되 비디오를 다시 굽는다. 반전·프레임레이트가 이때 픽셀에 들어가고, 회전은 컨테이너가 메타데이터로 못 받을 때만 굽는다. 오디오는 가능하면 복사한다.",
         src: "apps/video/src/lib/video/transcode.ts",
         feat: "video-exact",
         cargo: { count: 1, scale: 0.48, form: "구간만 · 다시 구움" },
@@ -429,7 +429,7 @@ export const PIPELINES: Pipeline[] = [
       {
         label: "트랙 살펴보기",
         tech: "mediabunny",
-        note: "오디오 코덱이 무엇인지에 따라 담을 컨테이너가 정해진다.",
+        note: "형식이 자동이면 오디오 코덱이 무엇인지에 따라 담을 컨테이너가 정해진다.",
         src: "apps/video/src/lib/video/probe.ts",
         cargo: { count: 1, scale: 1, form: "영상 한 덩어리" },
       },
@@ -457,7 +457,7 @@ export const PIPELINES: Pipeline[] = [
       {
         label: "인코딩 판별",
         tech: "textdecoder",
-        note: "BOM을 먼저 보고, 없으면 UTF-8로 엄격하게 읽어 본다. 여기서 실패하면 cp949다 — 한국에서 받는 CSV의 절반이 그렇다.",
+        note: "BOM을 먼저 보고, 없으면 UTF-8로 엄격하게 읽어 본다. 여기서 실패하면 cp949다 — 한국에서 받는 CSV의 절반이 그렇다. 판별이 빗나가면 인코딩·구분자를 손으로 골라 같은 바이트를 다시 읽는다.",
         src: "apps/sheet/src/lib/sheet/csv.ts",
         feat: "sheet-open",
         cargo: { count: 1, scale: 1, form: "글자로 펼침" },
@@ -472,7 +472,7 @@ export const PIPELINES: Pipeline[] = [
       {
         label: "값 해석",
         tech: "numfmt",
-        note: "칸마다 수·날짜·불리언·수식을 가른다. 010으로 시작하는 전화번호는 수로 바꾸지 않는다 — 이게 엑셀에서 제일 자주 데이는 자리라서.",
+        note: "칸마다 수·날짜·불리언·수식을 가른다. 010으로 시작하는 전화번호와 안전 정수를 넘는 긴 번호는 수로 바꾸지 않는다 — 이게 엑셀에서 제일 자주 데이는 자리라서. 해석 결과가 원문과 달라 보이는 칸은 원문을 함께 들고 간다.",
         src: "apps/sheet/src/lib/sheet/model.ts",
         feat: "sheet-format",
         cargo: { count: 6, scale: 1, form: "값이 된 칸" },
@@ -495,7 +495,7 @@ export const PIPELINES: Pipeline[] = [
       },
       {
         label: "CSV로 되돌리기",
-        note: "화면에 보이는 글자 그대로 쓴다. 엑셀이 한글을 깨뜨리지 않도록 UTF-8 BOM을 앞에 붙이는 게 기본값이다.",
+        note: "화면에 보이는 글자 그대로 쓴다 — 손대지 않은 칸은 파일에서 읽은 원문이 곧 그 글자다. 엑셀이 한글을 깨뜨리지 않도록 UTF-8 BOM을 앞에 붙이는 게 기본값이다.",
         src: "apps/sheet/src/lib/sheet/csv.ts",
         feat: "sheet-open",
         cargo: { count: 1, scale: 1, form: "다시 한 파일" },
