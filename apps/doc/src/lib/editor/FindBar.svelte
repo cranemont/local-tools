@@ -39,10 +39,15 @@
   }
 
   function goto(index: number): void {
-    const hit = editor.hits[index];
-    if (!hit || hit.page === null) return;
-    const page = document.querySelector<HTMLElement>(`[data-page="${hit.page}"]`);
-    page?.scrollIntoView({ block: "start", behavior: "smooth" });
+    const pageIndex = editor.pageOfHit(index);
+    if (pageIndex === null) return;
+    const page = document.querySelector<HTMLElement>(`[data-page="${pageIndex}"]`);
+    if (!page) return;
+    // scrollIntoView는 창까지 함께 굴려 앱을 위로 밀어낸다(아래 설명 영역으로).
+    // 문서 판 안에서만 움직이도록 직접 계산한다.
+    const box = page.parentElement;
+    if (box) box.scrollTo({ top: page.offsetTop - box.offsetTop, behavior: "smooth" });
+    else page.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
   function step(delta: number): void {

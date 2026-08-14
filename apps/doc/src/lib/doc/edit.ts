@@ -14,6 +14,7 @@
 
 import type { HwpDocument } from "./engine";
 import { guard, messageOf } from "./hwp";
+import type { SearchHit } from "./hwp";
 import { isEnginePanic } from "./engine";
 
 /** 캐럿이 설 수 있는 자리. 본문 문단이거나, 표 안의 셀 문단이다. */
@@ -131,6 +132,25 @@ export function caretAt(doc: HwpDocument, page: number, x: number, y: number): C
     para: hit.paragraphIndex ?? 0,
     offset: hit.charOffset ?? 0,
   };
+}
+
+/**
+ * 검색 결과 한 건이 문서의 어느 자리인가 — 찾기가 그 쪽으로 넘어가려면 이게 필요하다.
+ * (엔진의 searchAllText는 쪽 번호를 주지 않는다. sec·para·charOffset·cellContext뿐이다.)
+ */
+export function caretOfHit(hit: SearchHit): Caret {
+  if (hit.cell) {
+    return {
+      kind: "cell",
+      section: hit.section,
+      parentPara: hit.cell.parentPara,
+      control: hit.cell.control,
+      cell: hit.cell.cell,
+      cellPara: hit.cell.cellPara,
+      offset: hit.offset,
+    };
+  }
+  return { kind: "body", section: hit.section, para: hit.paragraph, offset: hit.offset };
 }
 
 /** 캐럿을 그릴 자리. 범위를 벗어난 위치에서는 엔진이 실패하므로 null로 돌아온다. */

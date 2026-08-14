@@ -35,6 +35,7 @@ import {
   insert,
   lengthAt,
   rectOf,
+  caretOfHit,
   splitParagraph,
   step,
 } from "../doc/edit";
@@ -238,6 +239,20 @@ class EditorState {
   async renderDocxInto(container: HTMLElement): Promise<void> {
     if (this.kind !== "docx" || !this.bytes) return;
     await renderDocx(this.bytes, container);
+  }
+
+  /**
+   * 검색 결과 하나가 몇 쪽인가. 엔진이 쪽 번호를 안 주므로 그 자리에서 캐럿 좌표로 알아낸다.
+   * 미리 다 구하지 않고 이동할 때만 부른다 — 결과가 수백 개인 문서에서 그게 싸다.
+   */
+  pageOfHit(index: number): number | null {
+    const hit = this.hits[index];
+    if (!hit || !this.doc) return null;
+    if (hit.page !== null) return hit.page;
+    const rect = rectOf(this.doc, caretOfHit(hit));
+    if (!rect) return null;
+    hit.page = rect.page; // 한 번 알아낸 건 남겨 둔다
+    return rect.page;
   }
 
   search(query: string): void {

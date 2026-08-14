@@ -275,6 +275,11 @@
 
   .page {
     position: relative;
+    /* 세로 flex 안에서 절대 줄어들면 안 된다.
+     * 이게 없으면 쪽이 많을수록(52쪽 문서 기준 3px) 컨테이너 높이에 맞춰 짓눌린다 —
+     * 아래 overflow: hidden이 flex 항목의 자동 최소 크기(min-height: auto)를 꺼버려서
+     * 쪽이 적을 땐 멀쩡하다가 여러 쪽 문서에서만 터졌다. */
+    flex-shrink: 0;
     width: min(100%, 820px);
     background: white;
     box-shadow: var(--shadow-1);

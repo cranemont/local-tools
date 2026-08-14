@@ -26,6 +26,22 @@ export interface MarkdownResult {
   notes: string[];
 }
 
+/**
+ * 앞머리 바이트로 그림 형식을 알아낸다 — MIME보다 이쪽이 사실이다.
+ * (rhwp가 내보내는 data URI는 형식과 무관하게 application/octet-stream이다.)
+ */
+function sniffExt(b: Uint8Array): string | null {
+  if (b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "png";
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "jpg";
+  if (b.length >= 3 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return "gif";
+  if (b.length >= 2 && b[0] === 0x42 && b[1] === 0x4d) return "bmp";
+  // RIFF....WEBP
+  if (b.length >= 12 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "webp";
+  if (b.length >= 4 && ((b[0] === 0x49 && b[1] === 0x49) || (b[0] === 0x4d && b[1] === 0x4d))) return "tif";
+  if (b.length >= 5 && b[0] === 0x3c && b[1] === 0x3f && b[2] === 0x78 && b[3] === 0x6d) return "svg";
+  return null;
+}
+
 const MIME_EXT: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -61,13 +77,17 @@ function extractImages(root: Document): ExtractedImage[] {
 
     let found = seen.get(src);
     if (!found) {
-      const ext = MIME_EXT[match[1].toLowerCase()] ?? "bin";
-      const path = `images/${images.length + 1}.${ext}`;
+      let bytes: Uint8Array;
       try {
-        images.push({ path, bytes: base64ToBytes(match[2]) });
+        bytes = base64ToBytes(match[2]);
       } catch {
         continue; // 깨진 data URI — 원본 src를 그대로 둔다.
       }
+      // 바이트를 먼저 본다. rhwp는 그림 MIME을 application/octet-stream으로만 주기 때문에
+      // MIME만 믿으면 hwp에서 나온 그림이 전부 .bin이 된다(실제로는 대개 BMP다).
+      const ext = sniffExt(bytes) ?? MIME_EXT[match[1].toLowerCase()] ?? "bin";
+      const path = `images/${images.length + 1}.${ext}`;
+      images.push({ path, bytes });
       found = { path, index: images.length };
       seen.set(src, found);
     }

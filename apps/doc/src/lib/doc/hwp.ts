@@ -171,6 +171,11 @@ export interface SearchHit {
   paragraph: number;
   offset: number;
   page: number | null;
+  /**
+   * 표 안에서 찾은 것이면 그 셀 자리. 엔진이 `cellContext`로 함께 준다.
+   * 캐럿을 만들 때 이게 있어야 쪽을 제대로 짚는다(표가 많은 공문서에서 대부분이 여기 걸린다).
+   */
+  cell?: { parentPara: number; control: number; cell: number; cellPara: number };
 }
 
 /**
@@ -205,11 +210,35 @@ export function searchAll(doc: HwpDocument, query: string, caseSensitive: boolea
       }
       return null;
     };
+    // 0.8.4 기준 엔진은 쪽 번호를 주지 않는다(sec·para·charOffset·cellContext뿐).
+    // 그래서 page는 대개 null이고, 이동할 때 caretOfHit + rectOf로 그 자리에서 알아낸다.
+    const ctx = row.cellContext as Record<string, unknown> | undefined;
+    const ctxNum = (...keys: string[]): number | null => {
+      if (!ctx) return null;
+      for (const key of keys) {
+        const value = ctx[key];
+        if (typeof value === "number") return value;
+      }
+      return null;
+    };
+    const control = ctxNum("ctrlIdx", "controlIndex");
+    const cell = ctxNum("cellIdx", "cellIndex");
+
     hits.push({
       section: num("sectionIdx", "section", "sec") ?? 0,
       paragraph: num("paraIdx", "paragraph", "para") ?? 0,
       offset: num("charOffset", "offset", "char") ?? 0,
       page: num("pageIndex", "page"),
+      ...(control !== null && cell !== null
+        ? {
+            cell: {
+              parentPara: ctxNum("parentPara", "parentParaIdx") ?? 0,
+              control,
+              cell,
+              cellPara: ctxNum("cellPara", "cellParaIdx") ?? 0,
+            },
+          }
+        : {}),
     });
   }
   return hits;
