@@ -5,16 +5,19 @@ import {
   FlowGate,
   Receiver,
   sendAccept,
+  sendAck,
   sendCancel,
   sendDecline,
   sendFile,
   sendFlow,
+  sendHello,
   sendOffer,
   sendText,
   sendWithdraw,
   type BatchOffer,
   type FileMeta,
 } from "../rtc/transfer";
+import { AckBook, AckSession, pushSample, windowRate, type Sample } from "../rtc/progress";
 import { memorySink, pickDestination } from "../rtc/sink";
 import { downloadBlob } from "../rtc/save";
 import { t } from "../i18n";
@@ -30,10 +33,12 @@ export interface TransferItem {
   done: number;
   /** waiting = 상대의 수락을 기다리는 중(아직 한 바이트도 안 나갔다) */
   status: "waiting" | "active" | "done" | "error" | "cancelled";
-  /** 최근 구간 이동평균 속도(B/s). 정체 중이면 0. */
+  /** 최근 구간 평균 속도(B/s). 정체 중이면 0. */
   rate: number;
   /** 몇 초째 한 바이트도 안 늘었다 */
   stalled: boolean;
+  /** 다 보냈고 상대가 디스크에 앉히기를 기다린다 — 아직 "완료"가 아니다 */
+  settling: boolean;
   blob: Blob | null;
   body: string;
 }
@@ -42,22 +47,19 @@ export interface TransferItem {
 const TICK_MS = 250;
 /** 이 시간 동안 진척이 없으면 정체로 본다. */
 const STALL_MS = 3000;
-/** 이동평균에서 새 표본이 갖는 몫 — 청크 단위로 재면 값이 튄다. */
-const RATE_ALPHA = 0.3;
 /** 연결이 붙기를 기다려 주는 시간. 넘으면 화면을 실패로 굳혀 탈출구를 준다. */
 const CONNECT_TIMEOUT_MS = 30_000;
 
 /** 항목별 진행 계량기. $state 밖(일반 객체)에 두어 청크마다 반응성을 건드리지 않는다. */
 interface Meter {
-  /** 콜백이 마지막으로 알려 온 값 */
+  /** 콜백이 마지막으로 알려 온 값 — 보내는 쪽이면 상대의 ack, 받는 쪽이면 디스크에 쓴 양 */
   pending: number;
   /** 화면에 이미 반영한 값 */
   shown: number;
-  /** 마지막 계산 시각 */
-  at: number;
   /** 마지막으로 값이 늘어난 시각 */
   movedAt: number;
-  rate: number;
+  /** 속도를 재는 표본 창 — 기울기가 곧 속도다(progress.ts) */
+  window: Sample[];
 }
 
 class DropState {
@@ -76,12 +78,18 @@ class DropState {
   incoming = $state<BatchOffer | null>(null);
   /** 이번에 받은 것이 디스크가 아니라 메모리로 갔다(폴백) — 용량 주의를 띄운다 */
   memoryFallback = $state(false);
+  /** 상대가 ack를 모르는 예전 판이다 — 진행률·완료가 낙관적이라는 표시 */
+  ackless = $state(false);
 
   private peer: DropPeer | null = null;
   private receiver: Receiver | null = null;
   private rzCancel: (() => void) | null = null;
   /** 한 채널에 파일 프레임이 섞이지 않도록 송신을 직렬화 */
   private sendChain: Promise<void> = Promise.resolve();
+  /** 보내는 중인 파일들의 ack 장부 — 취소한 파일은 여기서 빠진다 */
+  private book = new AckBook();
+  /** 이 연결의 상대가 ack를 아는 판인가(hello로 배우고, 안 오면 유예 뒤 포기) */
+  private ackSession = new AckSession();
   /** 상대 디스크가 밀리면 닫히는 문 — 송신 루프가 여기서 기다린다 */
   private gate = new FlowGate();
   /** 아직 답을 못 받은 내 묶음들 */
@@ -114,7 +122,25 @@ class DropState {
   }
 
   private makePeer(): DropPeer {
+    // 연결마다 새로 배운다 — 앞 상대가 예전 판이었다고 다음 상대까지 낙관하지 않는다.
+    this.ackSession = new AckSession();
+    this.book.clear();
+    this.ackless = false;
     this.receiver = new Receiver({
+      onHello: (caps) => this.ackSession.noteHello(caps.ack),
+      // 받는 쪽: 디스크에 앉힌 만큼을 상대에게 알린다.
+      onAckDue: (id, written, final) => {
+        const ch = this.peer?.channel;
+        if (ch) sendAck(ch, id, written, final);
+      },
+      // 보내는 쪽: 상대가 확인해 왔다. 진행률은 오직 여기서 나온다.
+      onPeerAck: (id, bytes, final) => {
+        // ack가 왔다는 사실 자체가 상대가 새 판이라는 증거다(늦게 온 것이라도).
+        this.ackSession.noteAck();
+        const tracker = this.book.apply(id, bytes, final, performance.now());
+        // 모르는 id면 취소된 파일의 늦은 ack다 — 여기서 끊긴다(다음 파일에 얹히지 않는다).
+        if (tracker) this.meter(id, tracker.acked);
+      },
       onOffer: (offer) => {
         this.offerQueue.push(offer);
         this.nextOffer();
@@ -140,6 +166,7 @@ class DropState {
           status: "active",
           rate: 0,
           stalled: false,
+          settling: false,
           blob: null,
           body: "",
         });
@@ -188,6 +215,7 @@ class DropState {
           status: "done",
           rate: 0,
           stalled: false,
+          settling: false,
           blob: null,
           body,
         });
@@ -201,6 +229,9 @@ class DropState {
         this.clearConnectTimeout();
         this.joining = false;
         this.stage = "connected";
+        // 능력 교환은 채널의 첫 프레임이다 — ordered라 상대의 수락보다 먼저 도착한다.
+        const ch = this.peer?.channel;
+        if (ch) sendHello(ch);
       },
       onDown: (wasConnected) => {
         this.clearConnectTimeout();
@@ -233,23 +264,34 @@ class DropState {
   private push(item: TransferItem): void {
     this.transfers.push(item);
     if (item.status === "active" || item.status === "waiting") {
-      const now = performance.now();
-      this.meters.set(item.id, { pending: 0, shown: 0, at: now, movedAt: now, rate: 0 });
+      this.meters.set(item.id, {
+        pending: 0,
+        shown: 0,
+        movedAt: performance.now(),
+        window: [],
+      });
     }
     this.syncActivity();
   }
 
+  /**
+   * 계량기는 앞으로만 간다. 보내는 쪽은 ack로, 받는 쪽은 디스크에 쓴 양으로 들어오는데
+   * 낙관 모드에서 건넨 바이트와 뒤늦은 ack가 섞이면 값이 뒷걸음질칠 수 있다.
+   */
   private meter(id: string, done: number): void {
     const m = this.meters.get(id);
-    if (m) m.pending = done;
+    if (m && done > m.pending) m.pending = done;
   }
 
   private finish(item: TransferItem, status: TransferItem["status"]): void {
     item.status = status;
     item.rate = 0;
     item.stalled = false;
+    item.settling = false;
     this.meters.delete(item.id);
     this.aborts.delete(item.id);
+    // 장부에서 빠지는 순간부터 이 파일의 늦은 ack는 갈 곳이 없다.
+    this.book.close(item.id);
     this.syncActivity();
   }
 
@@ -259,23 +301,21 @@ class DropState {
       if (item.status !== "active") continue;
       const m = this.meters.get(item.id);
       if (!m) continue;
-      const moved = m.pending - m.shown;
-      const dt = (now - m.at) / 1000;
-      if (moved > 0 && dt > 0) {
-        const inst = moved / dt;
-        m.rate = m.rate === 0 ? inst : m.rate * (1 - RATE_ALPHA) + inst * RATE_ALPHA;
+      // 표본은 250ms에 하나. 속도는 이 창의 기울기이지 마지막 한 조각의 순간값이 아니다.
+      pushSample(m.window, now, m.pending);
+      if (m.pending > m.shown) {
         m.shown = m.pending;
         m.movedAt = now;
         item.done = m.pending;
       }
-      m.at = now;
       // 큐에서 순서를 기다리는 파일은 아직 한 바이트도 안 움직인 게 정상이다 —
       // 정체 판정은 첫 바이트가 나간 뒤부터 센다.
       if (m.pending === 0) m.movedAt = now;
-      const stalled = now - m.movedAt > STALL_MS;
-      if (stalled) m.rate = 0;
+      // 확인을 기다리는 동안은 정체가 아니다(우리가 할 일이 없는 시간이다).
+      const stalled = !item.settling && now - m.movedAt > STALL_MS;
+      const rate = stalled ? 0 : windowRate(m.window, now);
       if (item.stalled !== stalled) item.stalled = stalled;
-      if (item.rate !== m.rate) item.rate = m.rate;
+      if (item.rate !== rate) item.rate = rate;
     }
   }
 
@@ -528,6 +568,7 @@ class DropState {
         status: "waiting",
         rate: 0,
         stalled: false,
+        settling: false,
         blob: null,
         body: "",
       });
@@ -566,24 +607,40 @@ class DropState {
       if (!item || item.status !== "waiting") continue; // 기다리는 동안 취소됐다
       item.status = "active";
       // 수락을 기다린 시간은 전송 시간이 아니다 — 계량기를 지금부터 다시 센다.
+      const started = performance.now();
       const m = this.meters.get(meta.id);
-      if (m) m.at = m.movedAt = performance.now();
+      if (m) {
+        m.movedAt = started;
+        m.window.length = 0;
+      }
       this.syncActivity();
+      // 상대의 ack가 앉을 장부. 여기 없는 id의 ack는 아무 진행률도 건드리지 못한다.
+      const tracker = this.book.open(meta.id, meta.size, started);
       try {
-        const result = await sendFile(
+        const result = await sendFile({
           ch,
-          files[i],
+          file: files[i],
           meta,
           batch,
-          (sent) => this.meter(meta.id, sent),
-          this.aborts.get(meta.id)?.signal,
-          this.gate,
-        );
+          tracker,
+          session: this.ackSession,
+          // 낙관 모드에서만 값이 온다 — 상대가 확인해 주는 판이면 진행률은 ack에서 나온다.
+          onProgress: (sent) => this.meter(meta.id, sent),
+          onSettling: () => {
+            if (item.status === "active") item.settling = true;
+          },
+          signal: this.aborts.get(meta.id)?.signal,
+          gate: this.gate,
+        });
+        // 상대가 예전 판이라 확인해 주지 않는다 — 화면이 그 사실을 말하게 한다.
+        this.ackless = this.ackSession.peerAcks === false;
         if (item.status !== "active") continue;
         if (result === "done") item.done = item.size;
         this.finish(item, result === "done" ? "done" : "cancelled");
       } catch {
         if (item.status === "active") this.finish(item, "error");
+      } finally {
+        this.book.close(meta.id);
       }
     }
   }
@@ -641,6 +698,7 @@ class DropState {
       status: "done",
       rate: 0,
       stalled: false,
+      settling: false,
       blob: null,
       body: text,
     });
@@ -664,6 +722,8 @@ class DropState {
     for (const ctl of this.aborts.values()) ctl.abort();
     this.aborts.clear();
     this.meters.clear();
+    this.book.clear();
+    this.ackSession = new AckSession();
     this.peer?.close();
     this.peer = null;
     // 받던 파일이 있으면 쓰다 만 것을 지우고 닫는다.
@@ -677,6 +737,7 @@ class DropState {
     this.itemBatch.clear();
     this.incoming = null;
     this.memoryFallback = false;
+    this.ackless = false;
     this.gate = new FlowGate();
     this.stage = "idle";
     this.myCode = "";

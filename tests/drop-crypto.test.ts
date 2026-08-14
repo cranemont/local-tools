@@ -644,6 +644,10 @@ function harness(opts: { accept?: boolean } = {}) {
   };
   const sinks: ReturnType<typeof fakeSink>[] = [];
   const events: ReceiverEvents = {
+    // ack 경로의 명세는 tests/drop-transfer.test.ts에 있다 — 여기서는 받아만 둔다.
+    onHello: () => {},
+    onAckDue: () => {},
+    onPeerAck: () => {},
     onOffer: (offer) => log.offers.push(offer.batch),
     onVerdict: (batch, ok) => log.verdicts.push({ batch, ok }),
     onWithdraw: (batch) => log.withdrawn.push(batch),
@@ -814,6 +818,9 @@ describe("수신 — 쓰다 만 파일을 남기지 않는다", () => {
   it("싱크를 열지 못하면 오류로 알린다 — 조용히 버리지 않는다", async () => {
     const { log } = harness();
     const rx = new Receiver({
+      onHello: () => {},
+      onAckDue: () => {},
+      onPeerAck: () => {},
       onOffer: () => {},
       onVerdict: () => {},
       onWithdraw: () => {},

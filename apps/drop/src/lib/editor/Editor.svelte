@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t, formatBytes, formatEta, formatOffer, formatRate } from "../i18n";
   import { canStreamToDisk } from "../rtc/sink";
+  import { etaSeconds } from "../rtc/progress";
   import { drop } from "./state.svelte";
   import CopyButton from "../CopyButton.svelte";
   import Icon from "../Icon.svelte";
@@ -74,17 +75,20 @@
           ? t.transfer.error
           : item.status === "waiting"
             ? t.transfer.waiting
-            : item.stalled
-              ? t.transfer.stalled
-              : item.dir === "out"
-                ? t.transfer.sending
-                : t.transfer.receiving;
+            : // 다 보냈고 상대의 확인만 남았다 — 여기서 "완료"라고 하면 그게 예전의 거짓말이다
+              item.settling
+              ? t.transfer.settling
+              : item.stalled
+                ? t.transfer.stalled
+                : item.dir === "out"
+                  ? t.transfer.sending
+                  : t.transfer.receiving;
 
   // 저장 위치를 물을 수 없는 브라우저에서만 뜨는 경고 — 상시 노출이 아니다.
   const noDisk = !canStreamToDisk();
 
   /** 남은 시간 — 속도가 0(정체·시작 직후)이면 아직 말할 수 없다. */
-  const etaText = (rate: number, left: number) => (rate > 0 ? formatEta(left / rate) : "");
+  const etaText = (rate: number, left: number) => formatEta(etaSeconds(rate, left));
 
   function detailText(item: Item): string {
     if (item.status !== "active") return `${formatBytes(item.size)} · ${statusLabel(item)}`;
@@ -296,6 +300,10 @@
         <!-- 디스크로 흘려보내지 못하고 메모리에 담는 중일 때만 -->
         {#if drop.memoryFallback}
           <span class="badge" title={t.transfer.memNote}>{t.transfer.memBadge}</span>
+        {/if}
+        <!-- 상대가 ack를 모르는 예전 판일 때만 — 진행률이 낙관적이라는 표시 -->
+        {#if drop.ackless}
+          <span class="badge" title={t.transfer.acklessNote}>{t.transfer.acklessBadge}</span>
         {/if}
         <button class="btn pill small back" onclick={restart}>{t.common.back}</button>
       </div>
