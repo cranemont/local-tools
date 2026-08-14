@@ -158,7 +158,16 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
    - 이 후처리는 `vite-plugin-singlefile` 출력 태그 형태(`<style rel="stylesheet" crossorigin>`, `<script type="module" crossorigin>`)에 **정규식으로 의존**한다. Vite/플러그인 업그레이드로 태그가 바뀌면 후처리가 **조용히 건너뛴다(early return)** → 파일이 안 줄어듦.
    - 확인법: 빌드 로그에 `self-extracting-html: dist/index.html → NNN kB`가 찍히는지 볼 것. 안 찍히면 정규식 갱신 필요.
 
-4. **다운로드는 표준 `<a download>` 방식**(`src/lib/pdf/save.ts`). File System Access(`showSaveFilePicker`/`showDirectoryPicker`)로 되돌리지 말 것 — 그건 크롬 "다운로드" 목록에 안 뜨고 저장 위치가 헷갈린다는 사용자 피드백으로 표준 다운로드로 바꾼 것.
+4. **도구가 만든 파일을 내려받는 것은 표준 `<a download>` 방식**(`src/lib/pdf/save.ts` 등 다섯 앱의 `save.ts`).
+   File System Access(`showSaveFilePicker`/`showDirectoryPicker`)로 되돌리지 말 것 — 그건 크롬 "다운로드"
+   목록에 안 뜨고 저장 위치가 헷갈린다는 사용자 피드백으로 표준 다운로드로 바꾼 것이다.
+   - **예외는 `apps/drop`의 수신 경로 하나다**(2026-08-14 판단으로 뒤집었다). 받는 파일은 우리가 만든
+     결과물이 아니라 **크기를 모르는 남의 파일**이라서, 다 모아 놓고 내려받으면 큰 파일에서 탭이 죽는다.
+     그래서 여기서만 청크를 디스크로 흘려보낸다.
+   - **`showSaveFilePicker`는 사용자 제스처를 요구하는데 청크는 제스처 없이 도착한다.** 그래서 수신
+     **수락 단계**가 구조상 필요하다 — "받기"를 누른 그 클릭이 저장 위치를 묻는 제스처다. 수락 단계를
+     없애면 스트리밍도 같이 죽는다.
+   - API가 없거나 사용자가 고르기를 취소하면 **메모리 + `<a download>`로 물러난다**. 이 폴백을 지우지 말 것.
 
 5. **pdf.js 워커는 `?worker&inline`으로 인라인**(`src/lib/pdf/pdfjs.ts`). 단일 파일 유지의 핵심. 외부 workerSrc URL로 바꾸지 말 것.
    - 단, pdf.js 보조 디코더(JBIG2/JPEG2000/QCMS)는 번들에 없다. 그런 희귀 인코딩 이미지가 든 PDF는 썸네일/래스터에서 문제될 수 있음(일반 PDF는 무관).

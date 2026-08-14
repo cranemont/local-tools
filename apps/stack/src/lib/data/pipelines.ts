@@ -718,9 +718,16 @@ export const PIPELINES: Pipeline[] = [
         src: "apps/drop/src/lib/rtc/peer.ts",
       },
       {
-        label: "64KB 청크 전송",
+        label: "받기 수락 · 저장 위치",
+        tech: "filesystemaccess",
+        note: "목록과 총량을 먼저 보여 주고, 받기를 누른 그 클릭에서 저장 위치를 받는다(피커는 제스처 안에서만 열린다).",
+        src: "apps/drop/src/lib/rtc/sink.ts",
+        feat: "drop-transfer",
+      },
+      {
+        label: "64KB 청크 → 디스크",
         tech: "webrtc",
-        note: "버퍼가 차면 멈췄다 이어 보낸다. 파일은 두 기기 사이만 지난다.",
+        note: "버퍼가 차면 멈췄다 잇고, 디스크가 밀리면 상대를 세운다. 파일은 두 기기 사이만 지나고 메모리에 쌓이지 않는다.",
         src: "apps/drop/src/lib/rtc/transfer.ts",
       },
     ],

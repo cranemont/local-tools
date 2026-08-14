@@ -340,10 +340,17 @@ export const TECHS: Tech[] = [
     src: ["apps/sheet/src/lib/launch.ts", "apps/sheet/pwa.ts"],
   },
   {
+    id: "filesystemaccess",
+    label: "File System Access",
+    kind: "native",
+    note: "받은 파일을 메모리에 쌓지 않고 디스크로 흘려보낸다(드롭 수신 전용). 피커는 사용자 제스처 안에서만 열려서, 저장 위치는 '받기'를 누른 그 클릭에서 미리 받아 둔다. 못 쓰면 <a download>로 물러난다.",
+    src: ["apps/drop/src/lib/rtc/sink.ts"],
+  },
+  {
     id: "adownload",
     label: "<a download>",
     kind: "native",
-    note: "File System Access 대신 표준 다운로드. 크롬 다운로드 목록에 뜨고 저장 위치가 헷갈리지 않는다는 이유로 되돌린 결정.",
+    note: "만들어 낸 결과물은 전부 표준 다운로드로 나간다. 크롬 다운로드 목록에 뜨고 저장 위치가 헷갈리지 않는다는 이유로 되돌린 결정(용량을 모르는 드롭 수신만 예외).",
     src: ["apps/pdf/src/lib/pdf/save.ts", "apps/gif/src/lib/gif/save.ts"],
   },
 
@@ -614,7 +621,7 @@ export const TECHS: Tech[] = [
     id: "sdpcodec",
     label: "연결정보 압축 코덱",
     kind: "own",
-    note: "WebRTC SDP를 deflate-raw + base64url로 줄여 QR 한 장·복붙 한 줄에 담는다.",
+    note: "WebRTC SDP를 deflate-raw + base64url로 줄여 QR 한 장·복붙 한 줄에 담는다. deflate-raw에는 체크섬이 없어 앞에 SHA-256 3바이트를 붙였다 — 한 글자만 어긋나도 거부된다.",
     src: ["apps/drop/src/lib/rtc/signal.ts"],
   },
   {
@@ -1039,9 +1046,9 @@ export const FEATURES: Feature[] = [
     id: "drop-transfer",
     app: "drop",
     label: "파일 전송",
-    note: "64KB 청크로 쪼개 보내고 버퍼가 차면 멈춘다(백프레셔). file·eof·cancel·text 네 종류 메시지가 전부.",
-    techs: ["webrtc", "adownload"],
-    src: ["apps/drop/src/lib/rtc/transfer.ts"],
+    note: "보낼 목록을 먼저 알리고(offer), 받는 쪽이 수락한 뒤에야 64KB 청크가 나간다. 청크는 메모리를 거치지 않고 디스크로 바로 쓰인다.",
+    techs: ["webrtc", "filesystemaccess", "adownload"],
+    src: ["apps/drop/src/lib/rtc/transfer.ts", "apps/drop/src/lib/rtc/sink.ts"],
   },
   {
     id: "drop-qr",

@@ -226,7 +226,8 @@ export const MECHANISMS: Mechanism[] = [
           from: "host",
           to: "guest",
           label: "DTLS 핸드셰이크 → DataChannel 열림",
-          detail: "여기서부터 중간이 없다. 64KB 청크로 쪼개 보내고 버퍼가 차면 멈췄다 잇는다.",
+          detail:
+            "여기서부터 중간이 없다. 받는 쪽이 수락하면 64KB 청크로 쪼개 보내고, 버퍼가 차거나 상대 디스크가 밀리면 멈췄다 잇는다.",
         },
       ],
       sees: {
