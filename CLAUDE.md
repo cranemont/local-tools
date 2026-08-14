@@ -5,7 +5,7 @@
 ## 한 줄 정체성
 
 각 도구는 **자기완결 단일 HTML 파일**로 빌드된다. 더블클릭(오프라인)으로도, 호스팅 URL로도 쓴다.
-**모든 처리는 브라우저 안에서만** 일어나고 파일은 네트워크로 나가지 않는다(예외: PDF 암호 탭 → 아래 참고).
+**모든 처리는 브라우저 안에서만** 일어나고 파일은 네트워크로 나가지 않는다(예외: 암호 걸린 PDF → 아래 참고).
 
 ## 명령어
 
@@ -29,14 +29,18 @@ apps/pdf/            # PDF 도구 (Svelte 5 + TS)
   src/lib/canvas/    # 탭① 편집·병합 (통합 캔버스)
   src/lib/toimage/   # 탭② PDF→이미지
   src/lib/password/  # 탭③ 암호
-  src/lib/pdf/       # 엔진: engine(썸네일)·exporter(병합)·rasterize(PNG)·
-                     #        save(다운로드)·qpdfLoader(암호)·pdfjs(워커)
+  src/lib/pdf/       # 엔진: engine(썸네일)·exporter(병합·분할)·rasterize(PNG/JPG/WebP)·
+                     #        save(다운로드)·qpdfLoader(암호)·pdfjs(워커)·
+                     #        range(쪽 범위 "1-5, 8, 12-" 파서 — 세 탭이 공유)·
+                     #        unlock.svelte.ts(암호 PDF를 만나면 프롬프트를 띄우고 다시 연다)
+  src/lib/PasswordPrompt.svelte  # 암호 입력 모달(편집·이미지 탭 공용)
   vite.config.ts     # 자가해제 플러그인 사용 (공용 패키지)
 apps/gif/            # GIF 에디터 (Svelte 5 + TS) — 단일 에디터 뷰(탭 없음)
   src/lib/editor/    # state.svelte.ts(상태 싱글턴)·Preview·Filmstrip·Panel·ImportDialog
   src/lib/gif/       # 엔진: decode(ImageDecoder 온디맨드+LRU)·encode(gifenc)·
                      #        webp(ANMF muxer)·mp4(WebCodecs 내보내기)·
-                     #        video(동영상 임포트)·transform·extract(PNG ZIP)·save
+                     #        video(동영상 임포트)·transform·extract(PNG ZIP)·save·
+                     #        timing(형식별 딜레이 하한·눈금 — 미리보기와 결과를 일치시킨다)
 apps/video/          # 동영상 도구 (Svelte 5 + TS) — 트림·압축·변환·소리, 파일 한 개씩
   src/lib/editor/    # state.svelte.ts·Player(<video>+구간재생)·Timeline(스트립+핸들+kf눈금)·Panel
   src/lib/video/     # 엔진: probe(메타·키프레임)·thumbs(스트립)·transcode(mediabunny
@@ -44,10 +48,12 @@ apps/video/          # 동영상 도구 (Svelte 5 + TS) — 트림·압축·변�
 apps/image/          # 이미지 도구 (Svelte 5 + TS) — 변환·압축·리사이즈·크롭·EXIF, 필름스트립 일괄
   src/lib/editor/    # state.svelte.ts(크롭 후보·되돌리기 스택)·Preview(디바운스 재인코딩+
                      #   용량 배지+크롭 오버레이)·Panel
-  src/lib/image/     # 엔진: decode(LRU+HEIC 위임)·pipeline(회전→크롭→pica→인코딩)·
+  src/lib/image/     # 엔진: decode(LRU+HEIC 위임)·pipeline(회전→반전→크롭→맞춤→pica→인코딩,
+                     #        targetSize=목표 캔버스 / fitPlan=그 위 배치로 갈라 둠)·
                      #        exif(APP1/RIFF/eXIf 바이트 조작)·heic/avif(CDN wasm)·save
 apps/sheet/          # 시트 (Svelte 5 + TS) — CSV·엑셀 편집기. ★ 이 앱만 두 벌로 빌드한다(아래 13번)
-  src/lib/sheet/     # 문서: types(셀·시트·통합문서)·model(조작·입력해석·정렬)·a1(A1↔좌표)·
+  src/lib/sheet/     # 문서: types(셀·시트·통합문서 — 셀의 `raw`가 가져온 원문이다)·
+                     #   model(조작·입력해석·정렬 — 정렬은 표 전체 행을 안정 정렬)·a1(A1↔좌표)·
                      #   csv(인코딩 판별+구분자 추론+RFC4180)·xlsx(ExcelJS 어댑터, 지연 로드)·
                      #   numfmt(엑셀 표시형식 해석)·serial(날짜 일련번호)·convert(JSON/MD/HTML)·save
   src/lib/formula/   # ★ 수식 엔진(직접 구현): tokenize→parse→evaluate,
@@ -64,7 +70,9 @@ apps/doc/            # 문서 (Svelte 5 + TS) — 한글·워드 읽기. ★ 이
                      #   + mammoth 시맨틱 HTML 지연 로드)·markdown(turndown + 직접 짠 GFM 표 규칙,
                      #   그림 떼어내기)·detect(매직바이트 판별)·save(md 한 장 또는 ZIP)
   src/lib/editor/    # state.svelte.ts(스테이지 머신)·Editor(좌우 분할·스크롤 비율 동기화)·
-                     #   Pages(SVG 쪽 가상 스크롤)·MarkdownPane(저장될 원문 그대로)·
+                     #   Pages(SVG 쪽 가상 스크롤 — 배율은 쪽의 실제 폭으로 건다)·
+                     #   MarkdownPane(저장될 원문 그대로)·Outline(목차 — 문단 걷기에서 함께 나온다)·
+                     #   scroll.ts(쪽 이동·찾기 하이라이트 좌표 계산)·
                      #   Toolbar·FindBar·PasswordDialog·Dropzone
   rhwp-wasm.ts       # ★ 빌드 플러그인 — wasm을 rhwp-<버전>.wasm으로 내보내고 SHA-384를 코드에 주입
 apps/drop/           # 드롭 (Svelte 5 + TS) — 서버 없는 P2P 파일 전송, 단일 플로 뷰
@@ -75,7 +83,10 @@ apps/drop/           # 드롭 (Svelte 5 + TS) — 서버 없는 P2P 파일 전�
                      #        nostr(NIP-01 최소 클라이언트, @noble/curves 서명)
   src/lib/editor/    # state.svelte.ts(스테이지 머신)·Editor·QrCode(uqr)·ScanDialog(카메라 스캔)
 apps/dev/            # 개발자 유틸 (Svelte 5 + TS) — 사이드바+검색 셸, 도구 16종
-  src/lib/tools/     # registry(도구 목록·그룹)·Format(JSON/YAML/XML 변환)·Diff·Encode·
+  src/lib/persist.svelte.ts  # ★ 도구별 입력 보존 — persisted() 하나로 16종을 닫는다.
+                     #   도구를 옮겼다 와도, 새로고침해도 남는다(디바운스 후 sessionStorage 1회 직렬화).
+  src/lib/tools/     # registry(도구 목록·그룹)·search(한글 어미·초성 관용 — 어미 떼기는 2음절까지)·
+                     #   JsonTree(접힌 노드는 DOM에 없다)·Format(JSON/YAML/XML 변환)·Diff·Encode·
                      #   Jwt(HS 검증)·Hash(+md5.ts 직접 구현)·Uuid(v4/v7/ULID)·Timestamp·
                      #   Regex·CronTool·Color(culori)·Qr(uqr+BarcodeDetector)·Chars·
                      #   Cookie(Set-Cookie 진단)·OAuthTool(URL 분석+PKCE)·
@@ -139,7 +150,9 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
    - 글루 JS: `<script integrity=...>`(SRI)로 브라우저가 강제 검증.
    - `.wasm`: fetch 후 **SHA-384 직접 검증**(불일치 시 실행 거부, fail-closed) → 검증된 바이트로 blob URL 만들어 `locateFile`이 그것만 가리킴(이 빌드는 `wasmBinary` 미지원).
    - **버전을 올리면 두 해시(GLUE_SRI, WASM_SRI)를 반드시 재계산**해야 한다. 안 하면 암호 기능이 통째로 안 됨.
-   - **암호 탭만 인터넷이 필요**하다(엔진 최초 1회 다운로드). 나머지 기능은 완전 오프라인.
+   - **암호 걸린 PDF를 다룰 때만 인터넷이 필요**하다(엔진 최초 1회 다운로드). 암호 탭뿐 아니라
+     편집·이미지 탭도 암호 걸린 문서를 만나면 qpdf를 받아 푼다(`unlock.svelte.ts`가 프롬프트를
+     맡고, 엔진은 `PdfPasswordError`만 던진다). 나머지 기능은 완전 오프라인.
 
 3. **자가해제형 빌드.** `@local-tools/vite-plugin-self-extracting`(packages/)의 `selfExtractingHtml()`가 빌드 후 인라인 JS/CSS를 deflate-raw+base64로 넣고, 로드 시 `DecompressionStream`으로 푼다(2.1MB→~0.9MB). 스플래시 색·문구는 옵션 인자로 커스텀 가능.
    - 이 후처리는 `vite-plugin-singlefile` 출력 태그 형태(`<style rel="stylesheet" crossorigin>`, `<script type="module" crossorigin>`)에 **정규식으로 의존**한다. Vite/플러그인 업그레이드로 태그가 바뀌면 후처리가 **조용히 건너뛴다(early return)** → 파일이 안 줄어듦.
@@ -333,6 +346,41 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
      하나만 보므로 BM25도 기존 화면이 그대로 그린다 — 새 모델 종류를 붙일 때도 이 경계를 지킬 것.
    - 파레토에서 **같은 용량의 점들은 표시상 좌우로 벌려 둔다**(`dodged`). 절단만 다른 조합은
      x가 완전히 같아(자른다고 다운로드가 줄지 않는다) 그대로 두면 셋 중 하나만 보인다.
+
+22. **이미지의 크기 계산은 두 함수로 갈라져 있다** — `targetSize()`는 결과 캔버스가 얼마인지,
+   `fitPlan()`은 그 캔버스 위에 원본을 어떻게 앉힐지(늘리기·여백·채우고 자르기)를 답한다.
+   패널의 안내 문구가 파이프라인과 **같은 두 함수를 부르게** 되어 있다 — 화면이 말하는 치수와
+   실제 산출물이 갈라지지 않게 하려는 것이니, 안내용 계산을 따로 만들지 말 것.
+   - **`noEnlarge`(확대 안 함)는 배율 모드에 걸지 않는다.** 한 번 걸었다가 "배율 200%"가
+     통째로 죽었다(원본을 그대로 돌려줬다). 배율은 사용자가 확대를 명시한 것이므로 예외다.
+     체크박스도 `width`·`height`·`longest`에서만 뜬다.
+
+23. **시트의 셀은 가져온 원문(`raw`)을 들고 있고, 편집 전까지 그대로 다시 나간다.**
+   예전엔 값+표시형식으로 재생성해서 **손대지도 않은 칸이 저장하면 달라졌다**(`"1.50"` → `1.5`,
+   `+8210…` → 부호 없는 수, 19자리 번호 → 지수 표기). 지금은 CSV 왕복이 바이트 단위로 같다.
+   - **표시형식을 한 번이라도 고르면 그 칸은 `raw`를 놓는다** — 사용자가 표현을 정한 것이니
+     원문이 이긴다는 규약이 그때부터 뒤집힌다. 이 전이를 없애면 형식 변경이 먹지 않는다.
+   - **xlsx 저장은 `raw`가 아니라 값+표시형식으로 나간다**(알려진 경계). 원문을 문자열로 밀어
+     넣으면 `"1.50"` 칸이 엑셀에서 수가 아니게 되기 때문이다. 고치려면 원문에서 numFmt를
+     역산해야 한다.
+   - 안전 정수(2^53) 밖의 숫자열은 **수로 해석하지 않고 글자로 남긴다**. 전화번호·주민번호·
+     카드번호·긴 ID가 망가지던 원인이라, 이 검사를 "숫자면 숫자로"로 되돌리지 말 것.
+
+24. **GIF·WebP·MP4는 프레임 딜레이의 하한과 눈금이 서로 다르다**(`gif/timing.ts`).
+   GIF는 1/100초 눈금에 20ms 하한(0·1은 브라우저가 100ms로 올린다). 그래서 **미리보기가
+   내보내기 형식 칩을 따라간다** — 형식을 바꾸면 재생 속도도 바뀌는 것이 의도된 동작이다.
+   미리보기를 형식과 무관하게 되돌리면 "화면과 결과가 다르다"는 원래 문제로 돌아간다.
+
+25. **동영상에서 무손실(패킷 복사)은 회전과 함께 쓰면 조건부로 깨진다.** MP4는 회전을
+   메타데이터로 실어 복사를 유지하지만, **WebM(Matroska)은 회전 메타데이터를 쓰지 않아**
+   mediabunny가 조용히 재인코딩한다. 화면이 그 조건에서만 안내를 띄우게 되어 있다
+   (`rotateBreaksCopy`) — 무손실 표시가 거짓말이 되지 않게 하려는 것이니 지울 것 없다.
+
+26. **드롭의 취소 프레임은 양방향 멱등이다.** 한쪽만 정리하면 상대가 영원히 기다린다.
+   취소 뒤 남아서 도착하는 청크가 **다음 파일에 섞이지 않는지**가 이 프로토콜의 급소다.
+   - **아직 `ack`가 없어 송신 측 "완료"는 낙관적이다** — 진행률이 재는 것은 데이터 채널에
+     건넨 바이트지 상대가 받은 바이트가 아니다. 전송 첫 구간의 속도가 실제보다 높게 나왔다가
+     가라앉는 것도 같은 이유다. 취소 프레임을 붙인 자리에 ack를 더하면 둘 다 풀린다.
 
 ## 핵심 설계 결정 (그릴링 합의 요약)
 
