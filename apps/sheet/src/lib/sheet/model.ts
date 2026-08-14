@@ -303,6 +303,8 @@ export function insertCols(sheet: SheetDoc, at: number, count: number, shift: Re
   );
   sheet.colWidths = shiftSizes(sheet.colWidths, at, count);
   sheet.cols += count;
+  // 표 안에 끼워 넣었으면 표도 그만큼 넓어진다(오른쪽 바깥이면 표는 그대로).
+  if (sheet.srcCols !== undefined && at < sheet.srcCols) sheet.srcCols += count;
 }
 
 export function deleteCols(sheet: SheetDoc, at: number, count: number, shift: RefShift): void {
@@ -314,6 +316,11 @@ export function deleteCols(sheet: SheetDoc, at: number, count: number, shift: Re
   );
   sheet.colWidths = shiftSizes(sheet.colWidths, at, -count);
   sheet.cols = Math.max(1, sheet.cols - count);
+  // 지운 열 중 표 안에 있던 것만큼 표가 좁아진다 — 안 그러면 지운 열이
+  // 빈 칸으로 파일에 계속 남는다(csv.ts의 srcCols).
+  if (sheet.srcCols !== undefined && at < sheet.srcCols) {
+    sheet.srcCols -= Math.min(at + count, sheet.srcCols) - at;
+  }
 }
 
 // ── 정렬 ────────────────────────────────────────────────────────

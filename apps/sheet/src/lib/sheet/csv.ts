@@ -251,6 +251,9 @@ export function readCsv(
   }
 
   sheet.cols = Math.max(26, maxCols + 3);
+  // 원문이 몇 열짜리였나를 적어 둔다 — 오른쪽 끝 열이 통째로 비어 있으면
+  // 셀 Map만 봐서는 그 열이 있었다는 걸 알 수 없다(types.ts의 srcCols).
+  sheet.srcCols = maxCols;
   if (headerLikely) sheet.frozenRows = 1;
   return { sheet, encoding, delimiter, headerLikely, columns: maxCols, preserved };
 }
@@ -269,6 +272,13 @@ function quoteField(text: string, delimiter: Delimiter): string {
  * 시트 → CSV 바이트. 화면에 보이는 문자열(표시 형식 적용 후)로 내보낸다.
  * 파일에서 온 뒤로 손대지 않은 칸은 원문(`raw`)을 그대로 다시 쓴다 — 한 칸만
  * 고치고 저장했는데 건드리지 않은 열이 통째로 달라져 있는 일을 막는다.
+ *
+ * **표는 네모로 나간다.** 열 수는 값이 든 칸의 오른쪽 끝과 원문에서 본 열 수
+ * (`srcCols`) 중 넓은 쪽이고, 모든 줄을 그 폭에 맞춘다. 예전엔 줄마다 오른쪽 끝의
+ * 빈 칸을 떨어냈는데, 그러면 마지막 열이 빈 줄이 왕복만으로 한 칸 좁아져
+ * ("이름,메모\r\n김,\r\n" → "…\r\n김\r\n") 받는 쪽에서 열이 밀렸다.
+ * 예외는 **칸이 하나도 없는 줄** 하나뿐이다 — 원문의 빈 줄에 없던 구분자를
+ * 지어내지 않는다.
  */
 export function writeCsv(
   sheet: SheetDoc,
@@ -277,24 +287,32 @@ export function writeCsv(
 ): Uint8Array {
   let bottom = -1;
   let right = -1;
+  const filled = new Set<number>();
   for (const key of sheet.cells.keys()) {
     const r = Math.floor(key / 16_384);
     const c = key % 16_384;
     if (r > bottom) bottom = r;
     if (c > right) right = c;
+    filled.add(r);
   }
+
+  // 표의 폭. 값이 든 범위보다 원문이 넓었다면(오른쪽 끝 빈 열) 원문 쪽을 따른다.
+  const width = Math.max(right + 1, sheet.srcCols ?? 0);
 
   const lines: string[] = [];
   for (let r = 0; r <= bottom; r++) {
+    // 칸이 하나도 없는 줄은 빈 줄 그대로 — 원문에 없던 구분자를 만들지 않는다.
+    if (!filled.has(r)) {
+      lines.push("");
+      continue;
+    }
     const fields: string[] = [];
-    for (let c = 0; c <= right; c++) {
+    for (let c = 0; c < width; c++) {
       const cell = sheet.cells.get(cellKey(r, c));
       const text =
         options.formulas && cell?.f ? `=${cell.f}` : (cell?.raw ?? render(r, c));
       fields.push(quoteField(text, options.delimiter));
     }
-    // 오른쪽 끝의 빈 칸들은 떨어낸다 — 파일이 쓸데없이 넓어 보인다.
-    while (fields.length > 0 && fields[fields.length - 1] === "") fields.pop();
     lines.push(fields.join(options.delimiter));
   }
 

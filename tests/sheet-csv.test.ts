@@ -19,8 +19,17 @@ import {
   type Delimiter,
 } from "../apps/sheet/src/lib/sheet/csv";
 import { cellKey } from "../apps/sheet/src/lib/sheet/a1";
-import { applyStyle, cellText, clearStyles, forceText, parseInput, putCell } from "../apps/sheet/src/lib/sheet/model";
-import type { SheetDoc } from "../apps/sheet/src/lib/sheet/types";
+import {
+  applyStyle,
+  cellText,
+  clearStyles,
+  deleteCols,
+  forceText,
+  insertCols,
+  parseInput,
+  putCell,
+} from "../apps/sheet/src/lib/sheet/model";
+import { emptySheet, type SheetDoc } from "../apps/sheet/src/lib/sheet/types";
 
 const utf8 = new TextEncoder();
 
@@ -380,10 +389,134 @@ describe("CSV 왕복 — 읽고 다시 쓰면 바이트가 같다", () => {
     expect(out).toBe('"  x  ",a\n');
   });
 
-  it("[알려진 예외] 줄 끝의 빈 칸은 떨어져 나간다 — 여기서만 바이트가 달라진다", () => {
+  it("마지막 열이 빈 줄도 바이트가 그대로다 — 메모를 안 적었다고 열이 사라지면 안 된다", () => {
     const src = "이름,메모\r\n김,\r\n";
-    // 둘째 줄의 빈 메모 칸이 사라진다(writeCsv가 오른쪽 끝 빈 칸을 떨어낸다).
-    expect(textOf(roundTrip(bomBytes(src))).replace("﻿", "")).toBe("이름,메모\r\n김\r\n");
+    const input = bomBytes(src);
+    expect(Array.from(roundTrip(input))).toEqual(Array.from(input));
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// 표는 네모다. 열 수는 (1) 값이 든 칸의 오른쪽 끝과 (2) 원문에서 본 열 수 중
+// 넓은 쪽으로 정하고, 모든 줄을 그 폭에 맞춰 쓴다. 예전엔 줄마다 오른쪽 끝의 빈
+// 칸을 떨어냈다 — "이름,메모\r\n김,\r\n"이 왕복만으로 "김"이 되어 받는 쪽에서
+// 열이 밀렸다(CLAUDE.md 23번의 "왕복이 바이트 단위로 같다"를 정면으로 깨는 것).
+describe("표의 열 수 — 왕복해도 줄지 않는다", () => {
+  const opts = (over: Partial<CsvWriteOptions> = {}): CsvWriteOptions => ({
+    ...DEFAULT_CSV_WRITE,
+    bom: false,
+    newline: "\n",
+    ...over,
+  });
+
+  const noBomTrip = (src: string): string =>
+    textOf(roundTrip(bytes(src), { bom: false, newline: "\n" }));
+
+  it("값이 든 칸이 정하는 폭에 모든 줄을 맞춘다 — 짧은 줄은 빈 칸으로 채운다", () => {
+    // 첫 줄이 3열이라 이 표는 3열이다. 둘째 줄도 3열로(칸 두 개는 비어서) 나가야 한다.
+    expect(noBomTrip("a,b,c\nd\n")).toBe("a,b,c\nd,,\n");
+  });
+
+  it("줄 끝 빈 칸이 여러 개여도 자리를 지킨다", () => {
+    expect(noBomTrip("a,b,c\r\nd,,\r\n")).toBe("a,b,c\nd,,\n");
+  });
+
+  it("원문 전체가 빈 마지막 열도 살아남는다 — 읽을 때 본 열 수를 기억한다", () => {
+    // 값이 든 칸만 보면 2열이지만, 원문은 3열짜리 표다. 그 3열을 기억해서 되돌려 준다.
+    const read = readCsv(bytes("a,b,\nc,d,\n"));
+    expect(read.columns).toBe(3);
+    expect(read.sheet.srcCols).toBe(3);
+    expect(noBomTrip("a,b,\nc,d,\n")).toBe("a,b,\nc,d,\n");
+  });
+
+  it("빈 열이 둘이어도 원문 열 수 그대로 나간다", () => {
+    expect(noBomTrip("a,b,,\nc,d,,\n")).toBe("a,b,,\nc,d,,\n");
+  });
+
+  it("새로 만든 표에는 기억할 원문이 없다 — 빈 열을 지어내지 않는다", () => {
+    // emptySheet의 cols는 26이지만 그건 화면 크기일 뿐 표의 열 수가 아니다.
+    const sheet = emptySheet("Sheet1");
+    expect(sheet.srcCols).toBeUndefined();
+    putCell(sheet, 0, 0, { v: "x" });
+    putCell(sheet, 1, 1, { v: "y" });
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("x,\n,y\n");
+  });
+
+  it("빈 줄은 빈 줄로 남는다 — 원문에 없던 구분자를 지어내지 않는다", () => {
+    expect(noBomTrip("a,b\n\nc,d\n")).toBe("a,b\n\nc,d\n");
+  });
+
+  it("탭 구분에서도 줄 끝 빈 칸이 자리를 지킨다", () => {
+    const src = "이름\t메모\r\n김\t\r\n";
+    const input = bomBytes(src);
+    expect(readCsv(input).delimiter).toBe("\t");
+    expect(Array.from(roundTrip(input))).toEqual(Array.from(input));
+  });
+
+  it("줄 끝이 비어도 두 번 왕복하면 더는 변하지 않는다(멱등)", () => {
+    const once = roundTrip(bomBytes("이름,메모,비고\r\n김,,\r\n"));
+    expect(Array.from(roundTrip(once))).toEqual(Array.from(once));
+  });
+
+  it("열을 지우면 기억한 열 수도 같이 줄어든다 — 지운 열이 파일에 남지 않는다", () => {
+    const sheet = readCsv(bytes("a,b,\nc,d,\n")).sheet;
+    deleteCols(sheet, 2, 1, (f) => f); // 빈 셋째 열을 지운다
+    expect(sheet.srcCols).toBe(2);
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("a,b\nc,d\n");
+  });
+
+  it("표 밖(오른쪽)의 열을 지우는 것은 표의 열 수를 건드리지 않는다", () => {
+    const sheet = readCsv(bytes("a,b,\nc,d,\n")).sheet;
+    deleteCols(sheet, 9, 1, (f) => f);
+    expect(sheet.srcCols).toBe(3);
+  });
+
+  it("열을 끼워 넣으면 기억한 열 수도 같이 늘어난다", () => {
+    const sheet = readCsv(bytes("a,b,\nc,d,\n")).sheet;
+    insertCols(sheet, 1, 1, (f) => f);
+    expect(sheet.srcCols).toBe(4);
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("a,,b,\nc,,d,\n");
+  });
+
+  it("표 오른쪽 바깥에 끼워 넣은 열은 표를 넓히지 않는다", () => {
+    const sheet = readCsv(bytes("a,b,\nc,d,\n")).sheet;
+    insertCols(sheet, 5, 2, (f) => f);
+    expect(sheet.srcCols).toBe(3);
+  });
+
+  it("표의 오른쪽 끝에 딱 붙여 끼워 넣은 열은 표 밖이다 — 경계는 열 수와 같은 자리다", () => {
+    // 3열짜리 표(0·1·2)에 at=3은 표 다음 칸이다. `at < srcCols`가 거짓이어야 한다.
+    const sheet = readCsv(bytes("a,b,\nc,d,\n")).sheet;
+    insertCols(sheet, 3, 1, (f) => f);
+    expect(sheet.srcCols).toBe(3);
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("a,b,\nc,d,\n");
+  });
+
+  it("표 안에서 시작해 밖까지 걸친 삭제는 표 안의 몫만큼만 줄인다", () => {
+    // 3열 표에서 1열부터 5개를 지운다 — 표 안에 있던 건 1·2 두 개뿐이다.
+    const sheet = readCsv(bytes("a,b,\nc,d,\n")).sheet;
+    deleteCols(sheet, 1, 5, (f) => f);
+    expect(sheet.srcCols).toBe(1);
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("a\nc\n");
+  });
+
+  it("빈 칸이 든 줄에서도 수식·표시형식 규칙은 그대로다", () => {
+    const sheet = readCsv(bytes("합,메모\n1.50,\n")).sheet;
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("합,메모\n1.50,\n");
+  });
+
+  it("수식으로 내보낼 때도 줄 끝 빈 칸이 자리를 지킨다", () => {
+    const sheet = readCsv(bytes("이름,메모\n김,\n")).sheet;
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts({ formulas: true })))).toBe(
+      "이름,메모\n김,\n",
+    );
+  });
+
+  it("[알려진 예외] 칸이 전부 빈 줄은 빈 줄이 되어 나간다 — 읽고 나면 둘을 가를 수 없다", () => {
+    // 셀은 희소 Map이라 ",\n"도 "\n"도 읽고 나면 "셀이 없는 줄"로 똑같아진다.
+    // 둘 중 하나만 되살릴 수 있는데, 흔한 쪽(원문의 빈 줄)을 지키는 편을 골랐다.
+    // 그래서 여기서만 바이트가 달라진다.
+    expect(noBomTrip("a,b\n,\nc,d\n")).toBe("a,b\n\nc,d\n");
   });
 });
 
