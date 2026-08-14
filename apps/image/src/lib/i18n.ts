@@ -100,6 +100,13 @@ export const t = {
     noEnlarge: "원본보다 크게 늘리지 않기",
 
     fit: "맞춤 방식",
+    /** 늘리기로 비율이 실제로 어긋날 때만 뜬다. */
+    fitStretchWarn: "비율 어긋남",
+    fitStretchWarnHint: (ew: number, eh: number, tw: number, th: number) =>
+      `${ew}×${eh}px 비율이 ${tw}×${th}px로 눌려요`,
+    /** JPEG로 내보내 투명이 사라질 때만 뜬다. */
+    alphaWarn: "투명 → 흰색",
+    alphaWarnHint: "JPEG는 투명을 담지 못해 흰 배경에 합성돼요",
     fitStretch: "늘리기",
     fitContain: "여백",
     fitCover: "채우고 자르기",

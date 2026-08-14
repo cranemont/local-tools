@@ -532,6 +532,74 @@ describe("두 함수를 이어 붙인 결과 — 화면 안내문이 읽는 값"
   });
 });
 
+describe("원본 변이 0이거나 숫자가 아니어도 캔버스가 NaN이 되지 않는다", () => {
+  // 비율을 잇는 세 모드는 원본 변으로 나눈다. 원본이 0이면 0/0 = NaN이고
+  // Math.max(1, NaN)은 NaN이라 붙잡히지 않는다 — 그 NaN이 canvas.width로 간다.
+  it("가로 맞춤에서 원본 가로가 0이면 세로는 원본 값을 그대로 둔다", () => {
+    // 비율을 알 수 없으니 지정한 변만 쓴다.
+    expect(targetSize(0, 600, spec({ mode: "width", width: 800 }))).toEqual({
+      w: 800,
+      h: 600,
+    });
+  });
+
+  it("세로 맞춤에서 원본 세로가 0이면 가로는 원본 값을 그대로 둔다", () => {
+    expect(targetSize(800, 0, spec({ mode: "height", height: 400 }))).toEqual({
+      w: 800,
+      h: 400,
+    });
+  });
+
+  it("긴 변 모드에서 원본이 0×0이어도 1px 아래로 내려가지 않는다", () => {
+    expectSane(targetSize(0, 0, spec({ mode: "longest", longest: 100 })));
+  });
+
+  it("원본 변이 0인 모든 모드·맞춤 조합에서 결과가 정수 1px 이상이다", () => {
+    const modes = ["none", "scale", "width", "height", "longest", "exact"] as const;
+    const fits: FitMode[] = ["stretch", "contain", "cover"];
+    const broken: Array<[number, number]> = [
+      [0, 0],
+      [0, 600],
+      [800, 0],
+    ];
+    for (const mode of modes) {
+      for (const fit of fits) {
+        for (const noEnlarge of [false, true]) {
+          for (const [bw, bh] of broken) {
+            const s = spec({ mode, fit, noEnlarge });
+            const target = targetSize(bw, bh, s);
+            expectSane(target);
+            const plan = fitPlan(bw, bh, target.w, target.h, effectiveFit(s));
+            expectSane(plan.draw);
+            expectSane(plan.src);
+          }
+        }
+      }
+    }
+  });
+
+  it("목표 치수가 NaN이어도 캔버스는 1px로 남는다 (입력란을 비웠을 때)", () => {
+    for (const mode of ["scale", "width", "height", "longest", "exact"] as const) {
+      const s = spec({
+        mode,
+        scale: Number.NaN,
+        width: Number.NaN,
+        height: Number.NaN,
+        longest: Number.NaN,
+      });
+      expectSane(targetSize(800, 600, s));
+    }
+  });
+
+  it("fitPlan도 원본 변이 0이면 1px로 붙잡는다", () => {
+    for (const fit of ["stretch", "contain", "cover"] as FitMode[]) {
+      const plan = fitPlan(0, 600, 100, 100, fit);
+      expectSane(plan.draw);
+      expectSane(plan.src);
+    }
+  });
+});
+
 describe("안내용 계산을 따로 만들지 않는다 (CLAUDE.md 22)", () => {
   const read = (rel: string) =>
     readFileSync(new URL(`../apps/image/src/lib/${rel}`, import.meta.url), "utf8");

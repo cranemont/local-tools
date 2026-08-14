@@ -17,38 +17,50 @@ export function effectiveSize(item: ImageItem): { w: number; h: number } {
   return crop ? { w: crop.w, h: crop.h } : rotatedSize(item);
 }
 
+/** 캔버스에 실을 수 있는 값으로 붙잡는다 — 1px 이상의 정수.
+ *  NaN·Infinity를 거르는 게 핵심이다: Math.max(1, NaN)은 NaN이라 그대로 빠져나간다. */
+function clamp(n: number): number {
+  return Number.isFinite(n) ? Math.max(1, Math.round(n)) : 1;
+}
+
+/** 원본 변으로 나눠 비율을 잇는 자리. 원본 변이 0이거나 수가 아니면 비율을 알 수 없으므로
+ *  따라가는 변을 원본 값 그대로 둔다 — 0/0 = NaN이 캔버스 크기로 흘러가던 곳이다. */
+function scaled(side: number, from: number, to: number): number {
+  return Number.isFinite(from) && from > 0 ? (side * to) / from : side;
+}
+
 /** 리사이즈 설정을 적용한 목표 캔버스 크기. exact를 뺀 모드는 비율을 유지한다. */
 export function targetSize(
   w: number,
   h: number,
   resize: ResizeSpec,
 ): { w: number; h: number } {
-  const clamp = (n: number) => Math.max(1, Math.round(n));
+  const original = { w: clamp(w), h: clamp(h) };
   let out: { w: number; h: number };
   switch (resize.mode) {
     case "scale":
       // 배율은 사용자가 부른 배수 그 자체다 — 200%를 넣었으면 늘리는 게 맞아 noEnlarge를 타지 않는다.
       return { w: clamp((w * resize.scale) / 100), h: clamp((h * resize.scale) / 100) };
     case "width":
-      out = { w: clamp(resize.width), h: clamp((h * resize.width) / w) };
+      out = { w: clamp(resize.width), h: clamp(scaled(h, w, resize.width)) };
       break;
     case "height":
-      out = { w: clamp((w * resize.height) / h), h: clamp(resize.height) };
+      out = { w: clamp(scaled(w, h, resize.height)), h: clamp(resize.height) };
       break;
     case "longest":
       // 긴 변만 목표에 맞추고 짧은 변은 따라간다 — 위 두 분기를 방향만 골라 재사용.
       out =
         w >= h
-          ? { w: clamp(resize.longest), h: clamp((h * resize.longest) / w) }
-          : { w: clamp((w * resize.longest) / h), h: clamp(resize.longest) };
+          ? { w: clamp(resize.longest), h: clamp(scaled(h, w, resize.longest)) }
+          : { w: clamp(scaled(w, h, resize.longest)), h: clamp(resize.longest) };
       break;
     case "exact":
       // 캔버스가 곧 목표다 — 원본이 작아도 줄이지 않는다(그림 배치는 fitPlan이 정한다).
       return { w: clamp(resize.width), h: clamp(resize.height) };
     default:
-      return { w, h };
+      return original;
   }
-  if (resize.noEnlarge && (out.w > w || out.h > h)) return { w, h };
+  if (resize.noEnlarge && (out.w > w || out.h > h)) return original;
   return out;
 }
 
@@ -68,22 +80,23 @@ export function fitPlan(
   th: number,
   fit: FitMode,
 ): FitPlan {
-  const clamp = (n: number) => Math.max(1, Math.round(n));
+  const whole = { w: clamp(bw), h: clamp(bh) };
+  const canvas = { w: clamp(tw), h: clamp(th) };
   if (fit === "contain") {
     const s = Math.min(tw / bw, th / bh);
-    return { draw: { w: clamp(bw * s), h: clamp(bh * s) }, src: { w: bw, h: bh } };
+    return { draw: { w: clamp(bw * s), h: clamp(bh * s) }, src: whole };
   }
   if (fit === "cover") {
     // 목표 비율만큼만 남기고 원본을 깎는다 — 남은 쪽이 캔버스를 가득 채운다.
     const wide = bw / bh > tw / th;
     return {
-      draw: { w: tw, h: th },
+      draw: canvas,
       src: wide
-        ? { w: Math.min(bw, clamp((bh * tw) / th)), h: bh }
-        : { w: bw, h: Math.min(bh, clamp((bw * th) / tw)) },
+        ? { w: clamp(Math.min(bw, (bh * tw) / th)), h: whole.h }
+        : { w: whole.w, h: clamp(Math.min(bh, (bw * th) / tw)) },
     };
   }
-  return { draw: { w: tw, h: th }, src: { w: bw, h: bh } };
+  return { draw: canvas, src: whole };
 }
 
 /** 이 설정에서 실제로 적용되는 맞춤 방식 — exact가 아니면 목표가 이미 비율을 지킨다. */

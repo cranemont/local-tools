@@ -9,6 +9,7 @@
   import { downloadBlob, formatBytes } from "../image/save";
   import {
     OUTPUT_EXT,
+    mayHaveAlpha,
     supportsExifKeep,
     type FitMode,
     type OutputFormat,
@@ -83,6 +84,25 @@
 
   /** 체인이 이어 주는 기준 비율 — 현재 장의 편집 후 가로/세로. */
   const aspect = $derived(outDims ? outDims.eff.w / outDims.eff.h : null);
+
+  /** 늘리기가 실제로 비율을 눌러 버리는가 — 목표를 손으로 적는 정확히 모드에서만 생긴다.
+   *  1% 넘게 어긋날 때만 참으로 본다(1px 반올림까지 경고하면 배지가 상시 노출이 된다). */
+  const stretchDistorts = $derived.by(() => {
+    if (!outDims || outDims.fit !== "stretch") return false;
+    const source = outDims.eff.w / outDims.eff.h;
+    const target = outDims.target.w / outDims.target.h;
+    return Math.abs(source / target - 1) > 0.01;
+  });
+
+  /** JPEG로 내보내 투명이 사라지는가 — 알파를 담을 수 있는 원본이거나, 여백을 투명으로 둔 경우. */
+  const alphaLost = $derived.by(() => {
+    if (editor.format !== "jpeg") return false;
+    const transparentPad =
+      editor.resizeMode === "exact" &&
+      editor.resizeFit === "contain" &&
+      editor.padColor === null;
+    return transparentPad || editor.items.some((i) => mayHaveAlpha(i.mime));
+  });
 
   // ── EXIF 표시 (장별 캐시) ─────────────────────────
   const exifCache = new Map<string, ExifDisplay | null>();
@@ -256,6 +276,9 @@
           {label}
         </button>
       {/each}
+      {#if alphaLost}
+        <span class="badge" title={t.panel.alphaWarnHint}>{t.panel.alphaWarn}</span>
+      {/if}
     </div>
   </section>
 
@@ -420,6 +443,19 @@
             {f.label}
           </button>
         {/each}
+        {#if stretchDistorts && outDims}
+          <span
+            class="badge"
+            title={t.panel.fitStretchWarnHint(
+              outDims.eff.w,
+              outDims.eff.h,
+              outDims.target.w,
+              outDims.target.h,
+            )}
+          >
+            {t.panel.fitStretchWarn}
+          </span>
+        {/if}
       </div>
 
       {#if editor.resizeFit === "contain"}
@@ -726,6 +762,20 @@
     background: var(--accent-weak);
     border-color: color-mix(in srgb, var(--accent) 40%, transparent);
     color: var(--accent-ink);
+  }
+
+  /* 조건이 참일 때만 붙는 경고 배지 — 컨트롤 옆자리를 쓰고 문단으로 자라지 않는다. */
+  .badge {
+    align-self: center;
+    padding: var(--space-2xs) var(--space-sm);
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: help;
   }
 
   .lbl {

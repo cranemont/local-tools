@@ -84,6 +84,21 @@ export const OUTPUT_EXT: Record<OutputFormat, string> = {
   avif: "avif",
 };
 
+/** 알파를 담을 수 있는 입력 형식인가 — JPEG로 내보낼 때 투명이 사라지는지 가리는 데 쓴다.
+ *  픽셀에 실제로 투명이 있는지는 전수 검사 없이 알 수 없어 형식으로만 가른다
+ *  (JPEG·BMP 원본은 애초에 알파가 없으므로 경고할 것이 없다). */
+export function mayHaveAlpha(mime: string): boolean {
+  return (
+    mime === "image/png" ||
+    mime === "image/webp" ||
+    mime === "image/avif" ||
+    mime === "image/gif" ||
+    mime === "image/svg+xml" ||
+    mime === "image/heic" ||
+    mime === "image/heif"
+  );
+}
+
 /** EXIF 유지를 지원하는 출력 — PNG(무손실 관례상 제외)·AVIF(HEIF 컨테이너)는 미지원. */
 export function supportsExifKeep(format: OutputFormat): boolean {
   return format === "jpeg" || format === "webp";
