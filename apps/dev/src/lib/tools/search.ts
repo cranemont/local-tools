@@ -63,7 +63,37 @@ interface Indexed {
   tool: ToolDef;
   text: string;
   cho: string;
+  /**
+   * 공백을 걷어낸 초성. 사람은 초성을 붙여 치는데('ㄱㅈㅅㅅㄱ') 색인은
+   * '글자수 세기' → 'ㄱㅈㅅ ㅅㄱ'이라 띄어쓰기를 건너는 질의가 통째로 0건이 됐다.
+   * 두 벌을 함께 두고 어느 쪽에든 걸리면 통과시킨다.
+   */
+  choTight: string;
+  /**
+   * `choTight`에서 낱말이 시작하는 자리. 공백을 지우면 앞 낱말의 꼬리와 뒤 낱말의
+   * 머리가 붙어 버려서('변환 포맷' → 'ㅂㅎㅍㅁ') 'ㅎㅍ'가 포맷터에 걸렸다 —
+   * '헬퍼'를 찾던 사람이 여섯 건을 받는다. 붙여 읽는 것은 허용하되
+   * **시작만은 낱말 첫머리**로 못 박아 그 꼬리-머리 조합을 막는다.
+   */
+  choStarts: Set<number>;
   words: string[];
+}
+
+/** 초성 문자열에서 공백을 걷어내고, 낱말이 시작하는 자리를 함께 기록한다. */
+function tighten(cho: string): { tight: string; starts: Set<number> } {
+  let tight = "";
+  const starts = new Set<number>();
+  let atStart = true;
+  for (const ch of cho) {
+    if (ch === " ") {
+      atStart = true;
+      continue;
+    }
+    if (atStart) starts.add(tight.length);
+    tight += ch;
+    atStart = false;
+  }
+  return { tight, starts };
 }
 
 const index = new WeakMap<ToolDef, Indexed>();
@@ -72,10 +102,14 @@ function indexOf(tool: ToolDef): Indexed {
   let entry = index.get(tool);
   if (!entry) {
     const text = `${tool.title} ${tool.desc} ${tool.group} ${tool.keywords}`.toLowerCase();
+    const cho = choseong(text);
+    const { tight, starts } = tighten(cho);
     entry = {
       tool,
       text,
-      cho: choseong(text),
+      cho,
+      choTight: tight,
+      choStarts: starts,
       words: text.split(/[^0-9a-z가-힣ㄱ-ㅎ]+/).filter((w) => w.length > 1),
     };
     index.set(tool, entry);
@@ -83,8 +117,16 @@ function indexOf(tool: ToolDef): Indexed {
   return entry;
 }
 
+/** 붙여 친 초성 — 낱말 첫머리에서 시작하는 자리만 인정한다. */
+function tightHit(entry: Indexed, token: string): boolean {
+  for (let i = entry.choTight.indexOf(token); i >= 0; i = entry.choTight.indexOf(token, i + 1))
+    if (entry.choStarts.has(i)) return true;
+  return false;
+}
+
 function strictHit(entry: Indexed, token: string): boolean {
-  if (isChoseongOnly(token)) return entry.cho.includes(token);
+  // 초성 질의는 띄어 친 것도('ㄱㅈㅅ ㅅㄱ') 붙여 친 것도('ㄱㅈㅅㅅㄱ') 같은 뜻이다.
+  if (isChoseongOnly(token)) return entry.cho.includes(token) || tightHit(entry, token);
   return entry.text.includes(token);
 }
 

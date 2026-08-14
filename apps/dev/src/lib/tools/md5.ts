@@ -9,15 +9,37 @@ const S = [
 const K = new Uint32Array(64);
 for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 2 ** 32);
 
+/**
+ * 패딩까지 포함한 전체 길이 — 메시지 뒤에 0x80 한 바이트와 길이 8바이트가 들어가는
+ * 가장 작은 64의 배수(RFC 1321 §3.1–3.2).
+ *
+ * 예전엔 `(((len + 8) >> 6) + 1) << 6`이었다. 시프트는 32비트 연산이라 결과가 2^31에
+ * 닿는 순간 부호가 뒤집힌다 — len ≥ 2147483576(2GiB - 72)에서 음수가 나오고
+ * `new Uint8Array(음수)`가 RangeError를 던졌다. 해시 도구는 파일을 통째로
+ * `arrayBuffer()`로 읽으므로 2GiB짜리 파일에서 실제로 닿는 자리다.
+ */
+export function md5PaddedLength(len: number): number {
+  return Math.ceil((len + 9) / 64) * 64;
+}
+
+/**
+ * 메시지 길이(바이트)를 64비트 리틀엔디언 비트 길이의 두 워드로 나눈다.
+ * 2^29바이트(512MiB)부터는 비트 수가 2^32를 넘어 상위 워드가 필요하다.
+ * `len % 2**29`로 먼저 줄여 두 워드 모두 정확한 정수로 나오게 한다.
+ */
+export function md5LengthWords(len: number): [lo: number, hi: number] {
+  return [(len % 2 ** 29) * 8, Math.floor(len / 2 ** 29)];
+}
+
 export function md5Hex(bytes: Uint8Array): string {
   const len = bytes.length;
-  const padded = new Uint8Array((((len + 8) >> 6) + 1) << 6);
+  const padded = new Uint8Array(md5PaddedLength(len));
   padded.set(bytes);
   padded[len] = 0x80;
   const dv = new DataView(padded.buffer);
-  const bitLen = len * 8;
-  dv.setUint32(padded.length - 8, bitLen >>> 0, true);
-  dv.setUint32(padded.length - 4, Math.floor(bitLen / 2 ** 32), true);
+  const [bitLo, bitHi] = md5LengthWords(len);
+  dv.setUint32(padded.length - 8, bitLo, true);
+  dv.setUint32(padded.length - 4, bitHi, true);
 
   let a0 = 0x67452301;
   let b0 = 0xefcdab89;

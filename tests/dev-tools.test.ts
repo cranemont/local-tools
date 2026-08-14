@@ -9,7 +9,12 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { createHash } from "node:crypto";
-import { md5Hex, bytesToHex } from "../apps/dev/src/lib/tools/md5";
+import {
+  md5Hex,
+  bytesToHex,
+  md5PaddedLength,
+  md5LengthWords,
+} from "../apps/dev/src/lib/tools/md5";
 
 // registry.ts가 끌고 오는 .svelte 17개는 node에서 변환되지 않는다.
 // 검색은 컴포넌트를 보지 않으므로(제목·설명·그룹·키워드만 본다) 껍데기로 대체한다.
@@ -75,6 +80,86 @@ describe("md5Hex — 64바이트 블록 경계 (패딩 버그가 나는 자리)"
       const buf = new Uint8Array(n);
       for (let i = 0; i < n; i++) buf[i] = (i * 37 + 11) & 0xff;
       expect(md5Hex(buf), `길이 ${n}`).toBe(reference(buf));
+    }
+  });
+});
+
+describe("md5PaddedLength — RFC 1321 3.1: 0x80 하나 + 길이 8바이트가 들어가는 64의 배수", () => {
+  // 규격이 말하는 것은 하나다 — 메시지 뒤에 1비트(0x80)와 8바이트 길이를 붙이고
+  // 전체를 64의 배수로 채운다. 그러니 답은 언제나 `len + 9` 이상인 가장 작은 64의 배수다.
+  const spec = (len: number) => Math.ceil((len + 9) / 64) * 64;
+
+  const cases: [number, number][] = [
+    [0, 64], // 빈 입력에도 블록 하나는 필요하다
+    [54, 64],
+    [55, 64], // 55 + 1 + 8 = 64 — 딱 맞는 마지막 길이
+    [56, 128], // 한 바이트 더 들어오면 블록이 하나 늘어난다
+    [63, 128],
+    [64, 128],
+    [65, 128],
+    [119, 128], // 119 + 9 = 128
+    [120, 192],
+    [128, 192],
+  ];
+  for (const [len, size] of cases)
+    it(`${len}바이트 → ${size}바이트`, () => {
+      expect(md5PaddedLength(len)).toBe(size);
+    });
+
+  it("2GiB 근처에서도 음수가 되지 않는다 — 32비트 시프트가 뒤집히던 자리", () => {
+    // 예전 식 `(((len + 8) >> 6) + 1) << 6`은 결과가 2^31에 닿는 순간 int32로 뒤집혔다.
+    // 첫 희생자가 2147483576바이트(= 2GiB - 72)다: 정답 2147483648이 -2147483648이 됐다.
+    expect(md5PaddedLength(2147483576)).toBe(2147483648);
+    expect(md5PaddedLength(2147483575)).toBe(2147483584); // 바로 앞 길이는 예전에도 멀쩡했다
+  });
+
+  it("2GiB·3GiB를 넘겨도 규격대로 계산한다", () => {
+    expect(md5PaddedLength(2 ** 31)).toBe(2147483712); // 2^31은 이미 64의 배수 → 한 블록 더
+    expect(md5PaddedLength(2 ** 31 + 55)).toBe(2147483712);
+    expect(md5PaddedLength(2 ** 31 + 56)).toBe(2147483776);
+    expect(md5PaddedLength(3 * 2 ** 30)).toBe(3221225536);
+  });
+
+  it("어떤 길이에서도 64의 배수이고, 여유가 9~72바이트다 (0x80 하나 + 길이 8)", () => {
+    const lens = [0, 1, 7, 55, 56, 64, 1000, 2 ** 20, 2147483575, 2147483576, 2 ** 31, 2 ** 32 + 3];
+    for (const len of lens) {
+      const size = md5PaddedLength(len);
+      expect(size, `길이 ${len}`).toBeGreaterThan(0);
+      expect(size % 64, `길이 ${len}`).toBe(0);
+      expect(size - len, `길이 ${len}`).toBeGreaterThanOrEqual(9);
+      expect(size - len, `길이 ${len}`).toBeLessThanOrEqual(72);
+      expect(size, `길이 ${len}`).toBe(spec(len));
+    }
+  });
+});
+
+describe("md5LengthWords — 길이는 비트 수로, 64비트 리틀엔디언 두 워드에 넣는다", () => {
+  // 손계산: bits = len * 8, lo = bits mod 2^32, hi = floor(bits / 2^32).
+  // 상위 워드는 len이 2^29(= 512MiB)에 닿는 순간부터 0이 아니다 — 2^29 * 8 = 2^32.
+  const cases: [number, number, number][] = [
+    [0, 0, 0],
+    [1, 8, 0],
+    [55, 440, 0],
+    [2 ** 29 - 1, 4294967288, 0], // 상위 워드가 아직 0인 마지막 길이
+    [2 ** 29, 0, 1], // 여기서 넘어간다
+    [2 ** 29 + 1, 8, 1],
+    [2147483648, 0, 4], // 2GiB → 2^34비트 = 4 * 2^32
+    [3 * 2 ** 30, 0, 6], // 3GiB
+  ];
+  for (const [len, lo, hi] of cases)
+    it(`${len}바이트 → lo=${lo}, hi=${hi}`, () => {
+      expect(md5LengthWords(len)).toEqual([lo, hi]);
+    });
+
+  it("두 워드 모두 부호 없는 32비트 정수 범위 안이다 (setUint32에 그대로 들어간다)", () => {
+    for (const len of [0, 55, 2 ** 29 - 1, 2 ** 29, 2147483576, 2 ** 32 + 7]) {
+      const [lo, hi] = md5LengthWords(len);
+      for (const w of [lo, hi]) {
+        expect(Number.isInteger(w), `길이 ${len}`).toBe(true);
+        expect(w, `길이 ${len}`).toBeGreaterThanOrEqual(0);
+        expect(w, `길이 ${len}`).toBeLessThan(2 ** 32);
+      }
+      expect(hi * 2 ** 32 + lo, `길이 ${len}`).toBe(len * 8);
     }
   });
 });
@@ -220,8 +305,41 @@ describe("searchTools — 의도한 질의는 여전히 걸린다", () => {
     expect(ids("ㄱㅈㅅ")).toContain("chars");
   });
 
+  it("초성은 띄어쓰기를 건너서도 걸린다 ('ㄱㅈㅅㅅㄱ' → '글자수 세기')", () => {
+    // 사람은 초성을 붙여 친다. 색인이 공백을 그대로 두면 '글자수 세기'는
+    // 'ㄱㅈㅅ ㅅㄱ'이라 붙여 친 'ㄱㅈㅅㅅㄱ'가 0건이 됐다.
+    // 공백을 지운 색인을 하나 더 두는 것이지, 초성을 헐겁게 보는 것이 아니다 —
+    // 붙여 친 질의도 걸리는 것은 여전히 그 도구 하나뿐이다.
+    expect(ids("ㄱㅈㅅㅅㄱ")).toEqual(["chars"]);
+  });
+
+  it("한 단어짜리 초성도 그대로다 ('ㅌㅇㅅㅌㅍ' → 타임스탬프)", () => {
+    expect(ids("ㅌㅇㅅㅌㅍ")).toContain("time");
+  });
+
+  it("띄어 친 초성도 토큰마다 걸린다 ('ㄱㅈㅅ ㅅㄱ')", () => {
+    expect(ids("ㄱㅈㅅ ㅅㄱ")).toContain("chars");
+  });
+
+  it("두 단어짜리 제목도 붙여 친 초성으로 걸린다 ('ㅌㅅㅌㅂㄱ' → '텍스트 비교')", () => {
+    expect(ids("ㅌㅅㅌㅂㄱ")).toContain("diff");
+    expect(ids("ㅋㄹㅂㅎ")).toContain("color"); // '컬러 변환'
+  });
+
   it("붙은 두 글자가 뒤바뀐 오타를 받는다 ('jsno' → 포맷터)", () => {
     expect(ids("jsno")).toContain("format");
+  });
+
+  it("초성을 붙여 읽어도 낱말 첫머리에서 시작해야 한다 ('ㅎㅍ'는 '헬퍼' 하나다)", () => {
+    // 공백을 지운 초성 색인은 앞 낱말의 꼬리와 뒤 낱말의 머리를 붙여 버린다 —
+    // '변환 포맷'이 'ㅂㅎㅍㅁ'이 되어 'ㅎ퍼'도 아닌 'ㅎㅍ'가 포맷터에 걸렸다.
+    // 사람이 'ㅎㅍ'라고 칠 때 뜻하는 것은 '헬퍼'이지 '…환 포…'가 아니다.
+    expect(ids("ㅎㅍ")).toEqual(["oauth"]);
+  });
+
+  it("낱말 첫머리 규칙은 다른 짧은 초성에도 같다", () => {
+    expect(ids("ㅌㅇ")).toEqual(["time"]); // 낱말 '타임'으로 시작한다
+    expect(ids("ㅈㅅ")).toEqual(["chars"]); // 낱말 '자소서'로 시작한다
   });
 
   it("한 글자 오타(편집거리 1)를 받는다 — 단 네 글자부터", () => {
