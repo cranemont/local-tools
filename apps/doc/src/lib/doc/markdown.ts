@@ -247,6 +247,25 @@ function collectNotes(root: Document, images: ExtractedImage[]): string[] {
   return notes;
 }
 
+/**
+ * 결과 마크다운의 제목 줄들. 워드 문서에는 문단을 물어볼 엔진이 없어서, 목차를
+ * **저장될 결과물**에서 뽑는다 — 화면의 목차와 파일의 `#`이 어긋날 수 없다.
+ */
+export function headingsOf(markdown: string): { level: number; text: string }[] {
+  const items: { level: number; text: string }[] = [];
+  let fenced = false;
+  for (const line of markdown.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) continue;
+    const found = /^(#{1,6})\s+(.+?)\s*#*$/.exec(line);
+    if (found) items.push({ level: found[1].length, text: found[2].trim() });
+  }
+  return items;
+}
+
 export function htmlToMarkdown(html: string): MarkdownResult {
   const root = new DOMParser().parseFromString(html, "text/html");
   const images = extractImages(root);

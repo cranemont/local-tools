@@ -46,6 +46,16 @@ function isPasswordProblem(message: string): boolean {
   return /비밀번호|암호|password|encrypt/i.test(message);
 }
 
+/** 엔진이 내주는 JSON 하나. 못 알아들으면 null이다 — 패닉만은 위로 올린다. */
+function readJson<T>(run: () => string): T | null {
+  try {
+    return JSON.parse(guard(run)) as T;
+  } catch (error) {
+    if (isEnginePanic(messageOf(error))) throw error;
+    return null;
+  }
+}
+
 /** 파일 바이트로 문서를 연다. 비밀번호가 필요하면 PasswordRequiredError를 던진다. */
 export async function openHwp(bytes: Uint8Array, password?: string): Promise<HwpDocument> {
   await ensureEngine();
@@ -128,14 +138,93 @@ function controlsOf(doc: HwpDocument, section: number, paragraph: number): strin
   return parts;
 }
 
+/** 목차 한 줄. 한글 문서는 문단 자리를 함께 들고 있어 눌렀을 때 그리로 갈 수 있다. */
+export interface OutlineItem {
+  /** 1~6 — 마크다운 `#` 개수와 같다. */
+  level: number;
+  text: string;
+  section?: number;
+  para?: number;
+}
+
+export interface DocumentContent {
+  html: string;
+  outline: OutlineItem[];
+}
+
 /**
- * 문서 전체를 HTML로 — 마크다운으로 가는 중간 산물이다.
+ * 제목으로 보기에 너무 긴 문단은 제목이 아니다.
+ * 본문 전체에 개요 번호를 두른 문서가 흔해서, 길이로 한 번 거른다 —
+ * 여기서 잘못 잡으면 문서가 통째로 제목이 된다.
+ */
+const HEADING_MAX_CHARS = 100;
+
+/** 스타일 이름으로 알아보는 제목들. 확신이 서는 것만 적는다. */
+const HEADING_STYLES: RegExp[] = [
+  /^개요\s*([1-9])$/,
+  /^제목\s*([1-9])$/,
+  /^heading\s*([1-9])$/i,
+  /^outline\s*([1-9])$/i,
+];
+
+/**
+ * 이 문단이 몇 번째 수준의 제목인가(0이면 제목이 아니다).
+ *
+ * 먼저 **개요 수준**을 본다 — 문단 모양의 `headType`이 `Outline`이면 그 문서가 스스로
+ * "이건 구조다"라고 밝힌 것이라 가장 믿을 만하다. 개요를 안 쓴 문서를 위해 스타일 이름을
+ * 뒤에 둔다. 둘 다 아니면 **그냥 문단으로 남긴다** — 글자 크기로 짐작하지 않는다.
+ */
+function headingLevel(doc: HwpDocument, section: number, paragraph: number): number {
+  const props = readJson<Record<string, unknown>>(() => doc.getParaPropertiesAt(section, paragraph));
+  if (props && props.headType === "Outline") {
+    const level = typeof props.paraLevel === "number" ? props.paraLevel : 0;
+    return Math.min(6, Math.max(1, level + 1));
+  }
+
+  const style = readJson<{ name?: unknown }>(() => doc.getStyleAt(section, paragraph));
+  const name = typeof style?.name === "string" ? style.name.trim() : "";
+  if (!name) return 0;
+  for (const pattern of HEADING_STYLES) {
+    const found = pattern.exec(name);
+    if (found) return Math.min(6, Number(found[1]));
+  }
+  if (name === "제목" || /^title$/i.test(name)) return 1;
+  return 0;
+}
+
+/**
+ * 목차에 쓸 글자만 뽑는다. **DOMParser로 뜬 문서는 활성 문서가 아니라** 스크립트도
+ * 안 돌고 그림도 안 받는다 — `document.createElement`에 innerHTML을 넣으면 문단마다
+ * data URI 그림을 디코딩하기 시작한다(마크다운 쪽도 같은 이유로 DOMParser를 쓴다).
+ */
+function plainText(html: string): string {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  return (parsed.body.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 문단 HTML을 `<h1>`~`<h6>`으로 갈아입힌다. 안에 블록이 남아 있으면(표·목록이 딸려 온
+ * 문단) **감싸지 않고 그대로 둔다** — 제목 안에 블록이 들어가면 마크다운이 무너진다.
+ */
+function asHeading(html: string, level: number): string | null {
+  const single = /^<p\b[^>]*>([\s\S]*)<\/p>$/i.exec(html);
+  const inner = (single ? single[1] : html).trim();
+  if (!inner || /<(?:p|div|table|ul|ol|li|h[1-6])\b/i.test(inner)) return null;
+  return `<h${level}>${inner}</h${level}>`;
+}
+
+/**
+ * 문서 전체를 HTML로 — 마크다운으로 가는 중간 산물이다. 목차도 같은 걸음에서 나온다.
  *
  * rhwp에는 "문서 전체를 HTML로"가 없다. 있는 것은 **선택 영역**과 **컨트롤** 두 가지라,
  * 문단을 따라 걸으며 둘을 번갈아 모은다. 문단 텍스트 → 그 문단에 달린 표·그림 순서다.
+ *
+ * 목차를 따로 걷지 않는 이유: `getStructure()`가 있지만 그걸 쓰면 **목차와 마크다운 제목이
+ * 따로 놀 수 있다**. 같은 판정으로 한 번에 내면 화면의 목차와 저장될 `#`이 언제나 같다.
  */
-export function documentHtml(doc: HwpDocument): string {
+export function documentContent(doc: HwpDocument): DocumentContent {
   const parts: string[] = [];
+  const outline: OutlineItem[] = [];
   const sections = doc.getSectionCount();
 
   for (let section = 0; section < sections; section++) {
@@ -148,7 +237,18 @@ export function documentHtml(doc: HwpDocument): string {
           const html = unwrapFragment(
             guard(() => doc.exportSelectionHtml(section, paragraph, 0, paragraph, length)),
           );
-          if (html) parts.push(html);
+          if (html) {
+            // 제목 판정에 두 번 더 묻게 되므로, 길이로 먼저 걸러 짧은 문단에서만 묻는다.
+            const level = length <= HEADING_MAX_CHARS ? headingLevel(doc, section, paragraph) : 0;
+            const heading = level > 0 ? asHeading(html, level) : null;
+            const text = heading ? plainText(html) : "";
+            if (heading && text) {
+              parts.push(heading);
+              outline.push({ level, text, section, para: paragraph });
+            } else {
+              parts.push(html);
+            }
+          }
         } catch (error) {
           // 문단 하나가 실패해도 나머지는 보여 준다 — 전부 잃는 것보다 낫다. 패닉만은 예외다.
           if (isEnginePanic(messageOf(error))) throw error;
@@ -158,7 +258,7 @@ export function documentHtml(doc: HwpDocument): string {
     }
   }
 
-  return parts.join("\n");
+  return { html: parts.join("\n"), outline };
 }
 
 /** 개방 포맷(.hwpx) 바이트. 바이너리 .hwp를 표준 쪽으로 옮길 때 쓴다. */

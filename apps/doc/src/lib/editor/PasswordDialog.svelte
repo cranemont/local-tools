@@ -24,7 +24,9 @@
   <form class="card" onsubmit={submit}>
     <Icon name="lock" size={28} />
     <h2>{t.password.title}</h2>
-    <p>{editor.wrongPassword ? t.password.wrong : t.password.body}</p>
+    {#if editor.wrongPassword}
+      <p>{t.password.wrong}</p>
+    {/if}
 
     <input
       bind:this={input}

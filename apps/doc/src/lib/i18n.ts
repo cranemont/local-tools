@@ -6,7 +6,6 @@ export const t = {
   brandName: "local-tools",
   appName: "문서",
   home: "홈",
-  privacyNote: "파일은 브라우저 밖으로 나가지 않아요",
 
   theme: {
     label: "테마",
@@ -39,20 +38,29 @@ export const t = {
     both: "나란히",
     markdown: "마크다운",
     syncScroll: "스크롤 맞춤",
-    syncScrollOn: "왼쪽을 따라 오른쪽도 움직여요",
-    syncScrollOff: "각각 따로 움직여요",
     empty: "옮길 내용이 없어요",
+  },
+
+  view: {
+    outline: "목차",
+    outlineOpen: "목차 열기",
+    outlineClose: "목차 닫기",
+    outlineEmpty: "제목으로 잡힌 문단이 없어요",
+    page: "쪽 번호",
+    pageTotal: (n: number) => `/ ${n}`,
+    zoom: "배율",
+    zoomIn: "확대",
+    zoomOut: "축소",
+    fitWidth: "폭 맞춤으로 되돌리기",
+    percent: (zoom: number) => `${Math.round(zoom * 100)}%`,
   },
 
   actions: {
     saveMarkdown: "마크다운 저장",
-    saveMarkdownHint: "그림이 있으면 images/ 폴더와 함께 ZIP으로 저장해요",
     copyMarkdown: "마크다운 복사",
     saveHwpx: "hwpx로 저장",
     saveHwpxFromDocx: "한글(.hwpx)로 저장",
-    saveHwpxHint: "한글에서 그대로 열리는 개방형 형식이에요",
     print: "인쇄 · PDF로 저장",
-    printHint: "크롬 인쇄 대화상자에서 “PDF로 저장”을 고르면 돼요",
     find: "문서에서 찾기",
   },
 
@@ -66,12 +74,9 @@ export const t = {
   edit: {
     start: "편집",
     stop: "편집 끝",
-    hint: "원본 위에서 바로 고칠 수 있어요",
-    docxHint: "워드 문서는 아직 편집할 수 없어요",
     undo: "되돌리기",
     redo: "다시 실행",
     save: "저장",
-    saveHint: "고친 내용을 원래 형식으로 내려받아요",
     unsaved: "저장하지 않은 편집이 있어요. 버리고 닫을까요?",
     stale: "편집한 내용이에요. 편집을 끝내면 여기도 다시 계산해요.",
     placeCaret: "글자를 누르면 커서가 놓여요",
@@ -90,12 +95,10 @@ export const t = {
     prev: "이전",
     next: "다음",
     close: "찾기 닫기",
-    hint: "원본은 그림으로 그려져서 브라우저 찾기가 닿지 않아요",
   },
 
   password: {
     title: "비밀번호가 걸린 문서예요",
-    body: "문서를 열려면 비밀번호가 필요해요. 비밀번호는 이 브라우저 밖으로 나가지 않아요.",
     wrong: "비밀번호가 맞지 않아요. 다시 입력해 주세요.",
     label: "비밀번호",
     submit: "열기",
@@ -105,13 +108,9 @@ export const t = {
   engine: {
     // 한글 문서 렌더러(wasm)만 네트워크를 탄다 — 그 사실을 숨기지 않는다.
     loading: "한글 문서 엔진을 받는 중…",
-    loadingHint: "처음 한 번만 받아요 (약 2.1MB). 워드 문서는 엔진 없이 열려요.",
-    failed: "한글 문서 엔진을 받지 못했어요",
     retry: "다시 시도",
-    ready: (version: string) => `한글 엔진 ${version}`,
     broken: "문서 엔진이 멈췄어요",
     reload: "새로고침",
-    offlineHint: "설치하면 엔진이 기기에 남아 인터넷 없이도 열려요",
   },
 
   notes: {

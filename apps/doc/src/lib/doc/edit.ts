@@ -174,6 +174,74 @@ export function rectOf(doc: HwpDocument, caret: Caret): CaretRect | null {
   return { page: rect.pageIndex, x: rect.x, y: rect.y, height: rect.height };
 }
 
+/** 찾은 글자를 덮는 사각형. 캐럿과 같은 자다(페이지 SVG 사용자 좌표). */
+export interface RangeRect {
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * 캐럿부터 `length` 글자를 덮는 사각형들 — 줄이 나뉘면 여러 개다.
+ * 찾기가 "몇 쪽"에서 멈추지 않고 그 자리를 칠할 수 있는 근거가 이것 하나다.
+ */
+export function rectsOfRange(doc: HwpDocument, caret: Caret, length: number): RangeRect[] {
+  if (length <= 0) return [];
+  const json = attempt(
+    () =>
+      caret.kind === "body"
+        ? doc.getSelectionRects(
+            caret.section,
+            caret.para,
+            caret.offset,
+            caret.para,
+            caret.offset + length,
+          )
+        : doc.getSelectionRectsInCell(
+            caret.section,
+            caret.parentPara,
+            caret.control,
+            caret.cell,
+            caret.cellPara,
+            caret.offset,
+            caret.cellPara,
+            caret.offset + length,
+          ),
+    null,
+  );
+
+  // 모양이 버전마다 흔들릴 수 있어 느슨하게 읽는다(searchAll과 같은 규칙).
+  const raw = parse<unknown>(json);
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as { rects?: unknown } | null)?.rects)
+      ? (raw as { rects: unknown[] }).rects
+      : [];
+
+  const rects: RangeRect[] = [];
+  for (const item of list) {
+    if (typeof item !== "object" || item === null) continue;
+    const row = item as Record<string, unknown>;
+    const num = (...keys: string[]): number | null => {
+      for (const key of keys) {
+        const value = row[key];
+        if (typeof value === "number") return value;
+      }
+      return null;
+    };
+    const page = num("pageIndex", "page");
+    const x = num("x");
+    const y = num("y");
+    const width = num("width", "w");
+    const height = num("height", "h");
+    if (page === null || x === null || y === null || width === null || height === null) continue;
+    rects.push({ page, x, y, width, height });
+  }
+  return rects;
+}
+
 export function insert(doc: HwpDocument, caret: Caret, text: string): Caret {
   if (!text) return caret;
   const json = attempt(

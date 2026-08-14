@@ -12,7 +12,9 @@
   import Pages from "./Pages.svelte";
   import MarkdownPane from "./MarkdownPane.svelte";
   import FindBar from "./FindBar.svelte";
+  import Outline from "./Outline.svelte";
   import PasswordDialog from "./PasswordDialog.svelte";
+  import { scrollToPage } from "./scroll";
   import type { PaneView } from "./view";
 
   let view = $state<PaneView>("both");
@@ -20,6 +22,7 @@
   let finding = $state(false);
   let findNonce = $state(0);
   let narrow = $state(false);
+  let outlineOpen = $state(false);
 
   // 드래그는 자식 위를 지날 때마다 leave/enter가 번갈아 나므로 깊이를 센다
   // (0이 될 때만 겹판이 사라진다 — 시트와 같은 방식).
@@ -42,8 +45,13 @@
   /** 인쇄는 원본만 내보낸다 — 마크다운만 보고 있어도 그 순간엔 원본 판을 살려 둔다. */
   const showOriginal = $derived(effectiveView !== "markdown" || editor.printing);
   const showMarkdown = $derived(effectiveView !== "original");
+  /**
+   * 원본 판을 보고 있는가. 쪽 이동·배율·목차·찾기는 전부 그 판만 움직이므로,
+   * 마크다운만 보고 있을 때는 내놓지도 가로채지도 않는다(그 판은 그냥 글이라 브라우저가 맡는다).
+   */
+  const onOriginal = $derived(effectiveView !== "markdown");
   /** 찾기는 원본(그림)을 위한 것이다 — 마크다운만 보고 있으면 브라우저 찾기가 맞다. */
-  const canFind = $derived(editor.kind !== "docx" && effectiveView !== "markdown");
+  const canFind = $derived(editor.kind !== "docx" && onOriginal);
 
   function openFile(file: File): void {
     void editor.open(file);
@@ -70,13 +78,66 @@
     if (file) openFile(file);
   }
 
-  /** 왼쪽은 그림이라 브라우저 Ctrl+F가 닿지 않는다 — 그 화면에서만 우리 찾기를 연다. */
+  /** 입력칸 안에서는 브라우저에 맡긴다(찾기 입력·쪽 번호·편집 중인 글자). */
+  function typingIn(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    return (
+      el !== null &&
+      (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName ?? ""))
+    );
+  }
+
+  /**
+   * 셸이 받는 단축키. 찾기(왼쪽이 그림이라 브라우저 Ctrl+F가 닿지 않는다), 배율,
+   * 쪽 이동 세 가지다. 배율은 브라우저 확대를 가로채는데, 그래야 도구 UI는 그대로 두고
+   * 문서만 키울 수 있다.
+   */
   function onKeydown(event: KeyboardEvent): void {
-    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "f") return;
-    if (editor.stage !== "ready" || !canFind) return;
-    event.preventDefault();
-    finding = true;
-    findNonce++; // 이미 열려 있어도 입력란으로 돌아가게
+    if (editor.stage !== "ready") return;
+    const mod = event.metaKey || event.ctrlKey;
+
+    if (mod) {
+      const key = event.key.toLowerCase();
+      if (key === "f") {
+        if (!canFind) return;
+        event.preventDefault();
+        finding = true;
+        findNonce++; // 이미 열려 있어도 입력란으로 돌아가게
+      } else if (key === "=" || key === "+") {
+        event.preventDefault();
+        editor.zoomIn();
+      } else if (key === "-") {
+        event.preventDefault();
+        editor.zoomOut();
+      } else if (key === "0") {
+        event.preventDefault();
+        editor.fitWidth();
+      }
+      return;
+    }
+
+    // 쪽 이동은 원본 판을 보고 있는 한글 문서에서만(워드 쪽은 쪽 개념이 없다),
+    // 편집 중에는 캐럿에 양보한다. 마크다운만 보고 있을 때 가로채면 그 판이 굴러가지 않는다.
+    if (!onOriginal || editor.editing || editor.pageCount === 0 || typingIn(event.target)) return;
+    const last = editor.pageCount - 1;
+    switch (event.key) {
+      case "PageDown":
+        event.preventDefault();
+        scrollToPage(Math.min(last, editor.currentPage + 1));
+        return;
+      case "PageUp":
+        event.preventDefault();
+        scrollToPage(Math.max(0, editor.currentPage - 1));
+        return;
+      case "Home":
+        event.preventDefault();
+        scrollToPage(0);
+        return;
+      case "End":
+        event.preventDefault();
+        scrollToPage(last);
+        return;
+    }
   }
 
   /**
@@ -131,9 +192,6 @@
     <div class="center">
       <span class="spinner" aria-hidden="true"></span>
       <p>{editor.engine === "loading" ? t.engine.loading : t.file.opening}</p>
-      {#if editor.engine === "loading"}
-        <p class="sub">{t.engine.loadingHint}</p>
-      {/if}
     </div>
   {:else if editor.stage === "locked"}
     <PasswordDialog />
@@ -167,19 +225,27 @@
         finding = !finding;
         if (finding) findNonce++;
       }}
+      outline={outlineOpen}
+      toggleOutline={() => (outlineOpen = !outlineOpen)}
     />
     {#if finding && canFind}
       <FindBar focus={findNonce} close={() => (finding = false)} />
     {/if}
 
-    <!-- 두 판은 언제나 DOM에 둔다 — 인쇄가 마크다운 화면에서도 원본을 내보내야 하고,
-         판을 오갈 때마다 다시 그리지 않아도 된다. 감출 때는 CSS로만 감춘다. -->
-    <div class="panes" class:split={effectiveView === "both"} onscrollcapture={onScroll}>
-      <div class="pane" class:hidden={!showOriginal}>
-        <Pages />
-      </div>
-      <div class="pane md" class:hidden={!showMarkdown}>
-        <MarkdownPane />
+    <div class="body">
+      {#if outlineOpen && onOriginal}
+        <Outline close={() => (outlineOpen = false)} />
+      {/if}
+
+      <!-- 두 판은 언제나 DOM에 둔다 — 인쇄가 마크다운 화면에서도 원본을 내보내야 하고,
+           판을 오갈 때마다 다시 그리지 않아도 된다. 감출 때는 CSS로만 감춘다. -->
+      <div class="panes" class:split={effectiveView === "both"} onscrollcapture={onScroll}>
+        <div class="pane" class:hidden={!showOriginal}>
+          <Pages />
+        </div>
+        <div class="pane md" class:hidden={!showMarkdown}>
+          <MarkdownPane />
+        </div>
       </div>
     </div>
   {/if}
@@ -207,8 +273,16 @@
     flex-direction: column;
   }
 
+  /* 목차는 두 판 **바깥**에 선다 — 판 안에 넣으면 반씩 나눈 폭 계산에 끼어든다. */
+  .body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+
   .panes {
     flex: 1;
+    min-width: 0;
     min-height: 0;
     display: flex;
   }

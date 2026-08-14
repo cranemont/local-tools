@@ -16,7 +16,7 @@ import type { DocKind } from "../doc/detect";
 import {
   PasswordRequiredError,
   closeHwp,
-  documentHtml,
+  documentContent,
   htmlToHwpx,
   openHwp,
   renderPage,
@@ -24,8 +24,8 @@ import {
   summarize,
   toHwpx,
 } from "../doc/hwp";
-import type { SearchHit } from "../doc/hwp";
-import type { Caret, CaretRect } from "../doc/edit";
+import type { OutlineItem, SearchHit } from "../doc/hwp";
+import type { Caret, CaretRect, RangeRect } from "../doc/edit";
 import {
   History,
   backspace,
@@ -35,17 +35,24 @@ import {
   insert,
   lengthAt,
   rectOf,
+  rectsOfRange,
   caretOfHit,
   splitParagraph,
   step,
 } from "../doc/edit";
 import { docxHtml, renderDocx } from "../doc/docx";
-import { htmlToMarkdown } from "../doc/markdown";
+import { headingsOf, htmlToMarkdown } from "../doc/markdown";
 import type { ExtractedImage } from "../doc/markdown";
 import { saveBytes, saveMarkdown, withExtension } from "../doc/save";
 import { t } from "../i18n";
 
 export type Stage = "empty" | "opening" | "locked" | "ready" | "error";
+
+/**
+ * 배율 사다리. 1이 **폭 맞춤**(창 너비에 맞춘 크기)이고, 나머지는 그 배수다.
+ * 자유로운 숫자 대신 눈금을 둔 이유는 버튼 한 번에 눈에 띄게 달라지게 하려는 것이다.
+ */
+const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3] as const;
 
 class EditorState {
   stage = $state<Stage>("empty");
@@ -74,6 +81,21 @@ class EditorState {
 
   hits = $state<SearchHit[]>([]);
   query = $state("");
+  /** 찾기에서 지금 보고 있는 결과(-1이면 없다). 하이라이트가 이 값으로 진해진다. */
+  currentHit = $state(-1);
+  /**
+   * 자리를 알아낸 결과들의 사각형. **옮겨 다니며 쌓인다** — 결과가 수백 개인 문서에서
+   * 전부 미리 재면 그 자리에서 손이 걸린다(엔진 호출이 결과 수만큼 든다).
+   */
+  private hitRects = $state(new Map<number, RangeRect[]>());
+
+  /** 문서의 제목 줄들 — 왼쪽 목차가 이걸 그린다. */
+  outline = $state<OutlineItem[]>([]);
+
+  /** 보기 배율 — 1이 폭 맞춤이다. */
+  zoom = $state(1);
+  /** 지금 보고 있는 쪽(0부터). Pages가 스크롤을 따라 올린다. */
+  currentPage = $state(0);
 
   /** 인쇄 중에는 페이지를 전부 그린다(가상 스크롤이 잘라 내면 안 되므로). */
   printing = $state(false);
@@ -129,10 +151,11 @@ class EditorState {
     this.pageCache.clear();
     this.markdown = "";
     this.notes = [];
+    this.outline = [];
     this.title = null;
     this.pageCount = 0;
-    this.hits = [];
-    this.query = "";
+    this.currentPage = 0;
+    this.clearFind();
     this.error = null;
     this.wrongPassword = false;
     this.history.reset();
@@ -198,7 +221,8 @@ class EditorState {
         const summary = summarize(doc);
         this.pageCount = summary.pages;
         this.title = summary.title;
-        this.applyMarkdown(documentHtml(doc));
+        const content = documentContent(doc);
+        this.applyMarkdown(content.html, content.outline);
       }
       this.wrongPassword = false;
       this.stage = "ready";
@@ -213,11 +237,16 @@ class EditorState {
     }
   }
 
-  private applyMarkdown(html: string): void {
+  /**
+   * 변환 결과를 화면에 건다. 목차는 한글 문서에서만 문단 자리와 함께 오고,
+   * 워드 문서는 엔진이 없으므로 결과 마크다운의 제목 줄에서 뽑는다.
+   */
+  private applyMarkdown(html: string, outline?: OutlineItem[]): void {
     const result = htmlToMarkdown(html);
     this.markdown = result.markdown;
     this.images = result.images;
     this.notes = result.notes;
+    this.outline = outline ?? headingsOf(result.markdown);
   }
 
   /** 한글 문서 페이지 한 장(SVG). 이미 그린 것은 다시 그리지 않는다. */
@@ -242,23 +271,52 @@ class EditorState {
   }
 
   /**
-   * 검색 결과 하나가 몇 쪽인가. 엔진이 쪽 번호를 안 주므로 그 자리에서 캐럿 좌표로 알아낸다.
-   * 미리 다 구하지 않고 이동할 때만 부른다 — 결과가 수백 개인 문서에서 그게 싸다.
+   * 결과 하나를 지금 결과로 삼고, 그 자리(쪽·세로 위치)를 돌려준다.
+   *
+   * 엔진이 쪽 번호를 안 주므로 그 자리에서 알아낸다 — 먼저 **선택 사각형**을 물어
+   * 하이라이트까지 한 번에 얻고, 그게 안 되면 캐럿 좌표로 물러난다.
    */
-  pageOfHit(index: number): number | null {
+  focusHit(index: number): { page: number; y: number } | null {
     const hit = this.hits[index];
     if (!hit || !this.doc) return null;
-    if (hit.page !== null) return hit.page;
+    this.currentHit = index;
+
+    const rects = this.rectsOfHit(index);
+    if (rects.length > 0) {
+      hit.page = rects[0].page; // 한 번 알아낸 건 남겨 둔다
+      return { page: rects[0].page, y: rects[0].y };
+    }
+
     const rect = rectOf(this.doc, caretOfHit(hit));
     if (!rect) return null;
-    hit.page = rect.page; // 한 번 알아낸 건 남겨 둔다
-    return rect.page;
+    hit.page = rect.page;
+    return { page: rect.page, y: rect.y };
+  }
+
+  private rectsOfHit(index: number): RangeRect[] {
+    const cached = this.hitRects.get(index);
+    if (cached) return cached;
+    const hit = this.hits[index];
+    if (!hit || !this.doc) return [];
+    const rects = rectsOfRange(this.doc, caretOfHit(hit), this.query.length);
+    this.hitRects = new Map(this.hitRects).set(index, rects);
+    return rects;
+  }
+
+  /** 원본 위에 칠할 것들 — 지금 결과는 진하게, 이미 자리를 알아낸 나머지는 옅게. */
+  get highlights(): { rect: RangeRect; current: boolean }[] {
+    const list: { rect: RangeRect; current: boolean }[] = [];
+    for (const [index, rects] of this.hitRects) {
+      for (const rect of rects) list.push({ rect, current: index === this.currentHit });
+    }
+    return list;
   }
 
   search(query: string): void {
     this.query = query;
     if (!this.doc || !query.trim()) {
-      this.hits = [];
+      this.clearFind();
+      this.query = query;
       return;
     }
     try {
@@ -270,6 +328,61 @@ class EditorState {
       this.hits = [];
       this.flash = error instanceof Error ? error.message : String(error);
     }
+    this.currentHit = -1;
+    this.hitRects = new Map();
+  }
+
+  /** 찾기를 닫았다 — 칠해 둔 자리도 함께 걷는다. */
+  clearFind(): void {
+    this.hits = [];
+    this.query = "";
+    this.currentHit = -1;
+    this.hitRects = new Map();
+  }
+
+  // ── 보기 ────────────────────────────────────────────────
+
+  private setZoom(next: number): void {
+    this.zoom = next;
+    // 배율이 바뀌면 문서 좌표가 그대로여도 화면 좌표가 달라진다 — 다시 재는 건 Pages가 한다.
+  }
+
+  zoomIn(): void {
+    const next = ZOOMS.find((value) => value > this.zoom + 0.001);
+    if (next !== undefined) this.setZoom(next);
+  }
+
+  zoomOut(): void {
+    const next = [...ZOOMS].reverse().find((value) => value < this.zoom - 0.001);
+    if (next !== undefined) this.setZoom(next);
+  }
+
+  /** 창 너비에 맞춘 기본 크기로 되돌린다. */
+  fitWidth(): void {
+    this.setZoom(1);
+  }
+
+  get canZoomIn(): boolean {
+    return this.zoom < ZOOMS[ZOOMS.length - 1] - 0.001;
+  }
+
+  get canZoomOut(): boolean {
+    return this.zoom > ZOOMS[0] + 0.001;
+  }
+
+  /**
+   * 목차 항목이 문서의 어디인가 — 누를 때 그 자리에서 알아낸다(찾기와 같은 방식).
+   * 워드 문서는 문단 자리가 없어 null이고, 화면이 글자로 찾아간다.
+   */
+  placeOfOutline(item: OutlineItem): { page: number; y: number } | null {
+    if (!this.doc || item.section === undefined || item.para === undefined) return null;
+    const rect = rectOf(this.doc, {
+      kind: "body",
+      section: item.section,
+      para: item.para,
+      offset: 0,
+    });
+    return rect ? { page: rect.page, y: rect.y } : null;
   }
 
   // ── 편집 ────────────────────────────────────────────────
@@ -293,7 +406,8 @@ class EditorState {
   private refreshMarkdown(): void {
     if (!this.doc || !this.markdownStale) return;
     try {
-      this.applyMarkdown(documentHtml(this.doc));
+      const content = documentContent(this.doc);
+      this.applyMarkdown(content.html, content.outline);
       this.markdownStale = false;
     } catch (error) {
       this.flash = error instanceof Error ? error.message : String(error);
@@ -339,6 +453,8 @@ class EditorState {
 
       // 쪽이 밀렸을 수 있으므로 그려 둔 것은 모두 버린다(한 쪽 다시 그리는 데 2ms대).
       this.pageCache.clear();
+      // 칠해 둔 찾기 자리도 함께 버린다 — 글자가 밀렸으면 엉뚱한 데를 칠하고 있다.
+      this.hitRects = new Map();
       this.revision++;
       this.pageCount = summarize(doc).pages;
       this.dirty = true;
@@ -382,6 +498,7 @@ class EditorState {
     if (!moved) return;
 
     this.pageCache.clear();
+    this.hitRects = new Map();
     this.revision++;
     this.pageCount = summarize(doc).pages;
     this.dirty = true;

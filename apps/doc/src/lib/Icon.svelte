@@ -20,7 +20,10 @@
     | "undo"
     | "redo"
     | "chevron-up"
-    | "chevron-down";
+    | "chevron-down"
+    | "list"
+    | "zoom-in"
+    | "zoom-out";
 </script>
 
 <script lang="ts">
@@ -101,6 +104,17 @@
     <path d="m6 15 6-6 6 6" />
   {:else if name === "chevron-down"}
     <path d="m6 9 6 6 6-6" />
+  {:else if name === "list"}
+    <!-- 줄이 짧아지는 모양 — 목차(제목 수준)를 가리킨다 -->
+    <path d="M4 6h16M4 12h11M4 18h7" />
+  {:else if name === "zoom-in"}
+    <circle cx="11" cy="11" r="6" />
+    <path d="M11 8.5v5M8.5 11h5" />
+    <path d="m20 20-3.5-3.5" />
+  {:else if name === "zoom-out"}
+    <circle cx="11" cy="11" r="6" />
+    <path d="M8.5 11h5" />
+    <path d="m20 20-3.5-3.5" />
   {/if}
 </svg>
 

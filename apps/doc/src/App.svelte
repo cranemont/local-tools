@@ -58,7 +58,7 @@
     <div class="spacer"></div>
 
     {#if editor.engine === "loading"}
-      <span class="engine" title={t.engine.loadingHint}>
+      <span class="engine">
         <span class="spinner" aria-hidden="true"></span>
         {t.engine.loading}
       </span>
@@ -87,14 +87,6 @@
   <main class="content">
     <Editor />
   </main>
-
-  <footer class="footer">
-    <span class="privacy">{t.privacyNote}</span>
-    {#if editor.engine === "ready"}
-      <span class="dot" aria-hidden="true">·</span>
-      <span class="version">{t.engine.ready(editor.engineVersion)}</span>
-    {/if}
-  </footer>
 </div>
 
 <style>
@@ -168,17 +160,6 @@
     flex-direction: column;
   }
 
-  .footer {
-    display: flex;
-    justify-content: center;
-    gap: var(--space-2xs);
-    padding: var(--space-xs) var(--space-md);
-    border-top: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-muted);
-    font-size: var(--text-sm);
-  }
-
   @media (max-width: 640px) {
     .engine {
       display: none;
@@ -187,8 +168,7 @@
 
   /* 인쇄에는 도구의 껍데기가 낄 자리가 없다 — 원본 페이지만 남긴다. */
   @media print {
-    .topbar,
-    .footer {
+    .topbar {
       display: none;
     }
     .app {

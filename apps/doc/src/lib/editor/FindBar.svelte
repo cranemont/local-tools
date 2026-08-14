@@ -1,19 +1,20 @@
 <script lang="ts">
   /**
    * 왼쪽 원본은 SVG라 브라우저 Ctrl+F가 닿지 않는다. 그 자리를 메우는 바다 —
-   * 엔진에게 문서 전체를 물어 몇 곳에 있는지 세고, 해당 쪽으로 데려간다.
+   * 엔진에게 문서 전체를 물어 몇 곳에 있는지 세고, 그 자리로 데려간 뒤 칠한다
+   * (칠하는 것은 Pages가 하고, 여기는 "지금 몇 번째"만 옮긴다).
    * (오른쪽 마크다운은 그냥 글자라 브라우저 찾기가 그대로 먹는다.)
    */
   import { onDestroy } from "svelte";
   import { t } from "../i18n";
   import Icon from "../Icon.svelte";
   import { editor } from "./state.svelte";
+  import { scrollToPage } from "./scroll";
 
   /** `focus`는 값이 바뀔 때마다 입력란으로 돌아오라는 신호다(Ctrl+F를 다시 눌렀을 때). */
   let { close, focus }: { close: () => void; focus: number } = $props();
 
   let query = $state("");
-  let current = $state(0);
   let input = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
@@ -24,7 +25,11 @@
 
   /** 엔진 검색은 문서 전체를 훑는다 — 타자마다 부르면 큰 문서에서 손이 걸린다. */
   let timer: ReturnType<typeof setTimeout> | undefined;
-  onDestroy(() => clearTimeout(timer));
+  onDestroy(() => {
+    clearTimeout(timer);
+    // 바를 닫으면 칠해 둔 자리도 함께 걷는다.
+    editor.clearFind();
+  });
 
   function schedule(): void {
     clearTimeout(timer);
@@ -34,26 +39,19 @@
   function run(): void {
     clearTimeout(timer);
     editor.search(query);
-    current = 0;
     goto(0);
   }
 
   function goto(index: number): void {
-    const pageIndex = editor.pageOfHit(index);
-    if (pageIndex === null) return;
-    const page = document.querySelector<HTMLElement>(`[data-page="${pageIndex}"]`);
-    if (!page) return;
-    // scrollIntoView는 창까지 함께 굴려 앱을 위로 밀어낸다(아래 설명 영역으로).
-    // 문서 판 안에서만 움직이도록 직접 계산한다.
-    const box = page.parentElement;
-    if (box) box.scrollTo({ top: page.offsetTop - box.offsetTop, behavior: "smooth" });
-    else page.scrollIntoView({ block: "start", behavior: "smooth" });
+    const at = editor.focusHit(index);
+    if (!at) return;
+    scrollToPage(at.page, at.y);
   }
 
   function step(delta: number): void {
-    if (editor.hits.length === 0) return;
-    current = (current + delta + editor.hits.length) % editor.hits.length;
-    goto(current);
+    const count = editor.hits.length;
+    if (count === 0) return;
+    goto((Math.max(0, editor.currentHit) + delta + count) % count);
   }
 
   function onKey(event: KeyboardEvent): void {
@@ -83,7 +81,7 @@
   {#if query.trim()}
     <span class="count" aria-live="polite">
       {editor.hits.length > 0
-        ? `${current + 1} / ${t.find.count(editor.hits.length)}`
+        ? `${Math.max(0, editor.currentHit) + 1} / ${t.find.count(editor.hits.length)}`
         : t.find.none}
     </span>
     <button
@@ -104,8 +102,6 @@
       <Icon name="chevron-down" size={16} />
       <span class="sr-only">{t.find.next}</span>
     </button>
-  {:else}
-    <span class="hint">{t.find.hint}</span>
   {/if}
 
   <button class="icon-btn tool" onclick={close} title={t.find.close}>
@@ -137,13 +133,9 @@
     font-size: var(--text-sm);
   }
 
-  .count,
-  .hint {
+  .count {
     font-size: var(--text-xs);
     white-space: nowrap;
-  }
-  .hint {
-    flex: 1;
   }
 
   @media print {
