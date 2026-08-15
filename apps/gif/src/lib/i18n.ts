@@ -128,10 +128,13 @@ export const t = {
     redact: "가리기",
     redactAdd: "영역 추가",
     redactCancel: "그리기 중지",
-    redactHint: "드래그로 가릴 영역 선택",
+    redactHint: "드래그로 영역 추가 · 상자를 끌어 옮기고 손잡이로 크기 조절",
     redactRemove: "삭제",
+    /** 크기는 **화면에 그려진 상자**의 크기다(배율·회전·크롭이 걸린 뒤). */
     redactItem: (i: number, mode: string, w: number, h: number) =>
       `${i}번 ${mode} ${w}×${h}`,
+    /** 크롭에 잘렸거나 적용 범위 밖이라 화면에 상자가 없는 영역. */
+    redactItemHidden: (i: number, mode: string) => `${i}번 ${mode} 안 나옴`,
     redactMosaic: "모자이크",
     redactBlur: "블러",
     /** 세기 라벨은 모드에 따라 뜻이 다르다 — 격자 한 칸 / 흐림 반경. */
@@ -157,7 +160,7 @@ export const t = {
     diff: "프레임 차분",
     /** 체크박스 줄의 title — 화면에 해설 문단을 두지 않는다. */
     diffHint:
-      "앞 프레임과 같은 픽셀을 투명으로 두어 용량을 줄여요 — 팔레트 한 칸을 쓰고 원본에 투명이 있으면 건너뛰어요",
+      "앞 프레임과 같은 픽셀을 투명으로 두어 용량을 줄여요. 팔레트 한 칸을 쓰므로 원본에 투명이 있는 프레임은 건너뛰어요",
     webpQuality: "품질",
 
     export: "내보내기",

@@ -28,6 +28,7 @@
     BLUR_MIN_RADIUS,
     MOSAIC_MAX_BLOCK,
     MOSAIC_MIN_BLOCK,
+    regionToOutput,
     unseenRegionCount,
   } from "../gif/redact";
   import type { RedactMode, RedactPatch } from "../gif/redact";
@@ -360,6 +361,19 @@
       out: editor.output,
       tf: editor.transform,
     }),
+  );
+  /** 목록에 적는 크기는 **미리보기에 그려진 상자**의 크기다 — 화면과 같은 함수로 옮긴다.
+   *  베이스 좌표를 그대로 적으면 배율·회전·크롭이 걸린 순간 화면의 상자와 숫자가 갈라진다. */
+  const regionBoxes = $derived(
+    editor.regions.map((r) =>
+      regionToOutput(
+        r,
+        editor.base.w,
+        editor.base.h,
+        editor.previewOutput,
+        editor.previewTransform,
+      ),
+    ),
   );
   const strengthMin = $derived(
     activeRegion?.mode === "blur" ? BLUR_MIN_RADIUS : MOSAIC_MIN_BLOCK,
@@ -793,7 +807,14 @@
               class="opick"
               onclick={() => editor.setActiveRegion(r.id)}
             >
-              {t.panel.redactItem(i + 1, REDACT_MODE_LABELS[r.mode], r.w, r.h)}
+              {regionBoxes[i]
+                ? t.panel.redactItem(
+                    i + 1,
+                    REDACT_MODE_LABELS[r.mode],
+                    regionBoxes[i]!.w,
+                    regionBoxes[i]!.h,
+                  )
+                : t.panel.redactItemHidden(i + 1, REDACT_MODE_LABELS[r.mode])}
             </button>
             <button
               type="button"

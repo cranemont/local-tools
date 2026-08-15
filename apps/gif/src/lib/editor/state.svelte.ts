@@ -146,6 +146,8 @@ export class EditorState {
   canRedo = $state(false);
   #past: Snapshot[] = [];
   #future: Snapshot[] = [];
+  /** 상자를 끌기 시작할 때 떠 둔 지점. 첫 이동에서 한 번만 확정한다(끌기 하나 = 되돌리기 하나). */
+  #dragMark: Snapshot | null = null;
   /** 범위 선택의 기준점 — Shift+클릭이 여기서부터 칠한다. */
   #anchor = 0;
   /** 편집 리비전 — 인코딩 결과가 낡았는지 판단하는 데 쓴다. */
@@ -168,6 +170,25 @@ export class EditorState {
 
   readonly output = $derived.by(() =>
     outputSize(this.base.w, this.base.h, this.transform),
+  );
+  /** 미리보기가 지금 그리는 변형. 크롭 모드에서는 변형 없는 베이스 위에서 남길 영역을 고르고,
+   *  가릴 영역은 그때도 그대로 들고 간다(좌표가 베이스 기준이라 자리가 맞다).
+   *  미리보기·패널·끌기가 **이 하나**를 본다 — 화면에 그려진 상자와 목록의 크기 표시가
+   *  갈라지지 않게 하려는 것이니, 화면용 계산을 따로 만들지 말 것(CLAUDE.md 22번과 같은 규약). */
+  readonly previewTransform = $derived.by<Transform>(() =>
+    this.cropMode
+      ? {
+          crop: null,
+          rotation: 0,
+          flipH: false,
+          flipV: false,
+          scale: 1,
+          redact: this.transform.redact,
+        }
+      : this.transform,
+  );
+  readonly previewOutput = $derived.by(() =>
+    outputSize(this.base.w, this.base.h, this.previewTransform),
   );
   /** 배율 1 기준 출력 크기 — 가로(px) 입력에서 배율 역산에 사용. */
   readonly unscaledOutput = $derived.by(() =>
@@ -253,6 +274,8 @@ export class EditorState {
     this.cropMode = false;
     this.redactMode = false;
     this.#anchor = 0;
+    // 끌던 도중에 되돌리기가 들어오면 떠 둔 지점은 버린다 — 되돌린 상태 위에 다시 쌓지 않는다.
+    this.#dragMark = null;
   }
 
   #syncHistory(): void {
@@ -813,6 +836,48 @@ export class EditorState {
 
   setActiveRegion(id: string | null): void {
     this.activeRegionId = id;
+  }
+
+  /** 미리보기에서 상자를 잡았다. 되돌리기 지점은 **실제로 움직였을 때** 남긴다 —
+   *  고르려고 한 번 누른 것까지 스택에 쌓이면 되돌리기가 헛돈다. */
+  beginRegionDrag(id: string): void {
+    this.setActiveRegion(id);
+    this.#dragMark = this.transform.redact.some((r) => r.id === id)
+      ? this.#capture()
+      : null;
+  }
+
+  /**
+   * 끌고 있는 중 — 인자는 **출력 캔버스 좌표**이고 저장은 베이스 좌표로 한다
+   * (addRegionFromOutput과 같은 규약). 미리보기가 보고 있는 변형으로 되돌리므로
+   * 크롭 모드에서 잡아도 자리가 맞는다.
+   * 되돌린 결과가 최소 크기 밑이면 그 프레임의 값을 그대로 둔다.
+   */
+  dragRegionTo(id: string, rect: RedactRect): void {
+    const i = this.transform.redact.findIndex((r) => r.id === id);
+    if (i < 0) return;
+    const box = outputToRegion(
+      rect,
+      this.base.w,
+      this.base.h,
+      this.previewOutput,
+      this.previewTransform,
+    );
+    if (!box) return;
+    const cur = this.transform.redact[i];
+    if (cur.x === box.x && cur.y === box.y && cur.w === box.w && cur.h === box.h) return;
+    if (this.#dragMark) {
+      this.#commit(this.#dragMark);
+      this.#dragMark = null;
+    }
+    const next: RedactRegion[] = [...this.transform.redact];
+    next[i] = { ...cur, ...box };
+    this.transform.redact = next;
+    this.touch();
+  }
+
+  endRegionDrag(): void {
+    this.#dragMark = null;
   }
 
   /** 칸 하나를 고친다. 오버레이와 같이 되돌리기 지점은 남기지 않는다.

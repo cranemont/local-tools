@@ -5,12 +5,15 @@ import {
   BLUR_MIN_RADIUS,
   MOSAIC_MAX_BLOCK,
   MOSAIC_MIN_BLOCK,
+  REDACT_HANDLES,
   REDACT_MIN_SIZE,
   applyRedactPatch,
   blurRadiusPx,
   blurSampleRect,
+  blurWantRect,
   clampStrength,
   defaultStrength,
+  dragRegionRect,
   isRegionOnFrame,
   isRegionUnseen,
   mosaicBlockPx,
@@ -22,6 +25,7 @@ import {
   regionsForFrame,
   selectionAffectsRegions,
   unseenRegionCount,
+  type RedactDrag,
   type RedactGeometry,
   type RedactRegion,
 } from "../apps/gif/src/lib/gif/redact";
@@ -587,6 +591,136 @@ describe("세기를 배율에 맞춘다", () => {
   });
 });
 
+describe("손잡이로 옮기고 크기 고치기 (dragRegionRect)", () => {
+  // 출력 캔버스 200×100, 상자는 (50,20)-(110,60).
+  const B = { w: 200, h: 100 };
+  const S = { x: 50, y: 20, w: 60, h: 40 };
+
+  it("손잡이는 여덟 개다 — 화면이 그리는 개수가 여기서 정해진다", () => {
+    expect([...REDACT_HANDLES].sort()).toEqual(
+      ["e", "n", "ne", "nw", "s", "se", "sw", "w"],
+    );
+  });
+
+  it("옮기기는 크기를 지키고 상자를 통째로 민다", () => {
+    expect(dragRegionRect(S, "move", 10, 5, B)).toEqual({ x: 60, y: 25, w: 60, h: 40 });
+    expect(dragRegionRect(S, "move", -20, -10, B)).toEqual({ x: 30, y: 10, w: 60, h: 40 });
+  });
+
+  it("옮기기는 캔버스 경계에서 멈춘다 — 밖으로 끌어도 줄지 않는다", () => {
+    // 오른쪽 끝: 200 - 60 = 140에서 멈춘다
+    expect(dragRegionRect(S, "move", 1000, 1000, B)).toEqual({
+      x: 140,
+      y: 60,
+      w: 60,
+      h: 40,
+    });
+    expect(dragRegionRect(S, "move", -1000, -1000, B)).toEqual({
+      x: 0,
+      y: 0,
+      w: 60,
+      h: 40,
+    });
+  });
+
+  it("각 손잡이는 자기가 잡은 변만 움직인다", () => {
+    // dx=8, dy=6을 걸었을 때 네 변이 어디로 가는지 손으로 적은 표다.
+    const cases: [RedactDrag, { x: number; y: number; w: number; h: number }][] = [
+      ["e", { x: 50, y: 20, w: 68, h: 40 }],
+      ["w", { x: 58, y: 20, w: 52, h: 40 }],
+      ["s", { x: 50, y: 20, w: 60, h: 46 }],
+      ["n", { x: 50, y: 26, w: 60, h: 34 }],
+      ["se", { x: 50, y: 20, w: 68, h: 46 }],
+      ["sw", { x: 58, y: 20, w: 52, h: 46 }],
+      ["ne", { x: 50, y: 26, w: 68, h: 34 }],
+      ["nw", { x: 58, y: 26, w: 52, h: 34 }],
+    ];
+    for (const [handle, want] of cases) {
+      expect(dragRegionRect(S, handle, 8, 6, B), handle).toEqual(want);
+    }
+  });
+
+  it("손잡이를 캔버스 밖으로 끌면 경계에서 멈춘다", () => {
+    expect(dragRegionRect(S, "e", 1000, 0, B)).toEqual({ x: 50, y: 20, w: 150, h: 40 });
+    expect(dragRegionRect(S, "w", -1000, 0, B)).toEqual({ x: 0, y: 20, w: 110, h: 40 });
+    expect(dragRegionRect(S, "s", 0, 1000, B)).toEqual({ x: 50, y: 20, w: 60, h: 80 });
+    expect(dragRegionRect(S, "n", 0, -1000, B)).toEqual({ x: 50, y: 0, w: 60, h: 60 });
+  });
+
+  it("반대쪽을 지나치게 끌면 뒤집힌 채로 따라온다 — 손을 계속 끌 수 있어야 한다", () => {
+    // 왼쪽 변을 오른쪽 변(110) 너머까지: 50 + 100 = 150
+    expect(dragRegionRect(S, "w", 100, 0, B)).toEqual({ x: 110, y: 20, w: 40, h: 40 });
+    // 위 변을 아래 변(60) 너머까지: 20 + 60 = 80
+    expect(dragRegionRect(S, "n", 0, 60, B)).toEqual({ x: 50, y: 60, w: 60, h: 20 });
+    // 모서리는 두 축이 함께 뒤집힌다
+    expect(dragRegionRect(S, "nw", 100, 60, B)).toEqual({ x: 110, y: 60, w: 40, h: 20 });
+  });
+
+  it("뒤집히는 순간에도 최소 크기(4px)를 지킨다 — 0을 지나며 상자가 사라지지 않는다", () => {
+    expect(REDACT_MIN_SIZE).toBe(4);
+    // 왼쪽 변을 오른쪽 변에 정확히 붙이면 반대쪽으로 4px 벌린다
+    expect(dragRegionRect(S, "w", 60, 0, B)).toEqual({ x: 110, y: 20, w: 4, h: 40 });
+    expect(dragRegionRect(S, "w", 59, 0, B)).toEqual({ x: 106, y: 20, w: 4, h: 40 });
+    expect(dragRegionRect(S, "w", 61, 0, B)).toEqual({ x: 110, y: 20, w: 4, h: 40 });
+    expect(dragRegionRect(S, "s", 0, -40, B)).toEqual({ x: 50, y: 20, w: 60, h: 4 });
+  });
+
+  it("캔버스 끝에 붙은 상자를 접으면 최소 크기가 안쪽으로 벌어진다", () => {
+    const edge = { x: 190, y: 20, w: 10, h: 40 };
+    // 왼쪽 변을 오른쪽(200) 밖으로: 경계에서 멈춘 뒤 안쪽으로 4px
+    expect(dragRegionRect(edge, "w", 20, 0, B)).toEqual({ x: 196, y: 20, w: 4, h: 40 });
+  });
+
+  it("캔버스가 최소 크기보다 작으면 캔버스가 상한이다 — 계산이 무너지지 않는다", () => {
+    const tiny = { w: 3, h: 3 };
+    expect(dragRegionRect({ x: 0, y: 0, w: 3, h: 3 }, "e", -10, 0, tiny)).toEqual({
+      x: 0,
+      y: 0,
+      w: 3,
+      h: 3,
+    });
+  });
+
+  it("이동량은 정수로 여민다 — 화면에서 소수 좌표가 온다", () => {
+    expect(dragRegionRect(S, "move", 10.6, 4.4, B)).toEqual({
+      x: 61,
+      y: 24,
+      w: 60,
+      h: 40,
+    });
+    expect(dragRegionRect(S, "e", 7.5, 0, B).w).toBe(68);
+  });
+
+  it("NaN·빈 값이 와도 상자가 그대로 있다", () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(dragRegionRect(S, "move", bad, bad, B)).toEqual(S);
+      expect(dragRegionRect(S, "se", bad, bad, B)).toEqual(S);
+    }
+  });
+
+  it("원본 사각형을 고치지 않는다", () => {
+    const start = { ...S };
+    dragRegionRect(start, "nw", -20, -20, B);
+    expect(start).toEqual(S);
+  });
+
+  it("회전·배율이 걸린 화면에서 끈 결과도 저장했다 다시 그리면 같은 상자다", () => {
+    // 화면에서 끄는 것은 출력 좌표, 저장은 베이스 좌표다(state가 outputToRegion을 지난다).
+    // 여기가 어긋나면 손을 떼는 순간 상자가 튄다.
+    const g = geo({ rotation: 90, scale: 0.5 });
+    const o = out(100, 100, g);
+    const start = regionToOutput(rg({ x: 20, y: 20, w: 40, h: 20 }), 100, 100, o, g);
+    // 90° 회전이라 화면의 가로는 베이스의 세로다 — 20px의 절반인 10px로 보인다.
+    expect(start).toEqual({ x: 30, y: 10, w: 10, h: 20 });
+    const dragged = dragRegionRect(start!, "e", 6, 0, o);
+    expect(dragged).toEqual({ x: 30, y: 10, w: 16, h: 20 });
+    // 화면에서 6px 넓힌 것이 베이스에서는 세로 12px이다(배율 0.5의 역)
+    const stored = outputToRegion(dragged, 100, 100, o, g);
+    expect(stored).toEqual({ x: 20, y: 8, w: 40, h: 32 });
+    expect(regionToOutput(stored!, 100, 100, o, g)).toEqual(dragged);
+  });
+});
+
 describe("블러 표본 상자 (blurSampleRect)", () => {
   it("반경의 세 배만큼 넓게 뜬다 — 좁게 뜨면 테두리가 밖을 빨아들인다", () => {
     expect(blurSampleRect({ x: 50, y: 50, w: 20, h: 20 }, 4, { w: 200, h: 200 })).toEqual({
@@ -613,6 +747,43 @@ describe("블러 표본 상자 (blurSampleRect)", () => {
       w: 20,
       h: 20,
     });
+  });
+
+  it("필요한 상자(blurWantRect)는 캔버스 밖까지 그대로 뻗는다", () => {
+    // 잘린 만큼을 가장자리 픽셀로 늘려 채우는 것이 transform.ts의 padSampleEdges다.
+    // 여기를 캔버스 안으로 여미면 채울 여백이 사라져 가장자리 줄만 덜 흐려진다.
+    expect(blurWantRect({ x: 0, y: 0, w: 20, h: 20 }, 4)).toEqual({
+      x: -12,
+      y: -12,
+      w: 44,
+      h: 44,
+    });
+    expect(blurWantRect({ x: 50, y: 50, w: 20, h: 20 }, 4)).toEqual({
+      x: 38,
+      y: 38,
+      w: 44,
+      h: 44,
+    });
+  });
+
+  it("뜰 수 있는 상자는 필요한 상자를 캔버스로 자른 것이다", () => {
+    const box = { x: 4, y: 90, w: 40, h: 10 };
+    const out = { w: 100, h: 100 };
+    const want = blurWantRect(box, 5);
+    const src = blurSampleRect(box, 5, out);
+    expect(src.x).toBe(Math.max(0, want.x));
+    expect(src.y).toBe(Math.max(0, want.y));
+    expect(src.x + src.w).toBe(Math.min(out.w, want.x + want.w));
+    expect(src.y + src.h).toBe(Math.min(out.h, want.y + want.h));
+    // 아래·왼쪽이 잘렸으니 채울 여백이 남는다
+    expect(src.y + src.h).toBeLessThan(want.y + want.h);
+    expect(src.x).toBeGreaterThan(want.x);
+  });
+
+  it("영역이 캔버스 안쪽에 있으면 잘릴 것이 없다", () => {
+    const box = { x: 40, y: 40, w: 20, h: 20 };
+    const out = { w: 200, h: 200 };
+    expect(blurSampleRect(box, 5, out)).toEqual(blurWantRect(box, 5));
   });
 });
 

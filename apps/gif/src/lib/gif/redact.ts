@@ -115,6 +115,130 @@ export function normalizeRegionRect(
   return { x: left, y: top, w, h };
 }
 
+// ── 손잡이로 옮기고 크기 고치기 ──────────────────────
+//
+// 좌표는 **출력 캔버스 기준**이다 — 사용자가 잡는 것은 화면에 그려진 상자이고,
+// 손을 뗄 때가 아니라 끌 때마다 outputToRegion이 베이스 좌표로 되돌려 저장한다.
+// 그래야 옮기는 동안에도 모자이크가 같이 따라온다(화면과 결과가 갈리지 않는다).
+
+/** 여덟 방향 손잡이. 이름은 나침반이고 apps/image의 크롭 손잡이와 같은 규약이다. */
+export type RedactHandle = "nw" | "n" | "ne" | "w" | "e" | "sw" | "s" | "se";
+/** 끌기 한 번이 하는 일 — 손잡이 하나를 잡았거나 상자를 통째로 옮기거나. */
+export type RedactDrag = RedactHandle | "move";
+
+/** 화면이 그리는 순서 그대로. 손잡이가 여덟 개인 것이 여기서 정해진다. */
+export const REDACT_HANDLES: readonly RedactHandle[] = [
+  "nw",
+  "n",
+  "ne",
+  "w",
+  "e",
+  "sw",
+  "s",
+  "se",
+];
+
+/** 손잡이가 어느 변을 잡고 있는가. 0이면 그 축은 안 움직인다. */
+const HANDLE_SIGNS: Record<RedactHandle, { sx: -1 | 0 | 1; sy: -1 | 0 | 1 }> = {
+  nw: { sx: -1, sy: -1 },
+  n: { sx: 0, sy: -1 },
+  ne: { sx: 1, sy: -1 },
+  w: { sx: -1, sy: 0 },
+  e: { sx: 1, sy: 0 },
+  sw: { sx: -1, sy: 1 },
+  s: { sx: 0, sy: 1 },
+  se: { sx: 1, sy: 1 },
+};
+
+function clampNum(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+/**
+ * 한 축의 두 변을 새로 잡는다. `fixed`는 잡지 않은 쪽이라 그대로 있고,
+ * `moving`은 캔버스(0..limit) 안에서 멈춘다.
+ * 고정 변을 지나쳐 끌면 뒤집힌 채로 읽는다 — 손을 계속 끌 수 있어야 한다.
+ * 뒤집히는 순간 크기가 0을 지나므로 최소 크기를 여기서 다시 벌려 준다.
+ */
+function resizeAxis(
+  moving: number,
+  fixed: number,
+  limit: number,
+  min: number,
+): { lo: number; hi: number } {
+  let mv = Math.round(clampNum(moving, 0, limit));
+  if (Math.abs(mv - fixed) < min) {
+    mv = mv >= fixed ? fixed + min : fixed - min;
+    if (mv > limit) mv = fixed - min;
+    if (mv < 0) mv = fixed + min;
+    mv = clampNum(mv, 0, limit);
+  }
+  return { lo: Math.min(mv, fixed), hi: Math.max(mv, fixed) };
+}
+
+/**
+ * 끌기 한 번의 결과 사각형(출력 캔버스 좌표).
+ * `start`는 손을 댄 순간의 상자이고 `dx`·`dy`는 그때부터의 이동량이다 —
+ * 매번 처음부터 다시 계산하므로 왕복 변환의 반올림이 쌓이지 않는다.
+ *
+ * 옮기기는 크기를 지키고 캔버스 경계에서 멈춘다(줄어들지 않는다).
+ * 크기 고치기는 잡은 변만 움직이고, 밖으로 끌면 경계에서 멈춘다.
+ */
+export function dragRegionRect(
+  start: RedactRect,
+  drag: RedactDrag,
+  dx: number,
+  dy: number,
+  bounds: Size,
+  min: number = REDACT_MIN_SIZE,
+): RedactRect {
+  const b = usableSize(bounds);
+  const s = {
+    x: Math.round(num(start.x, 0)),
+    y: Math.round(num(start.y, 0)),
+    w: Math.max(1, Math.round(num(start.w, 1))),
+    h: Math.max(1, Math.round(num(start.h, 1))),
+  };
+  // 캔버스가 최소 크기보다 작으면 캔버스가 상한이다.
+  const base = Math.max(1, Math.round(num(min, REDACT_MIN_SIZE)));
+  const minW = Math.min(base, b.w);
+  const minH = Math.min(base, b.h);
+  const mx = Math.round(num(dx, 0));
+  const my = Math.round(num(dy, 0));
+
+  if (drag === "move") {
+    const w = Math.min(s.w, b.w);
+    const h = Math.min(s.h, b.h);
+    return {
+      x: clampNum(s.x + mx, 0, b.w - w),
+      y: clampNum(s.y + my, 0, b.h - h),
+      w,
+      h,
+    };
+  }
+
+  const { sx, sy } = HANDLE_SIGNS[drag] ?? { sx: 0, sy: 0 };
+  const ax =
+    sx === 0
+      ? { lo: s.x, hi: s.x + s.w }
+      : resizeAxis(
+          sx < 0 ? s.x + mx : s.x + s.w + mx,
+          sx < 0 ? s.x + s.w : s.x,
+          b.w,
+          minW,
+        );
+  const ay =
+    sy === 0
+      ? { lo: s.y, hi: s.y + s.h }
+      : resizeAxis(
+          sy < 0 ? s.y + my : s.y + s.h + my,
+          sy < 0 ? s.y + s.h : s.y,
+          b.h,
+          minH,
+        );
+  return { x: ax.lo, y: ay.lo, w: ax.hi - ax.lo, h: ay.hi - ay.lo };
+}
+
 /** 세기의 범위는 모드마다 다르다 — 격자는 2..200px, 블러 반경은 1..100px. */
 export function clampStrength(mode: RedactMode, v: number): number {
   const lo = mode === "blur" ? BLUR_MIN_RADIUS : MOSAIC_MIN_BLOCK;
@@ -383,16 +507,34 @@ export function blurRadiusPx(radius: number, scale: number): number {
 }
 
 /**
- * 블러를 뜨는 표본 상자 — 영역보다 반경의 세 배만큼 넓고, 출력 캔버스 안으로 잘린다.
- * 이만큼 떠서 흐린 뒤 영역만 남기지 않으면 테두리가 밖을 빨아들여 네모가 드러난다.
+ * 블러가 필요로 하는 표본 상자 — 영역보다 반경의 세 배만큼 넓다. **캔버스 밖까지 그대로 뻗는다.**
+ * 이 상자를 다 채우지 못하면 커널이 빈자리를 세면서 그 줄만 덜 흐려진다.
+ */
+export function blurWantRect(box: RedactRect, radiusPx: number): RedactRect {
+  const pad = Math.ceil(Math.max(0, num(radiusPx, 0)) * BLUR_SAMPLE_PAD);
+  const left = Math.floor(num(box.x, 0)) - pad;
+  const top = Math.floor(num(box.y, 0)) - pad;
+  const right = Math.ceil(num(box.x, 0) + num(box.w, 0)) + pad;
+  const bottom = Math.ceil(num(box.y, 0) + num(box.h, 0)) + pad;
+  return {
+    x: left,
+    y: top,
+    w: Math.max(1, right - left),
+    h: Math.max(1, bottom - top),
+  };
+}
+
+/**
+ * 그중 캔버스에서 실제로 뜰 수 있는 부분 — blurWantRect를 출력 캔버스로 자른 것이다.
+ * 모자란 나머지는 가장자리 픽셀을 늘려 채운다(transform.ts의 padSampleEdges).
  */
 export function blurSampleRect(box: RedactRect, radiusPx: number, out: Size): RedactRect {
   const o = usableSize(out);
-  const pad = Math.ceil(Math.max(0, num(radiusPx, 0)) * BLUR_SAMPLE_PAD);
-  const left = Math.max(0, Math.floor(num(box.x, 0)) - pad);
-  const top = Math.max(0, Math.floor(num(box.y, 0)) - pad);
-  const right = Math.min(o.w, Math.ceil(num(box.x, 0) + num(box.w, 0)) + pad);
-  const bottom = Math.min(o.h, Math.ceil(num(box.y, 0) + num(box.h, 0)) + pad);
+  const want = blurWantRect(box, radiusPx);
+  const left = Math.max(0, want.x);
+  const top = Math.max(0, want.y);
+  const right = Math.min(o.w, want.x + want.w);
+  const bottom = Math.min(o.h, want.y + want.h);
   return {
     x: left,
     y: top,

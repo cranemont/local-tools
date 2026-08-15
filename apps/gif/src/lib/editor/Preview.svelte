@@ -5,8 +5,17 @@
   import { editor } from "./state.svelte";
   import { getFrameBitmap } from "../gif/decode";
   import { effectiveDelayMs } from "../gif/timing";
-  import { outputSize, renderFrame } from "../gif/transform";
-  import type { CropRect, Transform } from "../gif/types";
+  import { renderFrame } from "../gif/transform";
+  import {
+    REDACT_HANDLES,
+    dragRegionRect,
+    regionToOutput,
+    regionsForFrame,
+    type RedactDrag,
+    type RedactMode,
+    type RedactRect,
+  } from "../gif/redact";
+  import type { CropRect } from "../gif/types";
 
   let boxEl: HTMLDivElement;
   let canvasEl: HTMLCanvasElement;
@@ -30,20 +39,10 @@
     if (seq !== renderSeq) return;
 
     const { w: baseW, h: baseH } = editor.base;
-    // 크롭 모드에서는 변형 없는 베이스 프레임 위에서 남길 영역을 고른다.
-    // 가릴 영역은 그때도 그대로 들고 간다 — 좌표가 베이스 기준이라 자리가 맞고,
-    // 가리는 중에 원본이 드러나지 않는다.
-    const tf: Transform = editor.cropMode
-      ? {
-          crop: null,
-          rotation: 0,
-          flipH: false,
-          flipV: false,
-          scale: 1,
-          redact: editor.transform.redact,
-        }
-      : editor.transform;
-    const { w, h } = outputSize(baseW, baseH, tf);
+    // 크롭 모드에서 어떻게 그리는지는 state의 previewTransform 하나에 있다 —
+    // 화면의 상자와 패널의 크기 표시가 같은 좌표계를 보게 하려는 것이다.
+    const tf = editor.previewTransform;
+    const { w, h } = editor.previewOutput;
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
     const ctx = canvas.getContext("2d");
@@ -98,15 +97,160 @@
     }
   }
 
-  // ── 사각형 드래그 (크롭·가리기 공용) ───────────────
-  // 두 모드가 같은 몸짓을 쓰고 손을 뗄 때만 갈라진다. 레이어를 두 벌로 만들면
-  // 클램프·좌표 환산이 두 곳에서 어긋난다.
+  // ── 그려진 그림의 상자 ─────────────────────────────
+  // 캔버스는 max-width/height로만 줄어드는 대체 요소라 요소 상자가 곧 그림 상자다.
+  // 다만 absolute의 기준은 stagebox의 **패딩 상자**여서 테두리(clientLeft/Top)만큼 뺀다.
+  // inset:0으로 두면 padding 여백이 그림처럼 잡혀 여백에서도 드래그가 시작된다
+  // (apps/image의 measurePaint와 같은 계산 — CLAUDE.md 12번).
   interface ViewRect {
     x: number;
     y: number;
     w: number;
     h: number;
   }
+  let paint = $state<ViewRect | null>(null);
+
+  function measurePaint() {
+    if (!canvasEl || !boxEl) {
+      paint = null;
+      return;
+    }
+    const r = canvasEl.getBoundingClientRect();
+    const box = boxEl.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) {
+      paint = null;
+      return;
+    }
+    paint = {
+      x: r.left - box.left - boxEl.clientLeft,
+      y: r.top - box.top - boxEl.clientTop,
+      w: r.width,
+      h: r.height,
+    };
+  }
+
+  $effect(() => {
+    // 캔버스 픽셀 크기가 바뀌면 화면에 그려지는 크기도 바뀐다.
+    void editor.previewOutput;
+    void editor.frames.length;
+    if (!canvasEl || !boxEl) {
+      paint = null;
+      return;
+    }
+    measurePaint();
+    const ro = new ResizeObserver(() => measurePaint());
+    ro.observe(canvasEl);
+    ro.observe(boxEl);
+    return () => ro.disconnect();
+  });
+
+  /** 화면 1px이 출력 캔버스 몇 px인가. 끌기·상자 그리기가 이 값으로만 환산한다. */
+  const toCanvasX = $derived(paint ? editor.previewOutput.w / Math.max(1, paint.w) : 1);
+  const toCanvasY = $derived(paint ? editor.previewOutput.h / Math.max(1, paint.h) : 1);
+
+  // ── 가릴 영역의 윤곽 ───────────────────────────────
+  // 지금 프레임에 실제로 그려지는 영역만 상자로 보여 준다 — 범위 밖이거나 크롭에 잘린 것은
+  // 화면에 없는 것이 맞다(패널의 "안 나옴" 배지가 그쪽을 맡는다).
+  const REDACT_MODE_LABELS: Record<RedactMode, string> = {
+    mosaic: t.panel.redactMosaic,
+    blur: t.panel.redactBlur,
+  };
+  const shapes = $derived.by(() => {
+    const p = paint;
+    if (!p || editor.playing || !editor.frames.length) return [];
+    const index = Math.min(editor.current, editor.frames.length - 1);
+    const frame = editor.frames[index];
+    const drawn = new Set(
+      regionsForFrame(editor.regions, index, !!frame?.selected).map((r) => r.id),
+    );
+    const out = editor.previewOutput;
+    const tf = editor.previewTransform;
+    const kx = p.w / Math.max(1, out.w);
+    const ky = p.h / Math.max(1, out.h);
+    const list: { id: string; label: string; view: ViewRect }[] = [];
+    editor.regions.forEach((r, i) => {
+      if (!drawn.has(r.id)) return;
+      const box = regionToOutput(r, editor.base.w, editor.base.h, out, tf);
+      if (!box) return;
+      list.push({
+        id: r.id,
+        label: t.panel.redactItem(i + 1, REDACT_MODE_LABELS[r.mode], box.w, box.h),
+        view: { x: box.x * kx, y: box.y * ky, w: box.w * kx, h: box.h * ky },
+      });
+    });
+    return list;
+  });
+
+  /** 크롭 모드에서는 윤곽만 보여 준다 — 그 화면의 드래그는 남길 영역을 고르는 뜻이다. */
+  const shapesLive = $derived(!editor.cropMode);
+
+  type RegionDrag = {
+    id: string;
+    mode: RedactDrag;
+    start: RedactRect;
+    px: number;
+    py: number;
+  };
+  let regionDrag: RegionDrag | null = null;
+
+  function shapeDown(e: PointerEvent) {
+    if (!shapesLive || !paint) return;
+    const target = e.target as HTMLElement;
+    const el = target.closest<HTMLElement>("[data-region]");
+    const id = el?.dataset.region;
+    if (!el || !id) return;
+    const region = editor.regions.find((r) => r.id === id);
+    if (!region) return;
+    // 끌기의 기준은 **화면에 보이는 상자**다. 크롭에 반쯤 잘린 영역을 잡으면 보이는 만큼만
+    // 남는다 — 손잡이가 붙은 자리가 곧 사각형이어야 잡은 곳과 움직이는 곳이 같다.
+    const start = regionToOutput(
+      region,
+      editor.base.w,
+      editor.base.h,
+      editor.previewOutput,
+      editor.previewTransform,
+    );
+    if (!start) return;
+    editor.beginRegionDrag(id);
+    regionDrag = {
+      id,
+      mode: (target.dataset.handle as RedactDrag | undefined) ?? "move",
+      start,
+      px: e.clientX,
+      py: e.clientY,
+    };
+    try {
+      // 캡처는 상자 자신에게 건다 — 레이어는 pointer-events가 none이다.
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // 활성 포인터가 없으면(합성 이벤트 등) 캡처 없이 진행
+    }
+  }
+
+  function shapeMove(e: PointerEvent) {
+    const d = regionDrag;
+    if (!d) return;
+    editor.dragRegionTo(
+      d.id,
+      dragRegionRect(
+        d.start,
+        d.mode,
+        (e.clientX - d.px) * toCanvasX,
+        (e.clientY - d.py) * toCanvasY,
+        editor.previewOutput,
+      ),
+    );
+  }
+
+  function shapeUp() {
+    if (!regionDrag) return;
+    regionDrag = null;
+    editor.endRegionDrag();
+  }
+
+  // ── 새 사각형 드래그 (크롭·가리기 공용) ─────────────
+  // 두 모드가 같은 몸짓을 쓰고 손을 뗄 때만 갈라진다. 레이어를 두 벌로 만들면
+  // 클램프·좌표 환산이 두 곳에서 어긋난다.
   let cropStart: { x: number; y: number } | null = null;
   let cropView = $state<ViewRect | null>(null);
   const dragging = $derived(editor.cropMode || editor.redactMode);
@@ -119,11 +263,12 @@
     cropView = null;
   });
 
+  /** 포인터를 그림 안으로 여민 좌표(레이어 = 그림 상자이므로 왼쪽 위가 원점이다). */
   function clampToCanvas(clientX: number, clientY: number) {
     const r = canvasEl.getBoundingClientRect();
     return {
-      x: Math.min(Math.max(clientX, r.left), r.right),
-      y: Math.min(Math.max(clientY, r.top), r.bottom),
+      x: Math.min(Math.max(clientX, r.left), r.right) - r.left,
+      y: Math.min(Math.max(clientY, r.top), r.bottom) - r.top,
     };
   }
 
@@ -136,10 +281,9 @@
   function cropMove(e: PointerEvent) {
     if (!cropStart) return;
     const p = clampToCanvas(e.clientX, e.clientY);
-    const box = boxEl.getBoundingClientRect();
     cropView = {
-      x: Math.min(cropStart.x, p.x) - box.left,
-      y: Math.min(cropStart.y, p.y) - box.top,
+      x: Math.min(cropStart.x, p.x),
+      y: Math.min(cropStart.y, p.y),
       w: Math.abs(p.x - cropStart.x),
       h: Math.abs(p.y - cropStart.y),
     };
@@ -155,14 +299,10 @@
 
     // 캔버스 픽셀 좌표로 옮긴다. 크롭 모드에서는 변형이 없어 그것이 곧 베이스 좌표이고,
     // 가리기 모드에서는 출력 좌표라 state가 베이스 좌표로 되돌려 저장한다.
-    const box = boxEl.getBoundingClientRect();
-    const r = canvasEl.getBoundingClientRect();
-    const scaleX = canvasEl.width / r.width;
-    const scaleY = canvasEl.height / r.height;
-    const x = Math.round((view.x + box.left - r.left) * scaleX);
-    const y = Math.round((view.y + box.top - r.top) * scaleY);
-    const w = Math.round(view.w * scaleX);
-    const h = Math.round(view.h * scaleY);
+    const x = Math.round(view.x * toCanvasX);
+    const y = Math.round(view.y * toCanvasY);
+    const w = Math.round(view.w * toCanvasX);
+    const h = Math.round(view.h * toCanvasY);
 
     if (!wasCrop) {
       editor.addRegionFromOutput({ x, y, w, h });
@@ -189,14 +329,16 @@
   <div class="stagebox" bind:this={boxEl}>
     <canvas bind:this={canvasEl}></canvas>
 
-    {#if dragging}
+    {#if dragging && paint}
       <div
         class="croplayer"
         role="application"
         aria-label={dragHint}
+        style={`left:${paint.x}px; top:${paint.y}px; width:${paint.w}px; height:${paint.h}px`}
         onpointerdown={cropDown}
         onpointermove={cropMove}
         onpointerup={cropUp}
+        onpointercancel={cropUp}
       >
         {#if cropView}
           <div
@@ -204,8 +346,43 @@
             style={`left:${cropView.x}px; top:${cropView.y}px; width:${cropView.w}px; height:${cropView.h}px`}
           ></div>
         {/if}
-        <div class="crophint">{dragHint}</div>
       </div>
+    {/if}
+
+    <!-- 가릴 영역의 윤곽. 그리기 레이어 **위에** 둔다 — 상자를 잡으면 옮기고,
+         빈자리를 끌면 밑의 레이어가 새 영역을 만든다. -->
+    {#if shapes.length && paint}
+      <div
+        class="shapelayer"
+        class:live={shapesLive}
+        role="application"
+        aria-label={t.panel.redact}
+        style={`left:${paint.x}px; top:${paint.y}px; width:${paint.w}px; height:${paint.h}px`}
+        onpointerdown={shapeDown}
+        onpointermove={shapeMove}
+        onpointerup={shapeUp}
+        onpointercancel={shapeUp}
+      >
+        {#each shapes as s (s.id)}
+          <div
+            class="rbox"
+            class:active={s.id === editor.activeRegionId}
+            data-region={s.id}
+            title={s.label}
+            style={`left:${s.view.x}px; top:${s.view.y}px; width:${s.view.w}px; height:${s.view.h}px`}
+          >
+            {#if shapesLive && s.id === editor.activeRegionId}
+              {#each REDACT_HANDLES as h (h)}
+                <div class="rhandle {h}" data-handle={h}></div>
+              {/each}
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    {#if dragging}
+      <div class="crophint">{dragHint}</div>
     {/if}
   </div>
 
@@ -285,7 +462,6 @@
 
   .croplayer {
     position: absolute;
-    inset: 0;
     cursor: crosshair;
     touch-action: none;
   }
@@ -294,6 +470,84 @@
     border: 1.5px dashed var(--accent);
     background: color-mix(in srgb, var(--accent) 14%, transparent);
     pointer-events: none;
+  }
+
+  /* 레이어는 뚫려 있고 상자만 포인터를 받는다 — 빈자리를 끌면 밑에서 새 영역이 만들어진다. */
+  .shapelayer {
+    position: absolute;
+    pointer-events: none;
+    touch-action: none;
+  }
+  .rbox {
+    position: absolute;
+    box-sizing: border-box;
+    border: 1px dashed var(--text-muted);
+  }
+  .shapelayer.live .rbox {
+    pointer-events: auto;
+    cursor: move;
+  }
+  .rbox.active {
+    border: 1.5px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  .rhandle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    box-sizing: border-box;
+    border: 2px solid var(--accent);
+    background: var(--surface);
+  }
+  /* 손가락·마우스 모두 잡기 쉽게 히트 영역만 넓힌다(그림은 10px 그대로). */
+  .rhandle::before {
+    content: "";
+    position: absolute;
+    inset: -7px;
+  }
+  .rhandle.nw,
+  .rhandle.w,
+  .rhandle.sw {
+    left: -5px;
+  }
+  .rhandle.n,
+  .rhandle.s {
+    left: calc(50% - 5px);
+  }
+  .rhandle.ne,
+  .rhandle.e,
+  .rhandle.se {
+    right: -5px;
+  }
+  .rhandle.nw,
+  .rhandle.n,
+  .rhandle.ne {
+    top: -5px;
+  }
+  .rhandle.w,
+  .rhandle.e {
+    top: calc(50% - 5px);
+  }
+  .rhandle.sw,
+  .rhandle.s,
+  .rhandle.se {
+    bottom: -5px;
+  }
+  .rhandle.nw,
+  .rhandle.se {
+    cursor: nwse-resize;
+  }
+  .rhandle.ne,
+  .rhandle.sw {
+    cursor: nesw-resize;
+  }
+  .rhandle.n,
+  .rhandle.s {
+    cursor: ns-resize;
+  }
+  .rhandle.w,
+  .rhandle.e {
+    cursor: ew-resize;
   }
   .crophint {
     position: absolute;
