@@ -27,12 +27,15 @@ apps/pdf/            # PDF 도구 (Svelte 5 + TS)
   src/lib/i18n.ts    # 모든 사용자 문구 (한국어 전용, 여기 한 곳에 모음)
   src/lib/Icon.svelte# 라인 SVG 아이콘 세트(이모지 안 씀)
   src/lib/canvas/    # 탭① 편집·병합 (통합 캔버스)
-  src/lib/toimage/   # 탭② PDF→이미지
+  src/lib/toimage/   # 탭② 이미지·텍스트 (한 탭이 두 형식 축을 가진다 — 아래 27번)
   src/lib/password/  # 탭③ 암호
   src/lib/pdf/       # 엔진: engine(썸네일)·exporter(병합·분할)·rasterize(PNG/JPG/WebP)·
                      #        save(다운로드)·qpdfLoader(암호)·pdfjs(워커)·
                      #        range(쪽 범위 "1-5, 8, 12-" 파서 — 세 탭이 공유)·
-                     #        unlock.svelte.ts(암호 PDF를 만나면 프롬프트를 띄우고 다시 연다)
+                     #        unlock.svelte.ts(암호 PDF를 만나면 프롬프트를 띄우고 다시 연다)·
+                     #        extract(pdf.js getTextContent 호출부 — 뷰포트 행렬로 쪽 회전을
+                     #          걷어내 순수 함수에 넘긴다)·text(줄 묶기·공백 추론·문단 나누기,
+                     #          pdf.js를 import하지 않는다)·zipnames(ZIP 항목 이름 겹침 회피)
   src/lib/PasswordPrompt.svelte  # 암호 입력 모달(편집·이미지 탭 공용)
   vite.config.ts     # 자가해제 플러그인 사용 (공용 패키지)
 apps/gif/            # GIF 에디터 (Svelte 5 + TS) — 단일 에디터 뷰(탭 없음)
@@ -40,7 +43,9 @@ apps/gif/            # GIF 에디터 (Svelte 5 + TS) — 단일 에디터 뷰(�
   src/lib/gif/       # 엔진: decode(ImageDecoder 온디맨드+LRU)·encode(gifenc)·
                      #        webp(ANMF muxer)·mp4(WebCodecs 내보내기)·
                      #        video(동영상 임포트)·transform·extract(PNG ZIP)·save·
-                     #        timing(형식별 딜레이 하한·눈금 — 미리보기와 결과를 일치시킨다)
+                     #        timing(형식별 딜레이 하한·눈금 — 미리보기와 결과를 일치시킨다)·
+                     #        overlay(텍스트 오버레이 — 프레임 범위 판정·프리셋 좌표·줄바꿈 계획)·
+                     #        plan(내보내기 시작 시점의 상태 스냅샷 — 아래 28번)
 apps/video/          # 동영상 도구 (Svelte 5 + TS) — 트림·압축·변환·소리, 파일 한 개씩
   src/lib/editor/    # state.svelte.ts·Player(<video>+구간재생)·Timeline(스트립+핸들+kf눈금)·Panel
   src/lib/video/     # 엔진: probe(메타·키프레임)·thumbs(스트립)·transcode(mediabunny
@@ -50,25 +55,30 @@ apps/image/          # 이미지 도구 (Svelte 5 + TS) — 변환·압축·리�
                      #   용량 배지+크롭 오버레이)·Panel
   src/lib/image/     # 엔진: decode(LRU+HEIC 위임)·pipeline(회전→반전→크롭→맞춤→pica→인코딩,
                      #        targetSize=목표 캔버스 / fitPlan=그 위 배치로 갈라 둠)·
-                     #        exif(APP1/RIFF/eXIf 바이트 조작)·heic/avif(CDN wasm)·save
+                     #        size(그 두 순수 함수)·exif(APP1/RIFF/eXIf 바이트 조작)·
+                     #        heic/avif(CDN wasm)·save·
+                     #        target(목표 용량 이진 탐색 — 인코더를 주입받는 순수 상태 기계)·
+                     #        quantize(median cut 직접 구현 — PNG 색 수 축소)
 apps/sheet/          # 시트 (Svelte 5 + TS) — CSV·엑셀 편집기. ★ 이 앱만 두 벌로 빌드한다(아래 13번)
   src/lib/sheet/     # 문서: types(셀·시트·통합문서 — 셀의 `raw`가 가져온 원문이다)·
                      #   model(조작·입력해석·정렬 — 정렬은 표 전체 행을 안정 정렬)·a1(A1↔좌표)·
                      #   csv(인코딩 판별+구분자 추론+RFC4180)·xlsx(ExcelJS 어댑터, 지연 로드)·
-                     #   numfmt(엑셀 표시형식 해석)·serial(날짜 일련번호)·convert(JSON/MD/HTML)·save
+                     #   numfmt(엑셀 표시형식 해석)·serial(날짜 일련번호)·convert(JSON/MD/HTML)·save·
+                     #   filter(자동 필터 — 술어·고유값·보이는 행 + OP_SCOPE 표, 아래 29번)
   src/lib/formula/   # ★ 수식 엔진(직접 구현): tokenize→parse→evaluate,
                      #   engine(의존성 그래프+위상 재계산+순환 감지)·adjust(참조 보정)·
                      #   functions(@formulajs/formulajs 바인딩)
   src/lib/editor/    # state.svelte.ts(문서는 일반 객체 + revision 하나만 $state)·
                      #   Grid(행·열 가상화, 머리글·틀고정은 네이티브 sticky)·Toolbar·
-                     #   FormulaBar·SheetTabs·StatusBar·FindBar·Dropdown
+                     #   FormulaBar·SheetTabs·StatusBar·FindBar·Dropdown·FilterMenu
   src/lib/launch.ts  # PWA 파일 연결(launchQueue) + 설치 프롬프트
   pwa.ts             # PWA 빌드 후처리 — 매니페스트·아이콘(PNG 직접 인코딩)·서비스 워커
 apps/doc/            # 문서 (Svelte 5 + TS) — 한글·워드 읽기. ★ 이 앱도 두 벌로 빌드한다(아래 13번)
   src/lib/doc/       # 엔진: engine(rhwp wasm 자체 호스팅+SHA-384 검증·프리페치)·
                      #   hwp(열기·페이지 SVG·문단/컨트롤 걷기·찾기·hwpx)·docx(docx-preview 재현
                      #   + mammoth 시맨틱 HTML 지연 로드)·markdown(turndown + 직접 짠 GFM 표 규칙,
-                     #   그림 떼어내기)·detect(매직바이트 판별)·save(md 한 장 또는 ZIP)
+                     #   그림 떼어내기)·detect(매직바이트 판별)·save(md 한 장 또는 ZIP)·
+                     #   batch(일괄 변환 — ZIP 경로 계획 + 큐 상태 기계, 아래 30번)
   src/lib/editor/    # state.svelte.ts(스테이지 머신)·Editor(좌우 분할·스크롤 비율 동기화)·
                      #   Pages(SVG 쪽 가상 스크롤 — 배율은 쪽의 실제 폭으로 건다)·
                      #   MarkdownPane(저장될 원문 그대로)·Outline(목차 — 문단 걷기에서 함께 나온다)·
@@ -77,7 +87,9 @@ apps/doc/            # 문서 (Svelte 5 + TS) — 한글·워드 읽기. ★ 이
   rhwp-wasm.ts       # ★ 빌드 플러그인 — wasm을 rhwp-<버전>.wasm으로 내보내고 SHA-384를 코드에 주입
 apps/drop/           # 드롭 (Svelte 5 + TS) — 서버 없는 P2P 파일 전송, 단일 플로 뷰
   src/lib/rtc/       # 엔진: signal(SDP deflate-raw+base64url)·peer(non-trickle RTCPeerConnection)·
-                     #        transfer(64KB 청크+백프레셔 file/eof/text 프로토콜)·save·
+                     #        transfer(64KB 청크+백프레셔, ack 기반 진행률)·save·
+                     #        frames(프레임 인코딩·파싱을 한 자리로)·
+                     #        progress(ack 이력 → 이동 평균 속도)·
                      #        rendezvous(6자리 코드 — 공개 Nostr 릴레이 6곳 랑데부, 4메시지)·
                      #        spake2(RFC 9382 P-256 — 코드 오프라인 대입 불가, 벡터 검증됨)·
                      #        nostr(NIP-01 최소 클라이언트, @noble/curves 서명)
@@ -158,7 +170,7 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
    - 이 후처리는 `vite-plugin-singlefile` 출력 태그 형태(`<style rel="stylesheet" crossorigin>`, `<script type="module" crossorigin>`)에 **정규식으로 의존**한다. Vite/플러그인 업그레이드로 태그가 바뀌면 후처리가 **조용히 건너뛴다(early return)** → 파일이 안 줄어듦.
    - 확인법: 빌드 로그에 `self-extracting-html: dist/index.html → NNN kB`가 찍히는지 볼 것. 안 찍히면 정규식 갱신 필요.
 
-4. **도구가 만든 파일을 내려받는 것은 표준 `<a download>` 방식**(`src/lib/pdf/save.ts` 등 다섯 앱의 `save.ts`).
+4. **도구가 만든 파일을 내려받는 것은 표준 `<a download>` 방식**(`src/lib/pdf/save.ts` 등 일곱 앱의 `save.ts` — pdf·gif·video·image·sheet·doc·drop).
    File System Access(`showSaveFilePicker`/`showDirectoryPicker`)로 되돌리지 말 것 — 그건 크롬 "다운로드"
    목록에 안 뜨고 저장 위치가 헷갈린다는 사용자 피드백으로 표준 다운로드로 바꾼 것이다.
    - **예외는 `apps/drop`의 수신 경로 하나다**(2026-08-14 판단으로 뒤집었다). 받는 파일은 우리가 만든
@@ -387,14 +399,86 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
 
 26. **드롭의 취소 프레임은 양방향 멱등이다.** 한쪽만 정리하면 상대가 영원히 기다린다.
    취소 뒤 남아서 도착하는 청크가 **다음 파일에 섞이지 않는지**가 이 프로토콜의 급소다.
-   - **아직 `ack`가 없어 송신 측 "완료"는 낙관적이다** — 진행률이 재는 것은 데이터 채널에
-     건넨 바이트지 상대가 받은 바이트가 아니다. 전송 첫 구간의 속도가 실제보다 높게 나왔다가
-     가라앉는 것도 같은 이유다. 취소 프레임을 붙인 자리에 ack를 더하면 둘 다 풀린다.
+   같은 이유로 파일 한가운데서 접을 때는 반드시 `cancel`을 보내고 던진다 — 안 보내면
+   받는 쪽이 쓰다 만 파일을 연 채 영영 남는다.
+   - **진행률·완료는 상대의 `ack` 기준이다**(2026-08-15에 붙였다). 데이터 채널에 건넨 바이트를
+     세면 백프레셔 버퍼에 쌓인 것까지 "보냈다"가 되어 첫 구간 속도가 실제보다 높게 나왔다가
+     가라앉는다. 최종 ack는 받는 쪽이 **디스크 쓰기(sink close)까지 끝낸 뒤** 보낸다 —
+     그래야 "완료"가 진실이다. ack는 256KB·0.5초 간격 + eof 직후 한 번.
+   - **하위 호환은 handshake의 `hello`로 가른다.** 상대가 ack를 안다고 말해 놓고 한 장도
+     안 보내면 30초 뒤 오류다(낙관 완료로 물러나지 않는다). 상대가 어떤 판인지 **모를 때만**
+     20초 유예 뒤 낙관 모드로 물러난다 — 구버전 단일 HTML을 내려받아 쓰는 사람이 있어서다.
+     이 두 갈래를 하나로 합치지 말 것. 합치면 둘 중 하나가 반드시 거짓말이 된다.
    - **랑데부 방 태그가 6자리 코드를 새게 한다 — 미해결.** 태그가 코드만의 결정적 함수이고
      salt가 고정이라, 표를 한 번 만들면 릴레이에서 본 태그로 코드를 즉시 얻는다. SPAKE2는
      전사(transcript)를 지킬 뿐 이 통로를 막지 못한다.
      자세한 내용과 고려한 선택지는 [`docs/security/rendezvous-code-tag.md`](docs/security/rendezvous-code-tag.md).
      **랑데부를 손대기 전에 그 문서를 먼저 읽을 것.**
+
+27. **PDF 텍스트 추출은 화면 좌표(y 아래로)만 안다.** 쪽 회전(`/Rotate`)과 y 방향은
+   `extract.ts`가 뷰포트 행렬을 왼쪽에서 곱해 걷어낸 뒤 `text.ts`에 넘긴다 — 이 계약 덕에
+   회전 처리까지 node에서 테스트된다. PDF 사용자 좌표를 그대로 넘기면 줄 순서가 거꾸로 나온다.
+   - **뷰포트 변환만으로는 모자란다 — 회전을 두 번 잰다**(`uprightCorrection`). 뷰포트가
+     `/Rotate`를 걷어내는 것은 **글이 그 회전에 맞춰 그려졌을 때뿐**인데, 회전 도구는 내용
+     스트림은 놔둔 채 `/Rotate`만 바꾼다 — **우리 편집 탭이 바로 그렇다.** 그런 문서에서는
+     뷰포트 변환이 오히려 글을 눕힌다(90·270°는 줄이 세로로 흩어지고 180°는 줄·조각 순서가
+     통째로 뒤집힌다). 그래서 기준을 쪽이 아니라 **글 자신**에 둔다: 조각의 기준선이 전부
+     한쪽을 가리키면 그쪽을 되돌리고, 방향이 섞여 있으면(똑바른 본문 위에 눕힌 도장 하나)
+     손대지 않는다. 이 2차 보정을 빼면 우리 도구로 회전시킨 PDF의 텍스트가 깨진다.
+   - **다단(2단) 조판·표·세로쓰기는 범위 밖이고, 그 한계를 `tests/pdf-text.test.ts`가 명세로
+     못 박고 있다.** 좌우 단이 한 줄로 이어진다. 고칠 때 테스트부터 고쳐 무엇을 바꾸는지 밝힐 것.
+   - **저장 단위가 형식마다 다르다** — 이미지는 쪽마다 한 장, 텍스트는 **문서마다 `.txt` 한 장**.
+     200쪽짜리가 200개가 되지 않게 한 것이다. 쪽 경계는 폼 피드(`\f`, pdftotext 관례).
+   - 탭 이름은 "이미지·텍스트"다. txt를 내는 탭이 "PDF→이미지"로 남으면 거짓말이 된다.
+
+28. **GIF 내보내기는 시작 시점의 상태를 스냅샷으로 굳혀 끝까지 그것만 본다**(`gif/plan.ts`).
+   예전엔 인코딩 중에 프레임을 고르거나 딜레이를 고치면 **결과 파일 하나가 자기 안에서 앞뒤가
+   달랐다**(앞쪽 프레임엔 자막이 있고 뒤쪽엔 없는 식). 입력을 잠그는 대신 스냅샷을 고른 것은
+   인코딩 중에도 다음 편집을 하고 싶기 때문이다. 살아 있는 배열을 인코더에 넘기지 말 것.
+   - 필름스트립 썸네일에는 자막이 안 나온다(임포트 때 굳는 문자열이라 `renderFrame`을 안 지난다).
+     알려진 한계다.
+
+29. **시트에 필터가 걸리면 좌표계가 둘로 갈린다** — "문서의 행 번호"와 "보이는 행 목록의 순번".
+   행 머리글·커서·선택·복사·수식 참조는 전부 **원래 행 번호**로 남아야 한다(엑셀이 그렇다).
+   두 좌표계를 뒤섞으면 안 보이는 칸을 조작하게 된다 — 실제로 커서가 걸러진 줄에 남아
+   보이지도 않는 칸의 내용을 지우는 결함이 한 번 났다.
+   - **조작이 닿는 범위는 `sheet/filter.ts`의 `OP_SCOPE` 표 하나가 정한다.** 화면 상태는
+     `rowsFor(op, area)`로 물어보기만 한다. 새 조작을 붙이면 표에 한 줄 적는 것이 그 조작을
+     필터에 이어 붙이는 방법이다 — 갈래를 컴포넌트에서 다시 판단하지 말 것.
+   - **붙여넣기는 숨은 줄을 덮는다(엑셀과 같다)** — 건너뛰면 붙인 블록의 모양이 원본과 달라진다.
+     대신 **덮은 숨은 줄 수를 상태줄에 알린다**. 이 알림을 지우면 조용한 데이터 손실이 된다.
+     세는 시점은 붙이기 **전**이다(붙인 뒤엔 그 줄이 필터에 걸릴지가 이미 달라져 있다).
+   - 필터가 걸린 채 행을 삽입하면 새 빈 줄이 곧바로 걸러진다. 라이브 필터의 귀결이고,
+     엑셀처럼 "다시 적용까지 남기기"를 하려면 결과 캐시가 필요해 "언제나 맞다"와 부딪힌다.
+     알려진 한계로 테스트에 못 박혀 있다.
+   - CSV로 "보이는 행만" 내보낸 경우 **dirty를 내리지 않는다** — 걸러진 줄은 어느 파일에도 없다.
+
+30. **문서 일괄 변환에서 패닉에 발이 묶이는 것은 rhwp를 타는 문서뿐이다**(`doc/batch.ts`).
+   17번대로 rhwp는 한 번 패닉하면 인스턴스가 통째로 죽지만, **docx는 순수 JS 경로라 무관하다** —
+   남은 워드 문서까지 "못 함"으로 세우면 거짓말이다. 종류는 확장자가 아니라 **매직바이트**로
+   가른다(`needsEngine` + `detect`). 이름이 `.docx`인 한글 문서가 죽은 엔진을 또 부르지 않게.
+   - **패닉이 중단을 이긴다**(`mergeHalt`). 중단은 다시 놓으면 그만이지만 죽은 엔진은 새로고침
+     말고 살릴 길이 없는데, `stopped`로 덮으면 화면에서 그 사실과 새로고침 버튼이 함께 사라진다.
+     같은 이유로 `nextStep`은 **중단보다 패닉을 먼저** 처리한다.
+   - **새로고침 배너·버튼은 목록이 다 끝난 뒤에만 뜬다.** 도는 중에 띄우면 누른 사람이
+     이미 옮긴 워드 결과를 잃는다.
+   - 순차 규약은 `nextPending`이 지킨다 — 인덱스로 세는 루프로 되돌리면 굳힌 항목을 건너뛰는
+     규칙이 런타임에 또 생기고, 갈래의 순서가 테스트에 안 잡힌다.
+   - `batchOutputs`가 결과 바이트를 전부 메모리에 쥔다(4번대로 `<a download>`를 지켜야 해서
+     스트리밍으로 못 바꾼다). 문서 수십 개에 그림이 많으면 탭 메모리가 커진다.
+
+31. **이미지의 목표 용량은 사용자가 고른 설정보다 더 줄이기만 한다 — 더 좋게(=더 크게) 만들지
+   않는다.** 두 축이 같은 약속을 지킨다: 품질 축은 구간 `[1, 사용자 품질]`, PNG 축은 사용자가
+   고른 색 수를 상한으로 **눌러 세운 사다리**(`pngLadder(cap)`). 상한 위 칸을 걸러 내면 축이
+   통째로 사라져서(색 4는 3칸, 색 2는 1칸만 남는다) 버리지 않고 누른 것이다.
+   - PNG 축은 고정 인덱스가 아니다 — 칸 수는 `pngSteps(cap)`, 칸은 `pngStepAt(value, cap)`으로만
+     얻는다. `cap`은 필수 인자다(안 넘기면 컴파일이 막힌다).
+   - **목표 용량을 켜도 품질·색 수 컨트롤을 잠그지 않는다.** 잠그면 "자동이 정한다"로 읽히는데
+     실제로는 사용자가 고른 값이 탐색의 **상한**이라 화면이 거짓말이 된다.
+   - **`Stage.pixels()`는 캔버스를 한 번만 읽고 그 결과를 계속 돌려준다 — 제자리에서 고치지 말 것.**
+     탐색이 같은 스테이지를 최대 아홉 번 인코딩하는데 `getImageData`를 되풀이하면 크로미엄이
+     매번 GPU에서 되읽으며 `willReadFrequently` 경고를 띄운다. 컨텍스트 옵션으로는 못 고친다
+     (`getContext`는 처음 준 옵션만 쓰고, 소프트웨어 캔버스로 떨어지면 pica가 느려진다).
 
 ## 핵심 설계 결정 (그릴링 합의 요약)
 
