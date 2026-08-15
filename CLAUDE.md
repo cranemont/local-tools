@@ -552,6 +552,34 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
      한다.** `route.ts`는 `feat`이 없으면 그 `src`를 가진 기능 중 첫 번째로 떨어뜨리고,
      검사 ④는 "어딘가에 착지했다"만 보므로 배관이 조용히 다른 유닛으로 옮겨간다.
 
+37. **표본 파일은 코드로 만들고, 두 번 만들면 바이트가 같아야 한다**(`tests/fixtures/`).
+   저장소에 바이너리를 커밋하지 않는다(`packages/pwa-kit`이 PNG를 코드로 인코딩하는 관행과 같다).
+   - **pdf-lib은 `setCreationDate`·`setModificationDate`를 안 박으면 실행 시각을 넣는다.**
+     두 번 지어 비교하는 것만으로는 같은 초 안에 지으면 못 잡으므로 날짜 문자열을 직접 단언한다.
+     난수는 시드를 고정한다(`mulberry32`). qpdf 암호화만 결정적이지 않다(난수 키).
+   - 이미지 표본에 **균일한 사각형을 쓰지 마라** — 모자이크·블러를 재려면 잔 무늬가 있어야 한다.
+     균일한 면은 모자이크 뒤에도 같은 색이라 정상 동작에서 단언이 실패한다.
+   - **골든 이미지를 쓰지 않는다.** 같은 캔버스 연산이 Chrome과 node Skia에서 최대 8/255
+     어긋난다. 성질로 단언한다 — 영역 안이 원본과 다른가, 밖은 그대로인가.
+   - 앱 의존성(`pdf-lib`·`gifenc`)은 pnpm 격리 때문에 루트에서 이름으로 안 풀린다.
+     `../../apps/<앱>/node_modules/<pkg>`로 경로 지목한다(루트에 같은 이름을 또 달면 앱이 쓰는
+     판과 갈라진다). 규약의 정본은 `tests/fixtures/pdf.ts` 머리말이다.
+
+38. **시간대에 기대는 코드는 시간대를 바꿔 가며 재라.** CI 러너가 UTC라 안 그러면 안 보인다.
+   실제로 xlsx 날짜가 열 때마다 오프셋만큼 밀려 왕복 세 번에 하루가 어긋났는데 CI는 초록이었다.
+   - **ExcelJS는 일련번호를 UTC 기준 `Date`로 푼다.** 그 `Date`를 로컬 시각으로 읽는
+     `toSerial`에 넘기지 마라 — `serial.ts`의 `serialFromExcelJsDate`가 그 경계를 지킨다
+     (`getTime()`만 본다). ExcelJS는 1900년 윤년 버그를 흉내 내지 않으므로 그 보정도 얹지 않는다.
+   - 명세는 `process.env.TZ`를 대입해 시간대를 세운다(node가 그때 시간대 캐시를 버린다).
+     오늘 날짜를 읽는 명세도 로컬 필드가 아니라 값이 적힌 기준으로 읽는다(zip은 UTC).
+
+39. **CSV로 나가는 표의 범위는 "글자가 나가는 칸"이 정한다**(`model.ts`의 `hasContent` —
+   값·수식·원문 중 하나). 서식만 든 칸은 줄도 열도 만들지 않는다. 빈 칸에 셀을 만드는
+   `applyStyle`은 그대로 둔다 — 그 칸이 xlsx 파일에는 나가기 때문이다.
+   `csv.ts`와 `convert.ts`가 같은 판정을 지난다. 한쪽만 고치면 마크다운·JSON에 빈 줄이 는다.
+   - **원문(`raw`)을 되살리는 자리는 `cellText` 하나다**(23번). 내보내기 쪽에 `raw` 분기를
+     다시 만들지 마라 — 규약이 두 자리에 적히면 한쪽만 고쳐 놓고 고쳤다고 여기게 된다.
+
 ## 핵심 설계 결정 (그릴링 합의 요약)
 
 - 개인 도구, **광고 없음**(iLovePDF류는 기능 참고만).
@@ -562,5 +590,25 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
 ## 검증 방법 (변경 후)
 
 1. `pnpm check && pnpm build` → 0 errors, 자가해제 로그 확인.
+   `check`가 `vitest run`을 물고 있어 테스트가 배포를 막는다.
 2. `dist/index.html`를 정적 서버(`python3 -m http.server`)로 띄워 브라우저로 확인:
    드롭 → 썸네일 렌더 → 병합/회전/삭제/ZIP/암호 왕복. (`file://`는 확장 자동화가 접근 못 하니 정적 서버 사용.)
+
+### 테스트가 명세다
+
+산문 설명 대신 테스트로 동작을 못 박는다. `describe`/`it`은 동작을 서술하는 한국어로 쓴다.
+테스트는 앱 밖 `tests/`에 둔다 — 앱 소스에 섞으면 `svelte-check`가 같이 훑고 앱마다 vitest를
+devDependency로 달아야 한다. 새 의존성은 **루트 devDependencies**에만 넣는다
+(`scripts/check-stack-sources.mjs`는 앱 `dependencies`만 보므로 지도와 얽히지 않는다).
+
+지금 재는 것은 두 층이다.
+
+- **1층 — node 순수 함수.** 브라우저 없이 도는 계산.
+- **2층 — 룬 상태 기계와 실물 파일 왕복.** `vitest.config.ts`의 `svelte()` 플러그인 한 줄로 열린다.
+  `.svelte.ts` 싱글턴은 `import { editor } from "../apps/<앱>/src/lib/editor/state.svelte"`로
+  부른다(확장자 없이). 테스트 파일에서는 룬을 못 쓰지만 메서드를 부르고 `$derived` 게터를
+  그냥 읽으면 값이 나온다.
+
+캔버스·WebCodecs·wasm·DOM이 필요한 코드는 아직 사각지대이고 손으로 브라우저를 연다.
+설계와 다음 층 계획은 `docs/local/test-harness-plan.md`에 있다(gitignore — 저장소에 안 올린다).
+
