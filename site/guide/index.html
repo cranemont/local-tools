@@ -6,7 +6,7 @@
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <title>가이드 — hwp 열기·PDF 변환·파일 전송 | local-tools</title>
-    <meta name="description" content="한글 파일을 여는 법, hwp를 PDF·마크다운으로 바꾸는 법, 폰과 PC 사이로 파일을 옮기는 법. 우리 도구만이 아니라 선택지 전체를 다룹니다." />
+    <meta name="description" content="한글 파일을 여는 법, hwp를 PDF·마크다운으로 바꾸는 법, 폰과 PC 사이로 파일을 옮기는 법. 선택지별로 정리했고 local-tools 도구가 답이 아닌 경우도 적었습니다." />
     <link rel="canonical" href="https://tools.cranemont.com/guide/" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="oklch(0.978 0.003 240)" />
@@ -15,7 +15,7 @@
     <meta property="og:site_name" content="local-tools" />
     <meta property="og:locale" content="ko_KR" />
     <meta property="og:title" content="가이드 — hwp 열기·PDF 변환·파일 전송" />
-    <meta property="og:description" content="한글 파일을 여는 법, hwp를 PDF·마크다운으로 바꾸는 법, 폰과 PC 사이로 파일을 옮기는 법. 우리 도구만이 아니라 선택지 전체를 다룹니다." />
+    <meta property="og:description" content="한글 파일을 여는 법, hwp를 PDF·마크다운으로 바꾸는 법, 폰과 PC 사이로 파일을 옮기는 법. 선택지별로 정리했고 local-tools 도구가 답이 아닌 경우도 적었습니다." />
     <meta property="og:url" content="https://tools.cranemont.com/guide/" />
     <meta property="og:image" content="https://tools.cranemont.com/og/home.png" />
     <meta property="og:image:width" content="1200" />
@@ -30,7 +30,7 @@
             "@id": "https://tools.cranemont.com/guide/#page",
             "name": "가이드 — hwp 열기·PDF 변환·파일 전송",
             "url": "https://tools.cranemont.com/guide/",
-            "description": "한글 파일을 여는 법, hwp를 PDF·마크다운으로 바꾸는 법, 폰과 PC 사이로 파일을 옮기는 법. 우리 도구만이 아니라 선택지 전체를 다룹니다.",
+            "description": "한글 파일을 여는 법, hwp를 PDF·마크다운으로 바꾸는 법, 폰과 PC 사이로 파일을 옮기는 법. 선택지별로 정리했고 local-tools 도구가 답이 아닌 경우도 적었습니다.",
             "inLanguage": "ko",
             "isPartOf": {
               "@id": "https://tools.cranemont.com/#website"
@@ -60,7 +60,7 @@
       }
     </script>
     <script>
-      // 도구들과 같은 키의 테마 설정을 따른다 (없으면 시스템).
+      // 도구 페이지와 같은 키의 테마 설정을 따른다 (없으면 시스템).
       const savedTheme = localStorage.getItem("theme");
       if (savedTheme === "light" || savedTheme === "dark")
         document.documentElement.dataset.theme = savedTheme;
@@ -142,13 +142,13 @@
     <nav class="crumb wrap"><a href="/">local-tools</a></nav>
     <article class="wrap">
       <h1>가이드</h1>
-      <p class="lede">도구 사용법이 아니라, 그 문제를 푸는 방법 전체를 다룹니다. 우리 도구가 답이 아닐 때도 그렇게 적었습니다.</p>
+      <p class="lede">한글 파일 열기, PDF·마크다운 변환, 폰과 PC 사이 파일 전송을 선택지별로 정리했습니다. local-tools 도구가 답이 아닌 경우에는 다른 방법을 적었습니다.</p>
       <ul class="cards">
-        <li><a href="/guide/hwp-mac/"><strong>한글 프로그램 없이 hwp 파일 여는 법 (맥·윈도우)</strong><span>한컴이 무료로 배포하는 뷰어는 윈도우용입니다. 맥에서 hwp·hwpx를 여는 길을 브라우저 뷰어부터 한컴오피스·클라우드 오피스·변환 사이트까지 장단점과 함께 정리했습니다.</span></a></li>
+        <li><a href="/guide/hwp-mac/"><strong>한글 프로그램 없이 hwp 파일 여는 법 (맥·윈도우)</strong><span>한컴이 무료로 배포하는 뷰어는 윈도우용입니다. 맥에서 hwp·hwpx를 여는 방법을 브라우저 뷰어부터 한컴오피스·클라우드 오피스·변환 사이트까지 장단점과 함께 정리했습니다.</span></a></li>
         <li><a href="/guide/hwp-to-pdf/"><strong>hwp를 PDF로 바꾸는 법 — 파일을 올리지 않고</strong><span>한글 프로그램이 없어도 브라우저에서 hwp를 열고 인쇄 대화상자에서 "PDF로 저장"을 고르면 됩니다. 파일을 올리지 않는 방법과 온라인 변환·오피스 앱 경로를 한계와 함께 정리했습니다.</span></a></li>
-        <li><a href="/guide/hwp-to-markdown/"><strong>hwp·워드 문서를 마크다운으로 바꾸기</strong><span>hwp·docx를 브라우저에서 마크다운으로 바꾸는 방법. 복사-붙여넣기로 표가 깨지는 이유, pandoc의 입력 형식 제약, 병합 셀·그림이 어떻게 처리되는지 정리했습니다.</span></a></li>
-        <li><a href="/guide/phone-to-pc/"><strong>폰과 PC 사이에서 파일 옮기기</strong><span>폰과 PC 사이 파일은 케이블 없이도 옮깁니다. 에어드롭·퀵쉐어·휴대폰 연결·카톡·클라우드·전송 서비스를 기기 조합별로 비교하고, 브라우저끼리 직접 보내는 방법과 사진 위치정보 지우는 순서까지 정리했습니다.</span></a></li>
-        <li><a href="/guide/no-upload/"><strong>파일을 서버에 올리지 않고 브라우저에서 처리한다는 것</strong><span>파일을 서버에 올리지 않고 브라우저 안에서 처리합니다. 온라인 변환 사이트가 파일을 어떻게 다루는지, 브라우저만으로 가능한 이유, 네트워크를 타는 예외, 직접 확인하는 방법을 정리했습니다.</span></a></li>
+        <li><a href="/guide/hwp-to-markdown/"><strong>hwp·워드 문서를 마크다운으로 바꾸기</strong><span>hwp·docx를 브라우저에서 마크다운으로 바꾸는 방법. 복사-붙여넣기로 표가 깨지는 이유, pandoc의 입력 형식 제약, 병합 셀·그림이 결과에서 어떻게 나오는지 정리했습니다.</span></a></li>
+        <li><a href="/guide/phone-to-pc/"><strong>폰과 PC 사이에서 파일 옮기기</strong><span>폰과 PC 사이 파일은 케이블 없이도 옮길 수 있습니다. 에어드롭·퀵쉐어·휴대폰 연결·카톡·클라우드·전송 서비스를 기기 조합별로 비교했습니다. 브라우저끼리 직접 보내는 방법과 사진 위치정보 지우는 순서도 함께 적었습니다.</span></a></li>
+        <li><a href="/guide/no-upload/"><strong>파일을 서버에 올리지 않고 브라우저에서 처리한다는 것</strong><span>온라인 변환 사이트가 올린 파일을 어떻게 다루는지, 브라우저만으로 같은 일이 가능해진 이유, 네트워크를 타는 예외, 파일이 나가지 않는지 직접 확인하는 방법을 정리했습니다.</span></a></li>
       </ul>
       <footer><p><a href="/">local-tools의 도구 전체 보기</a></p></footer>
     </article>
