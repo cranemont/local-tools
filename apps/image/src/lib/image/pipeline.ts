@@ -4,7 +4,7 @@ import { encodeAvif } from "./avif";
 import { getBitmap } from "./decode";
 import { embedJpegExif, embedWebpExif, extractExif, neutralizeOrientation } from "./exif";
 import { applyPalette, quantize } from "./quantize";
-import { PNG_STEPS, pngStepAt, searchTarget, type AttemptInfo } from "./target";
+import { pngStepAt, pngSteps, searchTarget, type AttemptInfo } from "./target";
 import {
   OUTPUT_MIME,
   supportsExifKeep,
@@ -97,6 +97,8 @@ async function searchQuality(
 }
 
 /** PNG: 품질 손잡이가 없으니 색 수·축소 배율 사다리(target.ts)를 축으로 쓴다.
+ *  상한은 사용자가 고른 색 수다 — 품질 축과 같은 약속으로, 목표가 헐거우면 고른 그 설정이
+ *  그대로 나온다(사다리의 맨 위 칸이 곧 그 설정이다).
  *  배율이 바뀔 때만 스테이지를 다시 그린다 — 같은 배율의 칸끼리는 캔버스를 재사용한다. */
 async function searchPng(
   item: ImageItem,
@@ -104,11 +106,12 @@ async function searchPng(
   target: number,
   onAttempt?: AttemptReport,
 ): Promise<ProcessResult> {
+  const cap = settings.pngColors;
   let cached: { scale: number; stage: Stage } | null = null;
   const hit = await searchTarget(
-    { targetBytes: target, min: 0, max: PNG_STEPS - 1 },
+    { targetBytes: target, min: 0, max: pngSteps(cap) - 1 },
     async (value) => {
-      const step = pngStepAt(value);
+      const step = pngStepAt(value, cap);
       let stage: Stage;
       if (cached && cached.scale === step.scale) {
         stage = cached.stage;
@@ -142,6 +145,26 @@ interface Stage {
   canvas: HTMLCanvasElement;
   w: number;
   h: number;
+  /** 스테이지 픽셀. **여러 번 불러도 캔버스는 한 번만 읽는다** — 탐색이 같은 스테이지를
+   *  최대 아홉 번 인코딩하는데(AVIF는 매 품질마다, PNG는 매 색 수마다 픽셀이 필요하다)
+   *  같은 캔버스에 `getImageData`를 되풀이하면 크로미엄이 GPU에서 매번 되읽으며
+   *  `willReadFrequently` 경고를 띄운다. 컨텍스트 옵션으로는 못 고친다 —
+   *  `getContext("2d")`는 처음 만들 때 준 옵션만 쓰고, 그렇다고 스테이지를 통째로
+   *  소프트웨어 캔버스로 만들면 pica·drawImage가 느려진다.
+   *
+   *  ⚠️ **돌려받은 것을 제자리에서 고치지 말 것** — 다음 시도가 고쳐진 픽셀을 인코딩한다.
+   *  색 축소는 `applyPalette`가 새 배열에 칠하게 해서 이 규약을 지킨다. */
+  pixels(): ImageData;
+}
+
+function stageOf(canvas: HTMLCanvasElement, w: number, h: number): Stage {
+  let read: ImageData | null = null;
+  return {
+    canvas,
+    w,
+    h,
+    pixels: () => (read ??= context2d(canvas).getImageData(0, 0, w, h)),
+  };
 }
 
 /** extraScale은 리사이즈로 정해진 목표 크기에 더 거는 축소 배율(%)이다 — PNG 탐색만 쓴다. */
@@ -215,7 +238,7 @@ async function renderStage(
     stage = flat;
   }
 
-  return { canvas: stage, w, h };
+  return stageOf(stage, w, h);
 }
 
 function scaleSide(n: number, pct: number): number {
@@ -240,32 +263,29 @@ async function encodeStage(
   quality: number,
   colors: number | null,
 ): Promise<Blob> {
-  const { canvas, w, h } = stage;
+  const { canvas } = stage;
   if (settings.format === "avif") {
-    return encodeAvif(context2d(canvas).getImageData(0, 0, w, h), quality);
+    return encodeAvif(stage.pixels(), quality);
   }
   if (settings.format === "png") {
-    const target = colors === null ? canvas : reduceColors(canvas, colors, settings.pngDither);
+    const target = colors === null ? canvas : reduceColors(stage, colors, settings.pngDither);
     return canvasToBlob(target, OUTPUT_MIME.png);
   }
   return canvasToBlob(canvas, OUTPUT_MIME[settings.format], quality / 100);
 }
 
-/** 색을 줄인 **사본** 캔버스. 원본 스테이지는 그대로 둔다 —
- *  탐색이 같은 캔버스를 색 수만 바꿔 여러 번 인코딩하기 때문이다. */
-function reduceColors(
-  canvas: HTMLCanvasElement,
-  colors: number,
-  dither: boolean,
-): HTMLCanvasElement {
-  const { width, height } = canvas;
-  // getImageData는 사본을 준다 — 여기 되쓰는 것은 원본 캔버스에 닿지 않는다.
-  const data = context2d(canvas).getImageData(0, 0, width, height);
-  applyPalette(quantize(data.data, width, height, { colors, dither }), data.data);
+/** 색을 줄인 **사본** 캔버스. 스테이지 픽셀은 읽기만 한다 —
+ *  탐색이 같은 스테이지를 색 수만 바꿔 여러 번 인코딩하기 때문이다.
+ *  quantize는 입력을 읽기만 하고, 칠한 결과는 따로 잡은 배열로 받는다. */
+function reduceColors(stage: Stage, colors: number, dither: boolean): HTMLCanvasElement {
+  const { w, h } = stage;
+  const src = stage.pixels();
+  const painted = new Uint8ClampedArray(w * h * 4);
+  applyPalette(quantize(src.data, w, h, { colors, dither }), painted);
   const out = document.createElement("canvas");
-  out.width = width;
-  out.height = height;
-  context2d(out).putImageData(data, 0, 0);
+  out.width = w;
+  out.height = h;
+  context2d(out).putImageData(new ImageData(painted, w, h), 0, 0);
   return out;
 }
 

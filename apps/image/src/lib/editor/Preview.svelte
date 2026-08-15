@@ -439,11 +439,11 @@
       {#if picked}
         <span class="dims">{picked}</span>
       {/if}
-      {#if result.search && !result.search.met}
-        <span
-          class="badge miss"
-          title={t.preview.targetMissHint(formatBytes(editor.targetBytes ?? 0))}
-        >
+      <!-- 목표를 끄면 배지도 그 자리에서 사라져야 한다. 결과는 디바운스(200ms) 뒤에야
+           다시 계산되므로 result.search만 보면 직전 탐색의 '목표 초과'가 잠깐 남고,
+           툴팁이 사라진 목표를 "0B"로 읽어 준다. -->
+      {#if result.search && !result.search.met && editor.targetBytes !== null}
+        <span class="badge miss" title={t.preview.targetMissHint(formatBytes(editor.targetBytes))}>
           {t.preview.targetMiss}
         </span>
       {/if}

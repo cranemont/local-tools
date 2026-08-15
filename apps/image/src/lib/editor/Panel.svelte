@@ -325,7 +325,9 @@
     </div>
   </section>
 
-  <!-- PNG는 품질 손잡이가 없다 — 대신 색 수를 줄여 용량을 낮춘다 -->
+  <!-- PNG는 품질 손잡이가 없다 — 대신 색 수를 줄여 용량을 낮춘다.
+       목표 용량을 켜도 이 값은 잠그지 않는다 — 품질과 같이 **탐색의 상한**이라
+       목표가 헐거우면 여기 고른 색 수가 그대로 나온다(target.ts의 사다리 맨 위 칸). -->
   {#if editor.format === "png"}
     <section class="sec">
       <h3>{t.panel.colors}</h3>
@@ -333,8 +335,7 @@
         <button
           type="button"
           class="chip"
-          class:active={editor.pngColors === null && !auto}
-          disabled={auto}
+          class:active={editor.pngColors === null}
           onclick={() => editor.setPngColors(null)}
         >
           {t.panel.colorsOriginal}
@@ -343,8 +344,7 @@
           <button
             type="button"
             class="chip"
-            class:active={!auto && editor.pngColors === c}
-            disabled={auto}
+            class:active={editor.pngColors === c}
             onclick={() => editor.setPngColors(c)}
           >
             {c}
@@ -354,7 +354,7 @@
           <span class="badge note" title={t.panel.autoColorsHint}>{t.panel.auto}</span>
         {/if}
       </div>
-      {#if editor.pngColors !== null && !auto}
+      {#if editor.pngColors !== null}
         <div class="row">
           <input
             class="slider"

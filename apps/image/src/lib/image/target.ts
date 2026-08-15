@@ -11,6 +11,8 @@
 // 순서: 양 끝(max → min)을 먼저 짚고 안쪽을 이진 탐색한다. 흔한 두 경우 —
 // 지금 설정으로 이미 목표를 맞추는 그림, 어떻게 줄여도 못 맞추는 그림 — 이 한두 번에 끝난다.
 
+import { MAX_COLORS, MIN_COLORS } from "./quantize";
+
 /** 한 번의 시도 — 무엇을 넣었고 몇 바이트가 나왔는가. */
 export interface Attempt {
   value: number;
@@ -183,6 +185,11 @@ export async function searchTarget<T>(
 // PNG에는 품질 손잡이가 없다. 그래서 색 수(quantize.ts)와 축소 배율을 한 줄로 세워
 // 축을 만든다. 아래로 갈수록 작아지고, 탐색기가 쓰는 값(value)은 이 줄의 반대 순서다
 // — 탐색기는 "값이 클수록 크다"를 가정하므로 값이 클수록 위(좋은 쪽)여야 한다.
+//
+// 축의 맨 위는 **언제나 사용자가 고른 설정**이다. 품질 축이 [1, 사용자 품질]로 잘려 있는 것과
+// 같은 약속이다 — 목표 용량은 고른 설정보다 **더 줄이기만** 하지, 더 좋게(=더 크게) 만들지
+// 않는다. 축소 배율도 같은 뜻으로 100%가 상한이다(100% = 사용자가 고른 리사이즈 그대로,
+// pipeline.ts의 renderStage가 그 위에 더 거는 배율이다).
 
 export interface PngStep {
   /** 팔레트 색 수. **null이면 색을 줄이지 않는다.** */
@@ -200,7 +207,10 @@ export interface PngStep {
  *  256색으로 줄였더니 PNG가 **109%로 커졌다**(디더링까지 켜면 115%). PNG 필터는 부드러운
  *  변화를 0에 가까운 잔차로 만드는데 색을 줄이면 등고선에서 큰 계단이 생겨 필터가 진다.
  *  그래서 "아무것도 안 하는" 칸이 사다리의 맨 위에 있어야 한다 —
- *  안 그러면 목표 용량을 켜는 순간 최선의 결과가 끄고 있을 때보다 나빠진다. */
+ *  안 그러면 목표 용량을 켜는 순간 최선의 결과가 끄고 있을 때보다 나빠진다.
+ *
+ *  이 줄은 **사용자가 색 수를 고르지 않았을 때(원본 색)의 축**이다. 색을 골랐으면
+ *  `pngLadder()`가 그 값을 상한으로 눌러 다시 세운다. */
 const PNG_LADDER: readonly PngStep[] = [
   { colors: null, scale: 100 },
   { colors: 256, scale: 100 },
@@ -226,10 +236,44 @@ const PNG_LADDER: readonly PngStep[] = [
   { colors: 2, scale: 10 },
 ];
 
-/** PNG 축의 칸 수 — 탐색 구간은 0 .. PNG_STEPS - 1이다. */
-export const PNG_STEPS = PNG_LADDER.length;
+/** 상한을 건 사다리는 cap 하나로 정해진다 — 탐색이 칸마다 부르므로 세워 두고 다시 쓴다. */
+const ladderCache = new Map<number, readonly PngStep[]>();
 
-/** 값 → 사다리 칸. 값이 클수록 좋은 쪽(줄의 위)이다. */
-export function pngStepAt(value: number): PngStep {
-  return PNG_LADDER[PNG_STEPS - 1 - clampInt(value, 0, PNG_STEPS - 1)];
+/**
+ * 사용자가 고른 색 수(`cap`)를 상한으로 세운 사다리. 맨 위 칸이 곧 그 설정이고,
+ * 그보다 색이 많은 칸은 없다 — 목표가 헐거우면 사용자가 고른 그 색 수가 답이다.
+ *
+ * cap이 수면 **위쪽 칸을 버리는 게 아니라 색 수를 cap으로 눌러** 다시 세운다.
+ * 버리면 축이 통째로 사라지기 때문이다 — 색 4를 고른 사람에게 남는 칸은 25%·10%짜리
+ * 셋뿐이고 색 2를 고르면 10% 한 칸만 남는다. 눌러서 세우면 (색 4, 100%)에서 시작해
+ * 배율만 내려가는 온전한 사다리가 된다.
+ */
+function pngLadder(cap: number | null): readonly PngStep[] {
+  if (cap === null) return PNG_LADDER;
+  const limit = clampInt(cap, MIN_COLORS, MAX_COLORS);
+  const cached = ladderCache.get(limit);
+  if (cached) return cached;
+  const seen = new Set<string>();
+  const built: PngStep[] = [];
+  for (const step of PNG_LADDER) {
+    // 색을 안 줄이는 칸(null)도 상한까지는 줄여야 한다 — 사용자가 그렇게 골랐다.
+    const colors = Math.min(step.colors ?? limit, limit);
+    const key = `${colors}@${step.scale}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    built.push({ colors, scale: step.scale });
+  }
+  ladderCache.set(limit, built);
+  return built;
+}
+
+/** PNG 축의 칸 수 — 탐색 구간은 0 .. pngSteps(cap) - 1이다. */
+export function pngSteps(cap: number | null): number {
+  return pngLadder(cap).length;
+}
+
+/** 값 → 사다리 칸. 값이 클수록 좋은 쪽(줄의 위)이고, 맨 위는 사용자가 고른 설정이다. */
+export function pngStepAt(value: number, cap: number | null): PngStep {
+  const ladder = pngLadder(cap);
+  return ladder[ladder.length - 1 - clampInt(value, 0, ladder.length - 1)];
 }

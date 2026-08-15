@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   ATTEMPT_CAP,
-  PNG_STEPS,
   createPlan,
   nextValue,
   planOutcome,
   plannedAttempts,
   pngStepAt,
+  pngSteps,
   recordAttempt,
   searchTarget,
   type AttemptInfo,
@@ -17,11 +17,14 @@ import {
 // 이 파일이 명세다. apps/image의 "목표 용량"은 계획(target.ts)과 인코딩(pipeline.ts)이
 // 갈라져 있다 — 여기서는 가짜 인코더를 물려 계획만 잰다.
 //
-// 계약은 셋이다.
+// 계약은 넷이다.
 //   ① 맞췄다(met=true)고 말하는 결과는 **실제로 잰 바이트가 목표 이하**다.
 //   ② 하나도 못 맞추면 **가장 작은 결과**를 주고 met=false로 말한다(조용히 큰 파일 금지).
 //   ③ 시도 횟수는 maxAttempts를 절대 넘지 않는다.
-// 이 셋은 단조 가정(값이 클수록 크다)이 깨져도 지켜져야 한다 — 재인코딩은 단조가 아니다.
+//   ④ 축의 맨 위는 **사용자가 고른 설정**이다 — 목표 용량은 더 줄이기만 하지 더 좋게(=더 크게)
+//      만들지 않는다. 품질 축은 구간 [1, 사용자 품질]로, PNG 사다리는 사용자가 고른 색 수를
+//      상한으로 눌러 이 약속을 지킨다.
+// ①②③은 단조 가정(값이 클수록 크다)이 깨져도 지켜져야 한다 — 재인코딩은 단조가 아니다.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 값 → 바이트 표를 받아 시도 기록을 남기는 가짜 인코더. */
@@ -280,103 +283,226 @@ describe("진행 알림 — 화면이 멈춘 것처럼 보이지 않게", () => 
   });
 });
 
+describe("품질 축의 상한 — 부탁한 것보다 좋은 결과를 돌려주지 않는다", () => {
+  it("상한 위의 값은 아예 짚지 않는다", async () => {
+    // pipeline.ts가 max에 사용자가 고른 품질을 넣는다. 탐색기가 그 위를 짚으면
+    // 목표 용량을 켠 것만으로 부탁한 것보다 큰 파일이 나온다.
+    const enc = fakeEncoder(linear);
+    await searchTarget({ targetBytes: 500_000, min: 1, max: 60 }, enc.encode);
+    expect(Math.max(...enc.seen)).toBeLessThanOrEqual(60);
+  });
+
+  it("목표가 헐거우면 상한 그대로를 돌려준다", async () => {
+    const hit = await searchTarget(
+      { targetBytes: 500_000, min: 1, max: 60 },
+      fakeEncoder(linear).encode,
+    );
+    expect(hit).toMatchObject({ value: 60, met: true, attempts: 1 });
+  });
+});
+
 describe("PNG 사다리 — 품질이 없는 형식의 탐색 축", () => {
   /** null(=색을 안 줄임)은 어떤 색 수보다도 위다. */
   const rank = (c: number | null) => (c === null ? Infinity : c);
 
-  // 실측: 크로미엄에서 그라디언트 사진을 256색으로 줄이면 PNG가 109%로 **커진다**.
-  // 그래서 "아무것도 안 하는" 칸이 맨 위에 있어야 목표 용량을 켠 쪽이 끈 쪽보다 나쁘지 않다.
-  it("맨 위 칸은 색을 줄이지 않는다", () => {
-    expect(pngStepAt(PNG_STEPS - 1)).toEqual({ colors: null, scale: 100 });
+  /** 화면에서 고를 수 있는 색 수 전부 + "원본"(null). null이 기본값이다. */
+  const CAPS: (number | null)[] = [null, 256, 128, 64, 32, 16, 8, 4, 3, 2];
+
+  /** cap에서 세운 사다리를 위(좋은 쪽)부터 나열한다 — 값이 클수록 위다. */
+  const ladderOf = (cap: number | null) =>
+    Array.from({ length: pngSteps(cap) }, (_, i) => pngStepAt(pngSteps(cap) - 1 - i, cap));
+
+  // ── 축의 시작 칸 = 사용자가 고른 설정 ──────────────────────────────────────
+  // 이것이 계약 ④다. 예전에는 사다리가 고정이라 사용자가 색 4를 골라 둬도 목표가 헐거우면
+  // 맨 위 칸(원본 색)을 돌려줬다 — 목표 용량을 켜는 것만으로 설정보다 큰 파일이 나왔다.
+
+  it("색을 고르지 않았으면(원본 색) 맨 위 칸은 색을 줄이지 않는다", () => {
+    // 실측: 크로미엄에서 그라디언트 사진을 256색으로 줄이면 PNG가 109%로 **커진다**.
+    // 그래서 "아무것도 안 하는" 칸이 맨 위에 있어야 목표를 켠 쪽이 끈 쪽보다 나쁘지 않다.
+    expect(pngStepAt(pngSteps(null) - 1, null)).toEqual({ colors: null, scale: 100 });
+    expect(pngStepAt(pngSteps(null) - 2, null)).toEqual({ colors: 256, scale: 100 });
   });
 
-  it("두 번째 칸부터 색을 줄이기 시작한다", () => {
-    expect(pngStepAt(PNG_STEPS - 2)).toEqual({ colors: 256, scale: 100 });
+  it("상한(256)을 골랐으면 맨 위 칸이 256색이다 — 원본 색 칸은 후보에 없다", () => {
+    expect(pngStepAt(pngSteps(256) - 1, 256)).toEqual({ colors: 256, scale: 100 });
+    for (const step of ladderOf(256)) expect(step.colors).not.toBeNull();
   });
+
+  it("색 4를 골랐으면 맨 위 칸이 색 4·100%다", () => {
+    expect(pngStepAt(pngSteps(4) - 1, 4)).toEqual({ colors: 4, scale: 100 });
+  });
+
+  it("색 2(하한)를 골랐으면 색은 2로 붙박이고 크기만 내려간다", () => {
+    const ladder = ladderOf(2);
+    expect(ladder[0]).toEqual({ colors: 2, scale: 100 });
+    for (const step of ladder) expect(step.colors).toBe(2);
+    expect(ladder.length).toBeGreaterThan(1); // 크기 축이 남아 탐색할 여지가 있다
+  });
+
+  it("어떤 cap에서도 맨 위 칸이 곧 그 설정이다", () => {
+    for (const cap of CAPS) {
+      const top = pngStepAt(pngSteps(cap) - 1, cap);
+      expect(top.scale).toBe(100); // 100% = 사용자가 고른 리사이즈 그대로
+      expect(top.colors).toBe(cap);
+    }
+  });
+
+  it("고른 색 수보다 색이 많은 칸은 사다리 어디에도 없다", () => {
+    for (const cap of CAPS) {
+      for (const step of ladderOf(cap)) {
+        expect(rank(step.colors)).toBeLessThanOrEqual(rank(cap));
+        expect(step.scale).toBeLessThanOrEqual(100); // 리사이즈 설정도 상한이다
+      }
+    }
+  });
+
+  it("고른 색 수보다 큰 결과를 절대 채택하지 않는다 — 목표가 어떻든", async () => {
+    // 색 수 × 넓이에 비례하는 가짜 크기표. 목표를 아주 헐거운 것부터 도저히 못 맞추는 것까지.
+    const bytesOf = (cap: number | null) => (value: number) => {
+      const step = pngStepAt(value, cap);
+      return Math.round((step.colors ?? 512) * 400 * (step.scale / 100) ** 2);
+    };
+    for (const cap of CAPS) {
+      const sizeOf = bytesOf(cap);
+      for (const target of [10, 900, 5_000, 30_000, 200_000, 9_000_000]) {
+        const hit = await searchTarget(
+          { targetBytes: target, min: 0, max: pngSteps(cap) - 1 },
+          async (value) => ({ bytes: sizeOf(value), result: pngStepAt(value, cap) }),
+        );
+        expect(rank(hit!.result.colors)).toBeLessThanOrEqual(rank(cap));
+      }
+    }
+  });
+
+  it("목표가 헐거우면 고른 설정 그대로를 돌려준다 — 색 4는 색 4로 나온다", async () => {
+    const hit = await searchTarget(
+      { targetBytes: 9_000_000, min: 0, max: pngSteps(4) - 1 },
+      async (value) => ({ bytes: 1000, result: pngStepAt(value, 4) }),
+    );
+    expect(hit).toMatchObject({ met: true, attempts: 1 });
+    expect(hit!.result).toEqual({ colors: 4, scale: 100 });
+  });
+
+  // ── 사다리의 모양(어떤 cap에서도 지켜야 할 것) ────────────────────────────
 
   it("가장 작은 값은 색도 크기도 가장 많이 줄인 칸이다", () => {
-    const worst = pngStepAt(0);
-    const best = pngStepAt(PNG_STEPS - 1);
-    expect(rank(worst.colors)).toBeLessThan(rank(best.colors));
-    expect(worst.scale).toBeLessThan(best.scale);
+    for (const cap of CAPS) {
+      const worst = pngStepAt(0, cap);
+      const best = pngStepAt(pngSteps(cap) - 1, cap);
+      expect(rank(worst.colors)).toBeLessThanOrEqual(rank(best.colors));
+      expect(worst.scale).toBeLessThan(best.scale);
+    }
   });
 
   // 사다리는 "크기를 먼저 지킨다"는 **선호 순서**지 용량 순서가 아니다.
   // (색 8·배율 100%가 색 64·배율 75%보다 클 수도 있다.) 그래서 배율은 절대 오르지 않고,
   // 같은 배율 안에서만 색 수가 줄어든다 — 용량이 순서를 어기는 것은 탐색기가 감당한다.
   it("값이 작아질수록 배율은 절대 오르지 않는다", () => {
-    for (let v = PNG_STEPS - 1; v > 0; v--) {
-      expect(pngStepAt(v - 1).scale).toBeLessThanOrEqual(pngStepAt(v).scale);
+    for (const cap of CAPS) {
+      for (let v = pngSteps(cap) - 1; v > 0; v--) {
+        expect(pngStepAt(v - 1, cap).scale).toBeLessThanOrEqual(pngStepAt(v, cap).scale);
+      }
     }
   });
 
   it("배율이 같은 구간 안에서는 값이 작아질수록 색 수가 줄어든다", () => {
-    for (let v = PNG_STEPS - 1; v > 0; v--) {
-      const upper = pngStepAt(v);
-      const lower = pngStepAt(v - 1);
-      if (lower.scale === upper.scale) {
-        expect(rank(lower.colors)).toBeLessThan(rank(upper.colors));
+    for (const cap of CAPS) {
+      for (let v = pngSteps(cap) - 1; v > 0; v--) {
+        const upper = pngStepAt(v, cap);
+        const lower = pngStepAt(v - 1, cap);
+        if (lower.scale === upper.scale) {
+          expect(rank(lower.colors)).toBeLessThan(rank(upper.colors));
+        }
       }
     }
   });
 
-  it("같은 칸이 두 번 나오지 않는다", () => {
-    const seen = new Set<string>();
-    for (let v = 0; v < PNG_STEPS; v++) {
-      const step = pngStepAt(v);
-      seen.add(`${step.colors}@${step.scale}`);
+  it("같은 칸이 두 번 나오지 않는다 — 같은 설정을 두 번 인코딩하는 셈이다", () => {
+    for (const cap of CAPS) {
+      const keys = ladderOf(cap).map((s) => `${s.colors}@${s.scale}`);
+      expect(new Set(keys).size).toBe(keys.length);
     }
-    expect(seen.size).toBe(PNG_STEPS);
   });
 
-  it("색을 먼저 줄이고 그 다음에 크기를 줄인다 — 위 여섯 칸은 배율이 100%다", () => {
-    for (let i = 0; i < 6; i++) expect(pngStepAt(PNG_STEPS - 1 - i).scale).toBe(100);
+  it("색을 먼저 줄이고 그 다음에 크기를 줄인다 — 원본 색 축의 위 여섯 칸은 배율이 100%다", () => {
+    for (let i = 0; i < 6; i++) {
+      expect(pngStepAt(pngSteps(null) - 1 - i, null).scale).toBe(100);
+    }
   });
 
   it("색을 줄이는 칸은 전부 2..256 안이고, 배율은 0 초과 100 이하다", () => {
-    for (let v = 0; v < PNG_STEPS; v++) {
-      const step = pngStepAt(v);
-      if (step.colors !== null) {
-        expect(step.colors).toBeGreaterThanOrEqual(2);
-        expect(step.colors).toBeLessThanOrEqual(256);
+    for (const cap of CAPS) {
+      for (const step of ladderOf(cap)) {
+        if (step.colors !== null) {
+          expect(step.colors).toBeGreaterThanOrEqual(2);
+          expect(step.colors).toBeLessThanOrEqual(256);
+        }
+        expect(step.scale).toBeGreaterThan(0);
+        expect(step.scale).toBeLessThanOrEqual(100);
       }
-      expect(step.scale).toBeGreaterThan(0);
-      expect(step.scale).toBeLessThanOrEqual(100);
     }
   });
 
   it("범위 밖 값은 양 끝으로 붙잡힌다", () => {
-    expect(pngStepAt(-5)).toEqual(pngStepAt(0));
-    expect(pngStepAt(PNG_STEPS + 99)).toEqual(pngStepAt(PNG_STEPS - 1));
+    for (const cap of CAPS) {
+      expect(pngStepAt(-5, cap)).toEqual(pngStepAt(0, cap));
+      expect(pngStepAt(pngSteps(cap) + 99, cap)).toEqual(pngStepAt(pngSteps(cap) - 1, cap));
+    }
   });
 
-  it("사다리 22칸도 계획된 횟수 안에서 끝까지 좁혀진다", async () => {
-    // 사다리를 늘리면 plannedAttempts(0, PNG_STEPS-1)가 모자라 조용히 중간에서 멈춘다.
-    // 칸마다 최적이 그 칸이 되도록 목표를 잡아 전부 훑는다.
+  it("범위 밖 cap도 붙잡힌다 — 화면 밖에서 들어온 값에 사다리가 무너지지 않는다", () => {
+    expect(ladderOf(1000)).toEqual(ladderOf(256));
+    expect(ladderOf(1)).toEqual(ladderOf(2));
+    expect(ladderOf(0)).toEqual(ladderOf(2));
+    expect(ladderOf(Number.NaN)).toEqual(ladderOf(2));
+    expect(ladderOf(4.4)).toEqual(ladderOf(4));
+  });
+
+  // ── 짧아진 사다리에서도 수렴하는가 ────────────────────────────────────────
+
+  it("계획된 횟수는 어떤 cap의 사다리도 끝까지 좁히기에 충분하다", async () => {
+    // plannedAttempts = 2(양 끝) + ceil(log2(칸 수))이고, 양 끝을 짚고 나면 남는 구간은
+    // 최대 칸 수 - 2다. 사다리가 짧아질수록 이 산수는 더 넉넉해지지만, "넉넉하다"를
+    // 믿지 말고 칸마다 최적이 그 칸이 되도록 목표를 잡아 전부 훑는다.
     const sizeOf = (v: number) => (v + 1) * 1000;
     const miss: string[] = [];
-    for (let opt = 0; opt < PNG_STEPS; opt++) {
-      const hit = await searchTarget(
-        { targetBytes: sizeOf(opt), min: 0, max: PNG_STEPS - 1 },
-        async (v) => ({ bytes: sizeOf(v), result: v }),
-      );
-      if (!hit!.met || hit!.value !== opt) miss.push(`기대=${opt} 실제=${hit!.value}`);
+    for (const cap of CAPS) {
+      const steps = pngSteps(cap);
+      for (let opt = 0; opt < steps; opt++) {
+        const hit = await searchTarget(
+          { targetBytes: sizeOf(opt), min: 0, max: steps - 1 },
+          async (v) => ({ bytes: sizeOf(v), result: v }),
+        );
+        if (!hit!.met || hit!.value !== opt) {
+          miss.push(`cap=${cap} 칸수=${steps} 기대=${opt} 실제=${hit!.value}`);
+        }
+      }
     }
     expect(miss).toEqual([]);
+  });
+
+  it("계획된 횟수의 산수 자체를 못 박는다 — 양 끝 둘 + 남은 구간의 이진 깊이", () => {
+    for (const cap of CAPS) {
+      const steps = pngSteps(cap);
+      // 양 끝을 짚고 남는 최악의 구간은 steps - 2칸, 이진 탐색에 ceil(log2(steps-1))번.
+      const needed = 2 + Math.ceil(Math.log2(Math.max(1, steps - 1)));
+      expect(plannedAttempts(0, steps - 1)).toBeGreaterThanOrEqual(needed);
+      expect(plannedAttempts(0, steps - 1)).toBeLessThanOrEqual(ATTEMPT_CAP);
+    }
   });
 
   it("PNG 축도 같은 탐색기로 돈다 — 사다리를 타고 목표 아래로 내려간다", async () => {
     // 색 수 × 넓이에 비례하는 가짜 크기표(색을 안 줄이면 512색인 셈 친다).
     const bytesOf = (value: number) => {
-      const step = pngStepAt(value);
+      const step = pngStepAt(value, null);
       return Math.round((step.colors ?? 512) * 400 * (step.scale / 100) ** 2);
     };
     const hit = await searchTarget(
-      { targetBytes: 8000, min: 0, max: PNG_STEPS - 1 },
-      async (value) => ({ bytes: bytesOf(value), result: pngStepAt(value) }),
+      { targetBytes: 8000, min: 0, max: pngSteps(null) - 1 },
+      async (value) => ({ bytes: bytesOf(value), result: pngStepAt(value, null) }),
     );
     expect(hit!.met).toBe(true);
     expect(hit!.bytes).toBeLessThanOrEqual(8000);
-    expect(hit!.result).toEqual(pngStepAt(hit!.value));
+    expect(hit!.result).toEqual(pngStepAt(hit!.value, null));
   });
 });
