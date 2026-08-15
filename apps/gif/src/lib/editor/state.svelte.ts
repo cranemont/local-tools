@@ -14,6 +14,16 @@ import {
   type OverlayPatch,
   type TextOverlay,
 } from "../gif/overlay";
+import {
+  applyRedactPatch,
+  newRegion,
+  outputToRegion,
+  selectionAffectsRegions,
+  type RedactMode,
+  type RedactPatch,
+  type RedactRect,
+  type RedactRegion,
+} from "../gif/redact";
 import type { ExportFormat } from "../gif/timing";
 import type { CropRect, Frame, Rotation, Transform } from "../gif/types";
 import type { FrameSource } from "../gif/types";
@@ -51,7 +61,7 @@ export const QUALITY_PRESETS: {
 ];
 
 function defaultTransform(): Transform {
-  return { crop: null, rotation: 0, flipH: false, flipV: false, scale: 1 };
+  return { crop: null, rotation: 0, flipH: false, flipV: false, scale: 1, redact: [] };
 }
 
 function cloneTransform(tf: Transform): Transform {
@@ -61,6 +71,8 @@ function cloneTransform(tf: Transform): Transform {
     flipH: tf.flipH,
     flipV: tf.flipV,
     scale: tf.scale,
+    // 가릴 영역도 한 겹 베낀다 — 되돌리기 지점이 살아 있는 목록을 붙들면 안 된다.
+    redact: tf.redact.map((r) => ({ ...r })),
   };
 }
 
@@ -79,6 +91,8 @@ interface Snapshot {
   overlays: TextOverlay[];
   /** 편집 중이던 오버레이도 같이 돌아온다 — 안 그러면 되돌린 뒤 편집칸이 통째로 사라진다. */
   activeOverlayId: string | null;
+  /** 가릴 영역은 transform 안에 있고, 편집 중이던 영역만 따로 기억한다(오버레이와 같다). */
+  activeRegionId: string | null;
 }
 
 /** 단일 에디터 뷰의 전역 상태. 앱에 에디터가 하나뿐이라 모듈 싱글턴으로 둔다. */
@@ -95,6 +109,11 @@ export class EditorState {
   transform = $state<Transform>(defaultTransform());
   cropMode = $state(false);
 
+  /** 영역을 끌어 만드는 중인가. 크롭 모드와 동시에 켜지 않는다(같은 드래그를 두 뜻으로 읽는다). */
+  redactMode = $state(false);
+  /** 패널에서 편집 중인 가리기 영역. */
+  activeRegionId = $state<string | null>(null);
+
   /** 프레임 위에 얹는 텍스트. 여러 개(위 자막 + 아래 자막)를 겹칠 수 있다. */
   overlays = $state<TextOverlay[]>([]);
   /** 패널에서 편집 중인 오버레이. 목록에서 사라지면 아래 activeOverlay가 null로 떨어진다. */
@@ -103,6 +122,8 @@ export class EditorState {
   exportFormat = $state<ExportFormat>("gif");
   gifColors = $state(256);
   gifDither = $state(false);
+  /** 프레임 차분(gif/diff.ts). 기본으로 켠다 — 손해가 날 조건은 프레임마다 걸러 낸다. */
+  gifDiff = $state(true);
   webpQuality = $state(80);
   mp4Quality = $state<PresetId>("balanced");
 
@@ -159,6 +180,12 @@ export class EditorState {
   readonly activeOverlay = $derived(
     this.overlays.find((o) => o.id === this.activeOverlayId) ?? null,
   );
+  /** 가릴 영역 목록 — 변형 안에 산다(좌표가 크롭과 같은 베이스 기준이라 함께 움직인다). */
+  readonly regions = $derived(this.transform.redact);
+  /** 패널이 편집하는 영역. 지워진 id가 남아 있어도 null로 떨어진다. */
+  readonly activeRegion = $derived(
+    this.transform.redact.find((r) => r.id === this.activeRegionId) ?? null,
+  );
   /** gifenc repeat 값: -1=1회 재생, 0=무한, n>0=추가 반복 횟수. */
   readonly repeat = $derived.by(() => {
     if (this.loopForever) return 0;
@@ -195,6 +222,7 @@ export class EditorState {
       transform: cloneTransform(this.transform),
       overlays: this.overlays.map((o) => ({ ...o })),
       activeOverlayId: this.activeOverlayId,
+      activeRegionId: this.activeRegionId,
     };
   }
 
@@ -219,7 +247,11 @@ export class EditorState {
     this.activeOverlayId = snap.overlays.some((o) => o.id === snap.activeOverlayId)
       ? snap.activeOverlayId
       : null;
+    this.activeRegionId = this.transform.redact.some((r) => r.id === snap.activeRegionId)
+      ? snap.activeRegionId
+      : null;
     this.cropMode = false;
+    this.redactMode = false;
     this.#anchor = 0;
   }
 
@@ -376,11 +408,14 @@ export class EditorState {
     // sources는 지우지 않는다 — 되돌리기로 돌아올 수 있어야 한다.
     // (#pruneSources가 히스토리에서 밀려난 소스만 버린다.)
     releaseAll(); // 디코더·비트맵 캐시는 소스 바이트에서 다시 만들 수 있다
+    // 가릴 영역도 여기서 함께 사라진다(defaultTransform) — 좌표가 지운 프레임의 것이라 남길 뜻이 없다.
     this.transform = defaultTransform();
     // 오버레이도 함께 비운다 — 위에서 #mark()를 했으므로 되돌리기로 통째로 돌아온다.
     this.overlays = [];
     this.activeOverlayId = null;
+    this.activeRegionId = null;
     this.cropMode = false;
+    this.redactMode = false;
     this.playing = false;
     this.current = 0;
     this.banner = null;
@@ -408,7 +443,12 @@ export class EditorState {
    *  미리보기는 리비전으로만 다시 그리고 결과의 '낡음' 표시도 같은 값을 본다.
    *  늘 올리면 글자가 없을 때도 프레임을 고를 때마다 결과가 낡음으로 표시된다. */
   #touchIfSelectionDraws(): void {
-    if (selectionAffectsOverlays(this.overlays)) this.touch();
+    if (
+      selectionAffectsOverlays(this.overlays) ||
+      selectionAffectsRegions(this.transform.redact)
+    ) {
+      this.touch();
+    }
   }
 
   /** 한 장 토글. range면 기준점부터 이 프레임까지 한 번에 칠한다(Shift+클릭). */
@@ -622,6 +662,11 @@ export class EditorState {
     this.touch();
   }
 
+  setGifDiff(v: boolean): void {
+    this.gifDiff = v;
+    this.touch();
+  }
+
   setWebpQuality(q: number): void {
     this.webpQuality = Math.min(100, Math.max(1, Math.round(q)));
     this.touch();
@@ -675,9 +720,11 @@ export class EditorState {
     this.touch();
   }
 
+  /** 크롭·회전·뒤집기·배율만 되돌린다 — **가릴 영역은 남긴다.**
+   *  얼굴을 가려 놓고 크롭을 고치려다 가리기가 통째로 사라지면 그대로 내보내게 된다. */
   resetTransform(): void {
     this.#mark();
-    this.transform = defaultTransform();
+    this.transform = { ...defaultTransform(), redact: this.transform.redact };
     this.cropMode = false;
     this.touch();
   }
@@ -719,6 +766,63 @@ export class EditorState {
     const next = [...this.overlays];
     next[i] = applyOverlayPatch(this.overlays[i], patch, this.frames.length);
     this.overlays = next;
+    this.touch();
+  }
+
+  // ── 가리기 영역 ─────────────────────────────────
+  /** 영역 그리기 모드를 켜고 끈다. 크롭 모드와는 배타다 — 드래그 한 번을 두 뜻으로 못 읽는다. */
+  toggleRedactMode(): void {
+    this.playing = false;
+    this.redactMode = !this.redactMode;
+    if (this.redactMode) this.cropMode = false;
+  }
+
+  /**
+   * 미리보기에서 끈 사각형으로 영역을 만든다. 인자는 **출력 캔버스 좌표**다 —
+   * 미리보기는 변형이 걸린 그림을 보여 주므로, 저장은 베이스 좌표로 되돌려서 한다
+   * (그래야 나중에 크롭·회전을 바꿔도 같은 자리를 덮는다).
+   * 너무 작으면 아무 일도 없다 — 잘못 찍은 클릭으로 영역이 생기지 않게.
+   */
+  addRegionFromOutput(rect: RedactRect, mode: RedactMode = "mosaic"): void {
+    const box = outputToRegion(
+      rect,
+      this.base.w,
+      this.base.h,
+      this.output,
+      this.transform,
+    );
+    if (!box) return;
+    const region = newRegion(uid(), box, this.base.w, this.base.h, this.frames.length, mode);
+    if (!region) return;
+    this.#mark();
+    this.transform.redact = [...this.transform.redact, region];
+    this.activeRegionId = region.id;
+    this.touch();
+  }
+
+  removeRegion(id: string): void {
+    if (!this.transform.redact.some((r) => r.id === id)) return;
+    this.#mark();
+    const next = this.transform.redact.filter((r) => r.id !== id);
+    this.transform.redact = next;
+    if (this.activeRegionId === id) {
+      this.activeRegionId = next.length ? next[next.length - 1].id : null;
+    }
+    this.touch();
+  }
+
+  setActiveRegion(id: string | null): void {
+    this.activeRegionId = id;
+  }
+
+  /** 칸 하나를 고친다. 오버레이와 같이 되돌리기 지점은 남기지 않는다.
+   *  값을 가두는 규칙은 전부 applyRedactPatch에 있다. */
+  updateRegion(id: string, patch: RedactPatch): void {
+    const i = this.transform.redact.findIndex((r) => r.id === id);
+    if (i < 0) return;
+    const next: RedactRegion[] = [...this.transform.redact];
+    next[i] = applyRedactPatch(next[i], patch, this.frames.length);
+    this.transform.redact = next;
     this.touch();
   }
 }

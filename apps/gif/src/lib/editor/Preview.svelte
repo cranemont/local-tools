@@ -30,9 +30,18 @@
     if (seq !== renderSeq) return;
 
     const { w: baseW, h: baseH } = editor.base;
-    // 크롭 모드에서는 변형 없는 베이스 프레임 위에서 영역을 고른다.
+    // 크롭 모드에서는 변형 없는 베이스 프레임 위에서 남길 영역을 고른다.
+    // 가릴 영역은 그때도 그대로 들고 간다 — 좌표가 베이스 기준이라 자리가 맞고,
+    // 가리는 중에 원본이 드러나지 않는다.
     const tf: Transform = editor.cropMode
-      ? { crop: null, rotation: 0, flipH: false, flipV: false, scale: 1 }
+      ? {
+          crop: null,
+          rotation: 0,
+          flipH: false,
+          flipV: false,
+          scale: 1,
+          redact: editor.transform.redact,
+        }
       : editor.transform;
     const { w, h } = outputSize(baseW, baseH, tf);
     if (canvas.width !== w) canvas.width = w;
@@ -41,16 +50,11 @@
     if (!ctx) return;
     // 크롭 모드에서는 텍스트를 얹지 않는다 — 변형 전 좌표계라 결과와 자리가 다르고,
     // 남길 영역을 고르는 화면에 글자가 겹치면 방해만 된다.
-    renderFrame(
-      ctx,
-      bitmap,
-      tf,
-      baseW,
-      baseH,
-      editor.cropMode
-        ? undefined
-        : { overlays: editor.overlays, index, selected: frame.selected },
-    );
+    renderFrame(ctx, bitmap, tf, baseW, baseH, {
+      overlays: editor.cropMode ? [] : editor.overlays,
+      index,
+      selected: frame.selected,
+    });
   }
 
   // 일시정지 상태의 다시 그리기 (변형·프레임 변경 반영)
@@ -61,6 +65,7 @@
     void tf.flipH;
     void tf.flipV;
     void tf.scale;
+    void tf.redact;
     void editor.current;
     void editor.revision;
     void editor.cropMode;
@@ -93,7 +98,9 @@
     }
   }
 
-  // ── 크롭 드래그 ───────────────────────────────────
+  // ── 사각형 드래그 (크롭·가리기 공용) ───────────────
+  // 두 모드가 같은 몸짓을 쓰고 손을 뗄 때만 갈라진다. 레이어를 두 벌로 만들면
+  // 클램프·좌표 환산이 두 곳에서 어긋난다.
   interface ViewRect {
     x: number;
     y: number;
@@ -102,10 +109,12 @@
   }
   let cropStart: { x: number; y: number } | null = null;
   let cropView = $state<ViewRect | null>(null);
+  const dragging = $derived(editor.cropMode || editor.redactMode);
+  const dragHint = $derived(editor.cropMode ? t.panel.cropHint : t.panel.redactHint);
 
-  // 크롭 모드를 떠나면 그리던 점선을 버린다 — Esc는 드래그 도중에도 들어온다.
+  // 모드를 떠나면 그리던 점선을 버린다 — Esc는 드래그 도중에도 들어온다.
   $effect(() => {
-    if (editor.cropMode) return;
+    if (dragging) return;
     cropStart = null;
     cropView = null;
   });
@@ -138,21 +147,28 @@
 
   function cropUp() {
     const view = cropView;
+    const wasCrop = editor.cropMode;
     cropStart = null;
     cropView = null;
     // 그냥 클릭이면 모드 유지
     if (!view || view.w < 5 || view.h < 5) return;
 
+    // 캔버스 픽셀 좌표로 옮긴다. 크롭 모드에서는 변형이 없어 그것이 곧 베이스 좌표이고,
+    // 가리기 모드에서는 출력 좌표라 state가 베이스 좌표로 되돌려 저장한다.
     const box = boxEl.getBoundingClientRect();
     const r = canvasEl.getBoundingClientRect();
-    const scaleX = editor.base.w / r.width;
-    const scaleY = editor.base.h / r.height;
-    const rect = clampCrop(
-      Math.round((view.x + box.left - r.left) * scaleX),
-      Math.round((view.y + box.top - r.top) * scaleY),
-      Math.round(view.w * scaleX),
-      Math.round(view.h * scaleY),
-    );
+    const scaleX = canvasEl.width / r.width;
+    const scaleY = canvasEl.height / r.height;
+    const x = Math.round((view.x + box.left - r.left) * scaleX);
+    const y = Math.round((view.y + box.top - r.top) * scaleY);
+    const w = Math.round(view.w * scaleX);
+    const h = Math.round(view.h * scaleY);
+
+    if (!wasCrop) {
+      editor.addRegionFromOutput({ x, y, w, h });
+      return; // 영역은 여러 개를 잇달아 그린다 — 모드를 유지한다
+    }
+    const rect = clampCrop(x, y, w, h);
     editor.cropMode = false;
     if (rect) editor.setCrop(rect);
   }
@@ -173,11 +189,11 @@
   <div class="stagebox" bind:this={boxEl}>
     <canvas bind:this={canvasEl}></canvas>
 
-    {#if editor.cropMode}
+    {#if dragging}
       <div
         class="croplayer"
         role="application"
-        aria-label={t.panel.cropHint}
+        aria-label={dragHint}
         onpointerdown={cropDown}
         onpointermove={cropMove}
         onpointerup={cropUp}
@@ -188,7 +204,7 @@
             style={`left:${cropView.x}px; top:${cropView.y}px; width:${cropView.w}px; height:${cropView.h}px`}
           ></div>
         {/if}
-        <div class="crophint">{t.panel.cropHint}</div>
+        <div class="crophint">{dragHint}</div>
       </div>
     {/if}
   </div>

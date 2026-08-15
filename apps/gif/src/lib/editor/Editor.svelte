@@ -70,6 +70,9 @@
       if (editor.cropMode) {
         e.preventDefault();
         editor.cropMode = false;
+      } else if (editor.redactMode) {
+        e.preventDefault();
+        editor.redactMode = false;
       } else if (editor.selectedCount) {
         e.preventDefault();
         editor.selectNone();

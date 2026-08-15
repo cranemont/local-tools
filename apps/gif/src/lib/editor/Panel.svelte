@@ -23,6 +23,14 @@
     OverlayScope,
     OverlayVAlign,
   } from "../gif/overlay";
+  import {
+    BLUR_MAX_RADIUS,
+    BLUR_MIN_RADIUS,
+    MOSAIC_MAX_BLOCK,
+    MOSAIC_MIN_BLOCK,
+    unseenRegionCount,
+  } from "../gif/redact";
+  import type { RedactMode, RedactPatch } from "../gif/redact";
   import { snapshotPlan, type RenderPlan } from "../gif/plan";
   import { encodeGif, isAbortError } from "../gif/encode";
   import { encodeWebp } from "../gif/webp";
@@ -58,11 +66,20 @@
     { id: "center", label: t.panel.textAlignCenter },
     { id: "right", label: t.panel.textAlignRight },
   ];
+  // 텍스트와 가리기 영역이 **같은 목록**을 쓴다 — 프레임 범위 규약이 하나이므로 칩도 하나다.
   const SCOPES: { id: OverlayScope; label: string }[] = [
     { id: "all", label: t.panel.textScopeAll },
     { id: "selected", label: t.panel.textScopeSelected },
     { id: "range", label: t.panel.textScopeRange },
   ];
+  const REDACT_MODES: { id: RedactMode; label: string }[] = [
+    { id: "mosaic", label: t.panel.redactMosaic },
+    { id: "blur", label: t.panel.redactBlur },
+  ];
+  const REDACT_MODE_LABELS: Record<RedactMode, string> = {
+    mosaic: t.panel.redactMosaic,
+    blur: t.panel.redactBlur,
+  };
 
   let filename = $state("animation");
   let delayMode = $state<DelayMode>("set");
@@ -176,6 +193,7 @@
           repeat: editor.repeat,
           maxColors: editor.gifColors,
           dither: editor.gifDither,
+          diff: editor.gifDiff,
           onProgress,
         });
       } else if (fmt === "webp") {
@@ -281,12 +299,17 @@
   function onDitherChange(e: Event) {
     editor.setGifDither((e.target as HTMLInputElement).checked);
   }
+  function onDiffChange(e: Event) {
+    editor.setGifDiff((e.target as HTMLInputElement).checked);
+  }
   function onWebpQualityChange(e: Event) {
     editor.setWebpQuality(Number((e.target as HTMLInputElement).value));
   }
   function toggleCropMode() {
     editor.playing = false;
     editor.cropMode = !editor.cropMode;
+    // 두 모드가 같은 드래그를 쓰므로 하나만 켜 둔다.
+    if (editor.cropMode) editor.redactMode = false;
   }
 
   // ── 텍스트 오버레이 ───────────────────────────────
@@ -322,6 +345,41 @@
       const patch: OverlayPatch = {};
       patch[key] = (e.target as HTMLInputElement).value;
       patchActive(patch);
+    };
+  }
+
+  // ── 가리기 영역 ───────────────────────────────────
+  const activeRegion = $derived(editor.activeRegion);
+  /** 결과에 안 나오는 영역의 수 — 범위 밖이거나 크롭이 잘라낸 것을 함께 센다. */
+  const unseenRegions = $derived(
+    unseenRegionCount(editor.regions, {
+      frameCount: editor.frames.length,
+      selectedCount: editor.selectedCount,
+      baseW: editor.base.w,
+      baseH: editor.base.h,
+      out: editor.output,
+      tf: editor.transform,
+    }),
+  );
+  const strengthMin = $derived(
+    activeRegion?.mode === "blur" ? BLUR_MIN_RADIUS : MOSAIC_MIN_BLOCK,
+  );
+  const strengthMax = $derived(
+    activeRegion?.mode === "blur" ? BLUR_MAX_RADIUS : MOSAIC_MAX_BLOCK,
+  );
+
+  function patchRegion(patch: RedactPatch) {
+    if (activeRegion) editor.updateRegion(activeRegion.id, patch);
+  }
+  /** 가둔 값을 칸에 되써 준다 — 오버레이 쪽과 같은 이유다(화면 숫자와 실제 값이 갈리지 않게). */
+  function onRegionNumber(key: "strength" | "from" | "to") {
+    return (e: Event) => {
+      const el = e.target as HTMLInputElement;
+      const patch: RedactPatch = {};
+      patch[key] = Number(el.value);
+      patchRegion(patch);
+      const applied = editor.activeRegion?.[key];
+      if (applied !== undefined) el.value = String(applied);
     };
   }
 </script>
@@ -723,6 +781,124 @@
     {/if}
   </section>
 
+  <!-- 가리기 -->
+  <section class="sec">
+    <h3>{t.panel.redact}</h3>
+    {#if editor.regions.length}
+      <div class="olist">
+        {#each editor.regions as r, i (r.id)}
+          <div class="orow" class:active={r.id === editor.activeRegionId}>
+            <button
+              type="button"
+              class="opick"
+              onclick={() => editor.setActiveRegion(r.id)}
+            >
+              {t.panel.redactItem(i + 1, REDACT_MODE_LABELS[r.mode], r.w, r.h)}
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              aria-label={t.panel.redactRemove}
+              title={t.panel.redactRemove}
+              onclick={() => editor.removeRegion(r.id)}
+            >
+              <Icon name="trash" size={14} />
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+    <div class="row">
+      <button
+        type="button"
+        class="btn small"
+        class:active={editor.redactMode}
+        onclick={() => editor.toggleRedactMode()}
+        disabled={editor.frames.length === 0}
+      >
+        <Icon name="mosaic" size={14} />
+        {editor.redactMode ? t.panel.redactCancel : t.panel.redactAdd}
+      </button>
+      {#if unseenRegions > 0}
+        <span class="badge" title={t.panel.redactUnseenHint(unseenRegions)}>
+          {t.panel.redactUnseen(unseenRegions)}
+        </span>
+      {/if}
+    </div>
+
+    {#if activeRegion}
+      <div class="chips" role="group" aria-label={t.panel.redact}>
+        {#each REDACT_MODES as m (m.id)}
+          <button
+            type="button"
+            class="chip"
+            class:active={activeRegion.mode === m.id}
+            onclick={() => patchRegion({ mode: m.id })}
+          >
+            {m.label}
+          </button>
+        {/each}
+      </div>
+      <div class="row">
+        <label class="lbl" for="rd-strength">
+          {activeRegion.mode === "blur" ? t.panel.redactRadius : t.panel.redactBlock}
+        </label>
+        <input
+          id="rd-strength"
+          class="num"
+          type="number"
+          min={strengthMin}
+          max={strengthMax}
+          step="1"
+          value={activeRegion.strength}
+          onchange={onRegionNumber("strength")}
+        />
+      </div>
+
+      <p class="sub">{t.panel.textScope}</p>
+      <div class="chips" role="group" aria-label={t.panel.textScope}>
+        {#each SCOPES as s (s.id)}
+          <button
+            type="button"
+            class="chip"
+            class:active={activeRegion.scope === s.id}
+            onclick={() => patchRegion({ scope: s.id })}
+          >
+            {s.label}
+          </button>
+        {/each}
+      </div>
+      {#if activeRegion.scope === "range"}
+        <div class="row">
+          <label class="lbl" for="rd-from">{t.panel.rangeFrom}</label>
+          <input
+            id="rd-from"
+            class="num"
+            type="number"
+            min="1"
+            max={Math.max(1, editor.frames.length)}
+            step="1"
+            value={activeRegion.from}
+            onchange={onRegionNumber("from")}
+          />
+        </div>
+        <div class="row">
+          <label class="lbl" for="rd-to">{t.panel.rangeTo}</label>
+          <input
+            id="rd-to"
+            class="num"
+            type="number"
+            min="1"
+            max={Math.max(1, editor.frames.length)}
+            step="1"
+            value={activeRegion.to}
+            onchange={onRegionNumber("to")}
+          />
+        </div>
+      {/if}
+    {/if}
+  </section>
+
   <!-- 반복 -->
   <section class="sec">
     <h3>{t.panel.loop}</h3>
@@ -793,6 +969,10 @@
         <label class="row checkrow">
           <input type="checkbox" checked={editor.gifDither} onchange={onDitherChange} />
           <span class="lbl">{t.panel.dither}</span>
+        </label>
+        <label class="row checkrow" title={t.panel.diffHint}>
+          <input type="checkbox" checked={editor.gifDiff} onchange={onDiffChange} />
+          <span class="lbl">{t.panel.diff}</span>
         </label>
       {:else}
         <div class="row">

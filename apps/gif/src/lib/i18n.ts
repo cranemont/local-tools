@@ -125,6 +125,23 @@ export const t = {
     textUnseenHint: (n: number) =>
       `적용 범위에 걸리는 프레임이 없어 텍스트 ${n}개가 결과에 안 나와요`,
 
+    redact: "가리기",
+    redactAdd: "영역 추가",
+    redactCancel: "그리기 중지",
+    redactHint: "드래그로 가릴 영역 선택",
+    redactRemove: "삭제",
+    redactItem: (i: number, mode: string, w: number, h: number) =>
+      `${i}번 ${mode} ${w}×${h}`,
+    redactMosaic: "모자이크",
+    redactBlur: "블러",
+    /** 세기 라벨은 모드에 따라 뜻이 다르다 — 격자 한 칸 / 흐림 반경. */
+    redactBlock: "격자(px)",
+    redactRadius: "반경(px)",
+    /** 결과에 안 나오는 영역이 있을 때만 뜬다(목록 전체를 센다). */
+    redactUnseen: (n: number) => `${n}개 안 나옴`,
+    redactUnseenHint: (n: number) =>
+      `적용 범위 밖이거나 크롭에 잘려 영역 ${n}개가 결과에 안 나와요`,
+
     loop: "반복",
     loopForever: "무한 반복",
     loopCount: "횟수 지정",
@@ -137,6 +154,10 @@ export const t = {
     advanced: "고급",
     colors: "색상 수",
     dither: "디더링",
+    diff: "프레임 차분",
+    /** 체크박스 줄의 title — 화면에 해설 문단을 두지 않는다. */
+    diffHint:
+      "앞 프레임과 같은 픽셀을 투명으로 두어 용량을 줄여요 — 팔레트 한 칸을 쓰고 원본에 투명이 있으면 건너뛰어요",
     webpQuality: "품질",
 
     export: "내보내기",

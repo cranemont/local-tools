@@ -1,3 +1,5 @@
+import type { RedactRegion } from "./redact";
+
 /** 애니메이션(GIF·WebP)은 ImageDecoder로, 정지 이미지(PNG·JPG)는 createImageBitmap으로 디코딩. */
 export type SourceKind = "animated" | "still";
 
@@ -35,7 +37,7 @@ export interface CropRect {
   h: number;
 }
 
-/** 출력 변형 — 적용 순서: 크롭 → 회전 → 뒤집기 → 배율. */
+/** 출력 변형 — 적용 순서: 크롭 → 회전 → 뒤집기 → 배율 → 가리기. */
 export interface Transform {
   crop: CropRect | null;
   rotation: Rotation;
@@ -43,4 +45,8 @@ export interface Transform {
   flipV: boolean;
   /** 1 = 100%. */
   scale: number;
+  /** 모자이크·블러로 덮을 영역. 좌표는 crop과 같은 베이스 캔버스 기준이라,
+   *  크롭·회전·배율을 바꾸면 renderFrame이 같이 옮겨 그린다(redact.ts).
+   *  변형과 한 칸에 두는 이유: 영역은 이 기하를 따라다니고, 되돌리기·스냅샷도 함께 떠야 한다. */
+  redact: readonly RedactRegion[];
 }

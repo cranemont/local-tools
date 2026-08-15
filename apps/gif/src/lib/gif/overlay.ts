@@ -6,9 +6,21 @@
 export type OverlayVAlign = "top" | "middle" | "bottom";
 export type OverlayAlign = "left" | "center" | "right";
 /** 어느 프레임에 얹을지 — 전체 / 선택한 프레임만 / 1-based 번호 구간. */
-export type OverlayScope = "all" | "selected" | "range";
+export type FrameScope = "all" | "selected" | "range";
+/** 텍스트에서 쓰던 이름. 가리기 영역(redact.ts)이 같은 규약을 쓰면서 이름을 넓혔다. */
+export type OverlayScope = FrameScope;
 
-export interface TextOverlay {
+/** 프레임 범위를 적어 두는 세 칸. 텍스트와 가리기 영역이 이 모양을 포함하고,
+ *  판정은 아래 isInFrameScope·isScopeUnseen 하나씩만 쓴다 — 두 벌로 갈라지면
+ *  "자막은 붙는데 모자이크는 안 붙는" 프레임이 생긴다. */
+export interface FrameScoped {
+  scope: FrameScope;
+  /** scope === "range"일 때 1-based 포함 구간. */
+  from: number;
+  to: number;
+}
+
+export interface TextOverlay extends FrameScoped {
   id: string;
   text: string;
   /** 세로 위치 프리셋. 가로는 align이 맡는다 — 둘이 합쳐 9방향이 된다. */
@@ -24,10 +36,6 @@ export interface TextOverlay {
   strokeColor: string;
   /** 외곽선 두께(px, 배율 1 기준). 0이면 외곽선을 그리지 않는다. */
   strokeWidth: number;
-  scope: OverlayScope;
-  /** scope === "range"일 때 1-based 포함 구간. */
-  from: number;
-  to: number;
 }
 
 /** 웹폰트를 내려받지 않는다(단일 HTML 오프라인 원칙) — 시스템 폰트만 쓴다.
@@ -131,27 +139,60 @@ export function applyOverlayPatch(
   return next;
 }
 
-// ── 프레임 범위 판정 ─────────────────────────────────
+// ── 프레임 범위 판정 (텍스트·가리기 영역 공용) ───────
 
 /**
- * 0-based 프레임 인덱스가 이 오버레이의 범위에 드는가.
+ * 0-based 프레임 인덱스가 이 범위에 드는가.
  * `selected`는 그 프레임이 지금 필름스트립에서 선택돼 있는지 — 선택은 살아 있는 값이라
- * 선택을 바꾸면 얹히는 프레임도 따라 바뀐다.
+ * 선택을 바꾸면 걸리는 프레임도 따라 바뀐다.
  */
-export function isOverlayOnFrame(
-  o: TextOverlay,
+export function isInFrameScope(
+  s: FrameScoped,
   index: number,
   selected: boolean,
 ): boolean {
-  if (o.scope === "all") return true;
-  if (o.scope === "selected") return selected;
-  const a = Math.round(num(o.from, 1));
-  const b = Math.round(num(o.to, 1));
+  if (s.scope === "all") return true;
+  if (s.scope === "selected") return selected;
+  const a = Math.round(num(s.from, 1));
+  const b = Math.round(num(s.to, 1));
   // 거꾸로 적힌 구간("10~3")도 같은 구간으로 읽는다 — 빈 결과를 내지 않는다.
   const lo = Math.min(a, b);
   const hi = Math.max(a, b);
   const n = index + 1;
   return n >= lo && n <= hi;
+}
+
+/**
+ * 적어 둔 범위에 걸리는 프레임이 하나도 없는가 — 화면 경고용.
+ * 선택이 비었는데 범위가 "선택"이거나, 구간이 통째로 프레임 밖일 때다.
+ * (프레임을 하나씩 훑지 않고 산술로만 답한다. isInFrameScope와 같은 규칙이다.)
+ */
+export function isScopeUnseen(
+  s: FrameScoped,
+  frameCount: number,
+  selectedCount: number,
+): boolean {
+  const frames = Math.max(0, Math.round(num(frameCount, 0)));
+  if (frames === 0) return true;
+  if (s.scope === "selected") return Math.max(0, Math.round(num(selectedCount, 0))) === 0;
+  if (s.scope !== "range") return false;
+  const a = Math.round(num(s.from, 1));
+  const b = Math.round(num(s.to, 1));
+  return Math.max(a, b) < 1 || Math.min(a, b) > frames;
+}
+
+/** 필름스트립 선택이 바뀌면 이 범위가 가리키는 프레임도 바뀌는가. */
+export function scopeFollowsSelection(s: FrameScoped): boolean {
+  return s.scope === "selected";
+}
+
+/** 0-based 프레임 인덱스가 이 오버레이의 범위에 드는가. */
+export function isOverlayOnFrame(
+  o: TextOverlay,
+  index: number,
+  selected: boolean,
+): boolean {
+  return isInFrameScope(o, index, selected);
 }
 
 /** 그릴 것이 있는가 — 빈 글자·공백뿐인 글자는 어느 프레임에도 자국을 남기지 않는다. */
@@ -177,27 +218,17 @@ export function overlaysForFrame(
  * 그때만 리비전을 올려야 한다(늘 올리면 글자가 없어도 결과가 낡음으로 표시된다).
  */
 export function selectionAffectsOverlays(overlays: readonly TextOverlay[]): boolean {
-  return overlays.some((o) => o.scope === "selected" && isOverlayDrawable(o));
+  return overlays.some((o) => scopeFollowsSelection(o) && isOverlayDrawable(o));
 }
 
-/**
- * 적은 글자가 어느 프레임에도 안 그려지는가 — 화면 경고용.
- * 선택이 비었는데 범위가 "선택"이거나, 구간이 통째로 프레임 밖일 때다.
- * (판정은 isOverlayOnFrame과 같은 규칙이다: 프레임을 하나씩 훑지 않고 산술로만 답한다.)
- */
+/** 적은 글자가 어느 프레임에도 안 그려지는가 — 화면 경고용. */
 export function isOverlayUnseen(
   o: TextOverlay,
   frameCount: number,
   selectedCount: number,
 ): boolean {
   if (!isOverlayDrawable(o)) return false; // 빈 글자는 '안 보임'이 아니라 '없음'이다
-  const frames = Math.max(0, Math.round(num(frameCount, 0)));
-  if (frames === 0) return true;
-  if (o.scope === "selected") return Math.max(0, Math.round(num(selectedCount, 0))) === 0;
-  if (o.scope !== "range") return false;
-  const a = Math.round(num(o.from, 1));
-  const b = Math.round(num(o.to, 1));
-  return Math.max(a, b) < 1 || Math.min(a, b) > frames;
+  return isScopeUnseen(o, frameCount, selectedCount);
 }
 
 /** 지금 어디에도 안 그려지는 글자의 수. **목록 전체**를 센다 —

@@ -19,6 +19,7 @@
     | "flipH"
     | "flipV"
     | "crop"
+    | "mosaic"
     | "reverse"
     | "scissors"
     | "film"
@@ -94,6 +95,11 @@
   {:else if name === "crop"}
     <path d="M6 2v14a2 2 0 0 0 2 2h14" />
     <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+  {:else if name === "mosaic"}
+    <rect x="3" y="3" width="8" height="8" rx="1" />
+    <rect x="13" y="3" width="8" height="8" rx="1" />
+    <rect x="3" y="13" width="8" height="8" rx="1" />
+    <rect x="13" y="13" width="8" height="8" rx="1" />
   {:else if name === "reverse"}
     <path d="m16 3 4 4-4 4" />
     <path d="M20 7H4" />
