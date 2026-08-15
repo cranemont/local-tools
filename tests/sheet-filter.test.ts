@@ -448,7 +448,7 @@ describe("조작이 닿는 범위 — OP_SCOPE", () => {
     "copy",
     "replace",
   ];
-  const ALL: FilterOp[] = ["paste", "insertRows", "sort", "merge"];
+  const ALL: FilterOp[] = ["paste", "insertRows", "sort", "merge", "condFormat"];
 
   it("고른 영역을 다루는 조작은 보이는 행만 — 숨은 줄은 고른 적이 없다", () => {
     for (const op of VISIBLE) expect([op, scopeOf(op)]).toEqual([op, "visible"]);
@@ -456,6 +456,10 @@ describe("조작이 닿는 범위 — OP_SCOPE", () => {
 
   it("붙여넣기·행 삽입·정렬·병합은 전부에 닿는다 — 이어진 덩어리이거나 표의 짜임이다", () => {
     for (const op of ALL) expect([op, scopeOf(op)]).toEqual([op, "all"]);
+  });
+
+  it("조건부 서식의 집계 모수도 전부다 — 필터를 걸고 풀 때 같은 칸의 색이 바뀌면 안 된다", () => {
+    expect(scopeOf("condFormat")).toBe("all");
   });
 
   it("갈래가 없는 조작은 없다 — 표가 곧 규약이다", () => {

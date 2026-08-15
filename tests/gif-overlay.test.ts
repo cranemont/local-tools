@@ -669,7 +669,16 @@ function fr(over: Partial<Frame> & Pick<Frame, "id">): Frame {
 }
 
 function tf(over: Partial<Transform> = {}): Transform {
-  return { crop: null, rotation: 0, flipH: false, flipV: false, scale: 1, ...over };
+  // redact(가릴 영역)는 이 파일의 관심사가 아니다 — 명세는 tests/gif-redact.test.ts에 있다.
+  return {
+    crop: null,
+    rotation: 0,
+    flipH: false,
+    flipV: false,
+    scale: 1,
+    redact: [],
+    ...over,
+  };
 }
 
 /** 이 계획이 실제로 만들 파일 — 프레임마다 얹히는 글자와 딜레이.
