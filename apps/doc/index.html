@@ -107,8 +107,19 @@
         line-height: 1.75;
         word-break: keep-all;
       }
-      #intro .intro-wrap { max-width: 720px; margin: 0 auto; padding: 56px 24px 80px; }
-      #intro h1 { margin: 0 0 14px; font-size: 26px; line-height: 1.35; letter-spacing: -0.02em; text-wrap: balance; }
+      #intro .intro-wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+      #intro .intro-wrap[open] { padding-bottom: 64px; }
+      /* 접힌 상태가 기본이다. 화면에는 이 한 줄만 남고, 안의 본문은 그대로 색인된다
+         — 구글은 접힌 내용도 정상 색인하지만 감춘 텍스트(display:none)는 스팸으로 본다. */
+      #intro summary { display: flex; align-items: center; gap: 9px; padding: 17px 0; cursor: pointer; list-style: none; color: var(--i-muted); }
+      #intro summary::-webkit-details-marker { display: none; }
+      #intro summary::before { content: ""; flex: none; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform 140ms ease; }
+      #intro .intro-wrap[open] summary::before { transform: rotate(45deg); }
+      #intro summary:hover { color: var(--i-text); }
+      #intro summary:focus-visible { outline: 2px solid var(--i-link); outline-offset: 3px; border-radius: 3px; }
+      #intro h1 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.5; letter-spacing: -0.01em; color: inherit; }
+      #intro .lead { margin-top: 8px; }
+      @media (prefers-reduced-motion: reduce) { #intro summary::before { transition: none; } }
       #intro h2 { margin: 36px 0 10px; font-size: 17px; letter-spacing: -0.01em; }
       #intro p { margin: 0 0 12px; }
       #intro .lead { color: var(--i-muted); }
@@ -134,8 +145,8 @@
     <!-- 도구 아래 설명. 자가해제 압축을 타지 않는 평문이라 JS를 실행하지 않는
          크롤러도 읽는다. 문구를 고치면 i18n.ts의 실제 동작과 어긋나지 않는지 볼 것. -->
     <section id="intro">
-      <div class="intro-wrap">
-        <h1>한글 뷰어 없이 hwp 열고 편집하기 — 업로드 없이 브라우저에서</h1>
+      <details class="intro-wrap">
+        <summary><h1>한글 뷰어 없이 hwp 열고 편집하기 — 업로드 없이 브라우저에서</h1></summary>
         <p class="lead">문서는 한글 프로그램이 없어도 .hwp·.hwpx를 원본 레이아웃 그대로 열어 봅니다. 워드 .docx도 같은 화면에서 열리고, 한글 문서는 본문을 그 자리에서 고쳐 원래 형식으로 다시 저장할 수 있습니다. 문서는 브라우저 안에서만 처리되고 서버로 올라가지 않습니다.</p>
 
         <h2>이런 때 씁니다</h2>
@@ -162,7 +173,7 @@
         <p class="foot">
           <a href="/">local-tools의 다른 도구 보기</a> · 모든 처리는 브라우저 안에서 끝나고 파일은 서버로 전송되지 않습니다.
         </p>
-      </div>
+      </details>
     </section>
     <script type="module" src="/src/main.ts"></script>
   </body>

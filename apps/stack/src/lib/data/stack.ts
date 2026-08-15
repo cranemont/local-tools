@@ -110,15 +110,15 @@ export const KIND_NOTE: Record<TechKind, string> = {
  * 같은 도구가 화면마다 다른 이름으로 불렸다. 카드 문구를 고치면 여기도 같이 고친다.
  */
 export const APPS: AppMeta[] = [
-  { id: "pdf", label: "PDF", blurb: "여러 PDF를 하나로 합치고, 필요한 쪽만 뽑아 나누고, 순서를 바꾸고, 암호를 걸거나 풉니다", path: "../pdf/" },
-  { id: "gif", label: "GIF", blurb: "동영상 구간이나 사진 여러 장으로 움짤을 만들고 프레임 단위로 손봅니다. WebP·MP4로도 저장", path: "../gif/" },
-  { id: "video", label: "동영상", blurb: "필요한 구간만 잘라내고 용량을 줄입니다. 무손실 컷은 다시 인코딩하지 않아 화질 그대로", path: "../video/" },
-  { id: "image", label: "이미지", blurb: "JPG·PNG·WebP·AVIF 변환과 용량 줄이기. 아이폰 HEIC도 열리고 촬영 위치(EXIF) 제거까지", path: "../image/" },
-  { id: "sheet", label: "시트", blurb: "엑셀 없이 .xlsx와 CSV를 열어 고칩니다. 한글 깨짐을 자동으로 잡고 수식·서식을 그대로", path: "../sheet/" },
-  { id: "doc", label: "문서", blurb: "한글 프로그램 없이 hwp를 원본 그대로 열고, 고쳐 저장하고, PDF·마크다운으로 바꿉니다", path: "../doc/" },
-  { id: "drop", label: "드롭", blurb: "두 기기의 브라우저를 직접 연결해 파일을 옮깁니다. 코드 여섯 자리, 용량 제한 없음", path: "../drop/" },
-  { id: "dev", label: "개발자 도구", blurb: "JSON 정리, JWT 디코드, 텍스트 비교, 해시, 정규식, cron, QR 등 16종을 한 페이지에", path: "../dev/" },
-  { id: "lab", label: "실험장", blurb: "한국어 문장으로 임베딩 모델 다섯 개를 같은 조건에서 재봅니다. 모델은 브라우저 안에서", path: "../lab/" },
+  { id: "pdf", label: "PDF", blurb: "병합 · 정리 · 텍스트 추출 · 암호", path: "../pdf/" },
+  { id: "gif", label: "GIF", blurb: "프레임 편집 · 자막 · 동영상 변환 · WebP·MP4", path: "../gif/" },
+  { id: "video", label: "동영상", blurb: "자르기 · 압축 · 변환 · 소리 추출", path: "../video/" },
+  { id: "image", label: "이미지", blurb: "변환 · 압축 · 리사이즈 · EXIF", path: "../image/" },
+  { id: "sheet", label: "시트", blurb: "CSV · 엑셀 · 수식 · 필터", path: "../sheet/" },
+  { id: "doc", label: "문서", blurb: "한글 · 워드 열기 · 마크다운 변환", path: "../doc/" },
+  { id: "drop", label: "드롭", blurb: "기기 간 직접 전송 · 서버 없음", path: "../drop/" },
+  { id: "dev", label: "개발자 도구", blurb: "JSON 변환 · diff · QR · 해시", path: "../dev/" },
+  { id: "lab", label: "실험장", blurb: "임베딩 모델 비교 · 한국어 프로브", path: "../lab/" },
   {
     id: "stack",
     label: "기술 지도",
