@@ -101,7 +101,9 @@ export const KIND_NOTE: Record<TechKind, string> = {
   native: "브라우저가 이미 갖고 있어서 가져다 쓰기만 한 것",
   lib: "번들에 들어가는 서드파티 — 전부 순수 JS",
   own: "쓸 만한 게 없거나 너무 무거워서 직접 짠 것",
-  wasm: "유일하게 인터넷이 필요한 지점 — 엔진 최초 1회(그 뒤로는 캐시)",
+  // 인터넷을 타는 것이 이 갈래뿐이던 시절의 문구였다. 실험장의 transformers.js는
+  // lib인데도 모델을 받으므로, 여기서는 "해시를 맞춰 보고 실행한다"가 갈래의 표식이다.
+  wasm: "엔진을 최초 1회만 받아 캐시에 둔다 — 받은 바이트는 해시를 맞춰 본 뒤에만 실행한다",
 };
 
 /**
@@ -110,7 +112,7 @@ export const KIND_NOTE: Record<TechKind, string> = {
  * 같은 도구가 화면마다 다른 이름으로 불렸다. 카드 문구를 고치면 여기도 같이 고친다.
  */
 export const APPS: AppMeta[] = [
-  { id: "pdf", label: "PDF", blurb: "병합 · 정리 · 텍스트 추출 · 암호", path: "../pdf/" },
+  { id: "pdf", label: "PDF", blurb: "병합 · 정리 · 용량 줄이기 · 텍스트 추출 · 암호", path: "../pdf/" },
   { id: "gif", label: "GIF", blurb: "프레임 편집 · 자막 · 동영상 변환 · WebP·MP4", path: "../gif/" },
   { id: "video", label: "동영상", blurb: "자르기 · 압축 · 변환 · 소리 추출", path: "../video/" },
   { id: "image", label: "이미지", blurb: "변환 · 압축 · 리사이즈 · EXIF", path: "../image/" },
@@ -340,8 +342,13 @@ export const TECHS: Tech[] = [
     id: "filehandler",
     label: "File Handling API",
     kind: "native",
-    note: "설치된 PWA가 .csv·.xlsx의 열기 대상이 된다. 맥에서 CSV 더블클릭이 Numbers로 가는 걸 브라우저 안에서 바꿀 수 있는 유일한 방법이라, 시트만 PWA 빌드를 따로 낸다.",
-    src: ["apps/sheet/src/lib/launch.ts", "apps/sheet/pwa.ts"],
+    note: "설치된 PWA가 시트는 .csv·.xlsx의, 문서는 .hwp·.hwpx의 열기 대상이 된다. 맥에서 CSV 더블클릭이 Numbers로 가는 걸 브라우저 안에서 바꿀 수 있는 유일한 방법이라, 이 둘만 PWA 빌드를 따로 낸다.",
+    src: [
+      "apps/sheet/src/lib/launch.ts",
+      "apps/sheet/pwa.ts",
+      "apps/doc/src/lib/launch.ts",
+      "apps/doc/pwa.ts",
+    ],
   },
   {
     id: "filesystemaccess",
@@ -380,8 +387,12 @@ export const TECHS: Tech[] = [
     label: "mediabunny",
     kind: "lib",
     pkg: "mediabunny",
-    note: "순수 TS 디먹싱·먹싱. 코덱은 WebCodecs가 하고 이쪽은 컨테이너만 만진다 — 그래서 wasm이 없다.",
-    src: ["apps/video/src/lib/video/transcode.ts", "apps/gif/src/lib/gif/video.ts"],
+    note: "순수 TS 디먹싱·먹싱. 코덱은 WebCodecs가 하고 이쪽은 컨테이너만 만진다 — 그래서 wasm이 없다. 다만 여러 입력 구간을 한 출력에 먹이는 API는 1.52.3에 없어서, 구간을 이어붙일 때는 출력에 패킷 소스를 직접 달고 패킷을 옮긴다.",
+    src: [
+      "apps/video/src/lib/video/transcode.ts",
+      "apps/video/src/lib/video/concat.ts",
+      "apps/gif/src/lib/gif/video.ts",
+    ],
   },
   {
     id: "exceljs",
@@ -428,8 +439,13 @@ export const TECHS: Tech[] = [
     label: "fflate",
     kind: "lib",
     pkg: "fflate",
-    note: "ZIP 묶기. 세 앱이 공유하는 유일한 저장 포맷 라이브러리.",
-    src: ["apps/gif/src/lib/gif/extract.ts", "apps/image/src/lib/image/save.ts"],
+    note: "ZIP 묶기. 네 앱(pdf·gif·image·doc)이 공유하는 유일한 저장 포맷 라이브러리.",
+    src: [
+      "apps/pdf/src/lib/pdf/save.ts",
+      "apps/gif/src/lib/gif/extract.ts",
+      "apps/image/src/lib/image/save.ts",
+      "apps/doc/src/lib/doc/save.ts",
+    ],
   },
   {
     id: "noble",
@@ -519,6 +535,20 @@ export const TECHS: Tech[] = [
     kind: "own",
     note: "9방향 프리셋 좌표·줄바꿈·외곽선 두께를 출력 배율에 맞춰 계산한다. 캔버스도 DOM도 만지지 않는 순수 계산이라, 미리보기와 네 내보내기(GIF·WebP·MP4·PNG)가 같은 숫자를 받아 같은 자리에 글자를 찍는다.",
     src: ["apps/gif/src/lib/gif/overlay.ts"],
+  },
+  {
+    id: "redactbox",
+    label: "가림 영역 배치",
+    kind: "own",
+    note: "모자이크·블러로 덮을 사각형을 베이스 캔버스 좌표에 적어 두고, 그릴 때 그때의 크롭·회전·배율로 옮긴다. 가리려는 것은 얼굴·계좌번호처럼 원본 그림 위의 자리라서, 출력 좌표로 적어 두면 크롭을 바꿀 때마다 영역이 어긋난다. 격자 한 칸(2~200px)과 블러 반경(1~100px)도 출력 배율을 곱해서 쓴다 — 텍스트 크기가 배율을 따라가는 것과 같은 이유다. 회전은 90의 배수뿐이라 삼각함수 대신 표를 쓴다.",
+    src: ["apps/gif/src/lib/gif/redact.ts"],
+  },
+  {
+    id: "gifdiff",
+    label: "프레임 차분",
+    kind: "own",
+    note: "앞 프레임과 같은 픽셀을 투명 인덱스로 둔다. 바뀐 사각형만 팔레트를 뽑고 매핑하므로 gifenc의 quantize·applyPalette가 보는 픽셀도 그만큼 준다. 알파가 있는 프레임에는 걸지 않는다 — 투명으로 비워 둔 자리가 앞 프레임으로 보이려면 disposal 1(화면 유지)이어야 하는데 알파 프레임은 2(배경으로 되돌리기)를 쓴다.",
+    src: ["apps/gif/src/lib/gif/diff.ts"],
   },
   {
     id: "textlayout",
@@ -619,8 +649,8 @@ export const TECHS: Tech[] = [
     id: "sizesearch",
     label: "목표 용량 탐색",
     kind: "own",
-    note: "\"이 용량 이하\"를 받으면 그 이하로 떨어지는 가장 좋은 설정을 이진 탐색으로 찾는다 — 양 끝을 먼저 짚고 안쪽을 좁히며 최대 아홉 번. 재인코딩은 값이 클수록 크다는 가정이 깨질 수 있어 맞춘 것 중 가장 좋은 것과 전체에서 가장 작은 것을 함께 들고 가고, \"맞췄다\"는 표시는 실제로 잰 바이트가 목표 이하일 때만 붙는다.",
-    src: ["apps/image/src/lib/image/target.ts"],
+    note: "\"이 용량 이하\"를 받으면 그 이하로 떨어지는 가장 좋은 설정을 이진 탐색으로 찾는다 — 양 끝을 먼저 짚고 안쪽을 좁힌다. 재인코딩은 값이 클수록 크다는 가정이 깨질 수 있어 맞춘 것 중 가장 좋은 것과 전체에서 가장 작은 것을 함께 들고 가고, \"맞췄다\"는 표시는 잰 바이트가 목표 이하일 때만 붙는다. 같은 상태 기계가 두 앱에 복제돼 있다(save.ts와 같은 경계). 시도 횟수는 이미지가 최대 아홉 번, PDF는 한 번이 문서 전체를 다시 그리는 일이라 쪽 수로 깎는다 — 8쪽 이하 여섯 번, 120쪽을 넘으면 두 번.",
+    src: ["apps/image/src/lib/image/target.ts", "apps/pdf/src/lib/pdf/compress.ts"],
   },
   {
     id: "formula-engine",
@@ -648,6 +678,20 @@ export const TECHS: Tech[] = [
     kind: "own",
     note: "값 고르기 또는 조건 11가지로 보이는 행을 추린다. 고유값 목록과 글자 조건은 화면에 보이는 문자열을, 크기 비교는 계산된 값을 본다 — 파일에서 읽은 원문이 남은 칸은 값이 1.5여도 화면에는 \"1.50\"이라, 둘을 갈라 두지 않으면 같은 칸을 두 이름으로 부르게 된다. 문서 객체를 모르는 순수 계산이다.",
     src: ["apps/sheet/src/lib/sheet/filter.ts"],
+  },
+  {
+    id: "condrules",
+    label: "조건부 서식 판정",
+    kind: "own",
+    note: "규칙 목록을 술어로 굳혀 칸마다 매긴다. 값 비교·같음 판정·대소문자 접기는 자동 필터의 것을 그대로 쓴다 — \"100\"과 100이 필터에서는 같은데 서식에서는 다르면 같은 표를 두 번 배우게 된다. 목록 순서가 곧 순위여서 앞 규칙이 정한 속성을 뒤 규칙이 덮지 못하고, 색조·막대처럼 범위 전체를 봐야 하는 규칙은 집계를 따로 받는다. 최소와 최대가 같으면 자리는 0.5다 — 0으로 두면 \"제일 작다\"가 거짓이 된다.",
+    src: ["apps/sheet/src/lib/sheet/condformat.ts"],
+  },
+  {
+    id: "validationrules",
+    label: "입력 규칙 판정",
+    kind: "own",
+    note: "목록·정수·소수·날짜·글자 수·수식 여섯 가지로 새 입력을 본다. 수인지는 시트의 값 체계로 가른다 — \"010\"은 앞자리 0을 지키느라 글자로 남으므로 정수 규칙에 걸린다. 파일에서 읽은 값은 검사가 고치지 않고 표시만 한다(가져온 원문을 그대로 내보내는 규약과 같은 자리다). 다른 범위를 원본으로 쓴 목록과 사용자 지정 수식은 문서를 읽어야 풀리므로 부르는 쪽이 풀어서 넘긴다.",
+    src: ["apps/sheet/src/lib/sheet/validation.ts"],
   },
   {
     id: "md5",
@@ -732,7 +776,9 @@ export const TECHS: Tech[] = [
     src: ["apps/doc/src/lib/doc/batch.ts"],
   },
 
-  // ── wasm (여기만 인터넷이 필요하다) ──────────────────────────
+  // ── wasm (엔진 바이트를 받아 해시를 맞춰 보고 실행한다) ──────
+  // 인터넷을 타는 것이 이 갈래뿐이던 시절의 구분선이었다. 지금은 실험장의
+  // transformers.js(lib)도 모델·실행기를 받고, 드롭은 릴레이·STUN에 붙는다.
   {
     id: "rhwp",
     label: "@rhwp/core",
@@ -764,7 +810,7 @@ export const TECHS: Tech[] = [
     kind: "wasm",
     network: "CDN 최초 1회",
     net: cdnLink("qpdf 엔진 바이트"),
-    note: "PDF 암호 설정·해제. 순수 JS로 대체할 만한 게 없어 유일하게 wasm을 쓴다.",
+    note: "PDF 암호 설정·해제와 구조 다시 압축. apps/pdf에서 wasm을 쓰는 곳은 여기뿐이고, 순수 JS로 대체할 만한 것이 없어 남겨 둔 의존이다.",
     src: ["apps/pdf/src/lib/pdf/qpdfLoader.ts"],
   },
   {
@@ -840,11 +886,31 @@ export const FEATURES: Feature[] = [
     ],
     pipeline: "pdf-to-text",
   },
+  // 아래 셋은 화면에서 탭 하나("압축·암호")를 나눠 쓴다. PDF 한 개가 들어가 PDF 한 개가
+  // 나오는 모양이 같고, 셋 중 둘이 같은 엔진(qpdf)을 쓴다.
+  {
+    id: "pdf-recompress",
+    app: "pdf",
+    label: "용량 줄이기 · 다시 압축",
+    note: "글자·글꼴·주석은 손대지 않고 구조와 그림만 qpdf가 다시 압축한다. 암호와 같은 엔진이라 이 갈래도 최초 1회 인터넷이 필요하다. 이미 압축된 PDF는 객체 스트림 머리글 때문에 오히려 커지는데, 그때는 원본을 그대로 내려준다.",
+    techs: ["qpdf", "wasmloader", "adownload"],
+    src: ["apps/pdf/src/lib/pdf/qpdfLoader.ts", "apps/pdf/src/lib/compress/Compress.svelte"],
+    pipeline: "pdf-shrink",
+  },
+  {
+    id: "pdf-raster",
+    app: "pdf",
+    label: "용량 줄이기 · 이미지로",
+    note: "쪽을 JPEG로 그려 새 PDF에 담는다. 인터넷이 필요 없고 더 줄지만 글자가 사라진다 — 선택·검색·복사가 안 되고 되돌릴 수 없어서, 문서에 글자가 있는지 먼저 훑어 배지로 알린다. 못 찾았을 때는 다 훑은 것과 시간이 모자라 훑다 만 것을 갈라 말한다. 목표 용량을 주면 해상도·품질 사다리를 짚어 그 아래로 내려간다.",
+    techs: ["pdfjs", "canvas2d", "pdflib", "sizesearch", "adownload"],
+    src: ["apps/pdf/src/lib/pdf/repack.ts", "apps/pdf/src/lib/pdf/compress.ts"],
+    pipeline: "pdf-shrink",
+  },
   {
     id: "pdf-password",
     app: "pdf",
     label: "암호 설정·해제",
-    note: "이 앱에서 유일하게 인터넷이 필요한 기능. 엔진을 최초 1회만 받고 파일은 브라우저 안에 머문다.",
+    note: "AES-256으로 걸거나 푼다. 엔진을 최초 1회만 받고 파일과 입력한 비밀번호는 브라우저 안에 머문다. 용량 줄이기의 \"다시 압축\"과 같은 엔진을 쓴다 — 이 앱이 인터넷을 타는 지점은 그 둘뿐이다.",
     techs: ["qpdf", "wasmloader", "adownload"],
     src: ["apps/pdf/src/lib/pdf/qpdfLoader.ts", "apps/pdf/src/lib/password/Password.svelte"],
     pipeline: "pdf-password",
@@ -911,6 +977,22 @@ export const FEATURES: Feature[] = [
     src: ["apps/gif/src/lib/gif/overlay.ts"],
   },
   {
+    id: "gif-redact",
+    app: "gif",
+    label: "가리기 (모자이크·블러)",
+    note: "남기면 안 되는 자리를 격자로 뭉개거나 흐린다. 덮는 자리는 텍스트와 같은 renderFrame 하나뿐이라 미리보기와 네 내보내기가 같은 그림이 된다. 순서는 그림 → 가리기 → 텍스트다 — 뒤집으면 자막까지 뭉개진다. 영역은 크롭·회전과 함께 옮겨 다니고, 크롭이 영역을 남김없이 잘라내면 그 프레임에는 안 그린 채 배지로 알린다. 원본 픽셀을 지우는 처리라 결과에서 되돌릴 수 없다.",
+    techs: ["redactbox", "offscreencanvas"],
+    src: ["apps/gif/src/lib/gif/redact.ts"],
+  },
+  {
+    id: "gif-diff",
+    app: "gif",
+    label: "프레임 차분",
+    note: "앞 프레임에서 바뀐 자리만 새로 싣는다. 투명 인덱스가 팔레트 한 칸을 가져가므로 16색 미만이거나 바뀐 넓이가 90%를 넘으면 걸지 않는다 — 온 화면이 조금씩 달라지는 영상 프레임이 그 경우고, 거기서는 오히려 커진다. 한 픽셀도 안 바뀐 프레임은 1×1 투명 한 장으로 딜레이만 싣는다.",
+    techs: ["gifdiff", "gifenc"],
+    src: ["apps/gif/src/lib/gif/diff.ts"],
+  },
+  {
     id: "gif-extract",
     app: "gif",
     label: "프레임 PNG 추출",
@@ -953,6 +1035,15 @@ export const FEATURES: Feature[] = [
     note: "트랙 옵션을 비워 패킷을 그대로 옮긴다. 재인코딩이 없어 빠르고 화질 손실이 없는 대신 키프레임 경계로 잘린다. 회전은 MP4면 메타데이터로 적어 복사를 유지하지만, WebM은 그 값을 안 써서 다시 굽는다.",
     techs: ["mediabunny"],
     src: ["apps/video/src/lib/video/transcode.ts"],
+  },
+  {
+    id: "video-concat",
+    app: "video",
+    label: "여러 구간 잘라 잇기",
+    note: "구간을 여러 개 잡아 한 파일로 잇는다. 목록 순서가 곧 결과 순서라 뒤 대목을 앞에 놓거나 같은 대목을 두 번 쓸 수 있고, 겹침·순서 뒤바뀜은 고치지 않고 배지로만 알린다 — 강의 영상에서 그렇게 자르는 것이 정당한 편집이라서다. 구간마다 한 파일로 받는 갈래도 있는데 ZIP으로 묶지 않고 하나씩 내려받는다(이 앱에는 압축 라이브러리가 없다).",
+    techs: ["mediabunny", "webcodecs"],
+    src: ["apps/video/src/lib/video/segments.ts", "apps/video/src/lib/video/concat.ts"],
+    pipeline: "video-concat",
   },
   {
     id: "video-audio",
@@ -1029,10 +1120,29 @@ export const FEATURES: Feature[] = [
     id: "sheet-xlsx",
     app: "sheet",
     label: "엑셀 열기·저장",
-    note: "값·수식 원문·서식·병합·틀 고정·열 너비까지 왕복시킨다. 엔진이 무거워서 xlsx를 실제로 만질 때만 내려받는다.",
+    note: "값·수식 원문·서식·병합·틀 고정·열 너비에 조건부 서식과 입력 규칙까지 왕복시킨다. 엔진이 무거워서 xlsx를 만질 때만 내려받는다. 옮기지 못하는 것은 양쪽에서 센다 — 아이콘 집합·평균 위/아래·기간처럼 우리에게 없는 규칙은 못 읽고, \"참이면 중지\"는 ExcelJS가 그 속성을 다루지 않아 못 쓴다. 둘 다 조용히 넘기면 왕복 한 번에 규칙이 사라진다.",
     techs: ["exceljs"],
     src: ["apps/sheet/src/lib/sheet/xlsx.ts"],
     pipeline: "sheet-xlsx",
+  },
+  {
+    id: "sheet-cond",
+    app: "sheet",
+    label: "조건부 서식",
+    note: "값에 따라 글자·칸 색을 바꾸거나 색조·막대를 깐다. 규칙은 뷰 상태가 아니라 문서 내용이라 되돌리기에 남고 파일로 나간다. 판정은 그리는 칸만 하고, 범위 전체를 봐야 답이 나오는 규칙(중복·상위/하위·색조·막대)의 집계는 리비전마다 한 번만 세어 화면 안의 칸들이 나눠 쓴다.",
+    techs: ["condrules", "exceljs"],
+    src: ["apps/sheet/src/lib/sheet/condformat.ts", "apps/sheet/src/lib/editor/CondDialog.svelte"],
+  },
+  {
+    id: "sheet-validation",
+    app: "sheet",
+    label: "입력 규칙",
+    note: "범위에 목록·수 범위·날짜·글자 수·수식 조건을 걸어 새 입력을 되돌리거나 표시만 남긴다. 셀이 아니라 범위에 붙이는 이유는 빈 칸에도 걸려야 해서다(셀은 희소 Map이라 빈 칸에는 객체가 없다). 이미 들어 있는 값은 고치지 않고, 붙여넣기·채우기는 검사를 건너뛰고 몇 칸이 어긋났는지만 센다.",
+    techs: ["validationrules", "exceljs"],
+    src: [
+      "apps/sheet/src/lib/sheet/validation.ts",
+      "apps/sheet/src/lib/editor/ValidationDialog.svelte",
+    ],
   },
   {
     id: "sheet-formula",
