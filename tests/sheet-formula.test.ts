@@ -740,6 +740,30 @@ describe("행·열 삽입과 삭제(adjustRows·adjustCols)", () => {
     expect(adjustRows("A5", 0, 3)).toBe("A8");
     expect(adjustRows("A10", 2, -5)).toBe("A5");
   });
+
+  // 삽입·삭제는 그 시트 안의 일이다. 다른 시트를 가리키는 참조까지 밀면
+  // Sheet1에 행 하나를 끼웠다고 Sheet2의 다른 칸을 보게 된다.
+  it("다른 시트를 가리키는 참조는 밀지 않는다", () => {
+    expect(adjustRows("Sheet2!A5", 0, 1)).toBe("Sheet2!A5");
+    expect(adjustRows("SUM(Sheet2!A1:A9)", 0, 3)).toBe("SUM(Sheet2!A1:A9)");
+    expect(adjustCols("Sheet2!C1", 0, 1)).toBe("Sheet2!C1");
+    expect(adjustRows("'내 시트'!$A$5", 0, 2)).toBe("'내 시트'!$A$5");
+  });
+
+  it("다른 시트 참조는 지워도 #REF!가 되지 않는다 — 그 줄은 이 시트에서 지운 것이다", () => {
+    expect(adjustRows("Sheet2!A3", 2, -1)).toBe("Sheet2!A3");
+    expect(adjustCols("Sheet2!C1", 2, -1)).toBe("Sheet2!C1");
+  });
+
+  it("한 수식 안에서 같은 시트 참조만 골라 민다", () => {
+    expect(adjustRows("A1+Sheet2!A1", 0, 1)).toBe("A2+Sheet2!A1");
+  });
+
+  // 복사·채우기는 다르다 — 상대 참조는 시트 이름이 붙어 있어도 함께 움직인다(엑셀과 같다).
+  it("복사·채우기에서는 다른 시트 참조도 옮겨진다", () => {
+    expect(translateFormula("Sheet2!A1", 1, 0)).toBe("Sheet2!A2");
+    expect(translateFormula("Sheet2!$A$1", 1, 0)).toBe("Sheet2!$A$1");
+  });
 });
 
 describe("트리 → 수식 문자열(stringify)", () => {
