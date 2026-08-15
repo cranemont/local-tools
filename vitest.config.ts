@@ -62,7 +62,14 @@ function browserApp(
         enabled: true,
         headless: true,
         provider: playwright(),
-        instances: [{ browser: "chromium" }],
+        instances: [
+          {
+            browser: "chromium",
+            // 4층과 같은 헤드리스 셸을 쓴다 — 바이너리를 한 벌만 받게(리눅스 zip 114.7MB).
+            // 이걸 안 적으면 전체 크로미엄을 찾는데, CI는 `--only-shell`로만 받는다.
+            launchOptions: { channel: "chromium-headless-shell" },
+          },
+        ],
       },
     },
   };
