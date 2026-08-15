@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-pwa/
+coverage/
 .playwright-mcp/
 *.log
 .DS_Store
