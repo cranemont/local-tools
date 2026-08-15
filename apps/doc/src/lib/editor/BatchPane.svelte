@@ -8,10 +8,11 @@
   import Icon from "../Icon.svelte";
   import { editor } from "./state.svelte";
   import PasswordDialog from "./PasswordDialog.svelte";
-  import { isRunning, progressOf } from "../doc/batch";
+  import { progressOf } from "../doc/batch";
 
   const progress = $derived(progressOf(editor.batch));
-  const running = $derived(isRunning(editor.batch));
+  // 도는 중인지의 규칙은 한 곳에만 둔다 — 위 막대의 엔진 버튼도 같은 값으로 숨는다.
+  const running = $derived(editor.batchRunning);
   const canSave = $derived(progress.done > 0 && editor.busy === null);
 </script>
 
@@ -33,7 +34,13 @@
 
     <div class="spacer"></div>
 
-    {#if editor.batchHalt === "panic"}
+    <!-- 새로고침 권유는 **다 끝난 뒤에만** 띄운다. 워드를 이어서 옮기는 중에 누르면
+         지금까지 옮겨 놓은 것을 통째로 잃는다.
+         '남은 것만 다시'는 **못 함이 실제로 있을 때만** 말한다 — 마지막 문서에서 죽었거나
+         남은 것이 전부 워드였으면 다시 할 것이 없고, 그때의 새로고침 안내는 위 막대가 맡는다. -->
+    {#if editor.batchHalt === "panic" && running}
+      <span class="halted">{t.batch.haltedBusy}</span>
+    {:else if editor.batchHalt === "panic" && progress.halted > 0}
       <span class="halted">{t.batch.halted}</span>
       <button class="btn small danger" onclick={() => location.reload()}>
         <Icon name="refresh" size={15} />
@@ -44,7 +51,9 @@
     {/if}
 
     {#if running}
-      <button class="btn small" onclick={() => editor.stopBatch()}>{t.batch.stop}</button>
+      <button class="btn small" onclick={() => editor.stopBatch()} disabled={editor.batchStopping}>
+        {editor.batchStopping ? t.batch.stopping : t.batch.stop}
+      </button>
     {/if}
 
     <button
@@ -63,31 +72,35 @@
     </button>
   </div>
 
-  <ul class="list">
-    {#each editor.batch as item (item.id)}
-      <li class="row">
-        <span class="name" title={item.name}>{item.name}</span>
-        <span class="path" title={item.path}>{item.path}</span>
-        <span class="badge" data-status={item.status} title={item.reason ?? undefined}>
-          {#if item.status === "running"}<span class="spinner" aria-hidden="true"></span>{/if}
-          {t.batch.status[item.status]}
-        </span>
-      </li>
-    {/each}
-  </ul>
-</div>
+  <!-- 겹판은 목록 위에만 깐다 — 위 막대의 중단·닫기까지 덮으면 잠긴 문서 하나에
+       일괄 변환 전체가 갇힌다. -->
+  <div class="body">
+    <ul class="list">
+      {#each editor.batch as item (item.id)}
+        <li class="row">
+          <span class="name" title={item.name}>{item.name}</span>
+          <span class="path" title={item.path}>{item.path}</span>
+          <span class="badge" data-status={item.status} title={item.reason ?? undefined}>
+            {#if item.status === "running"}<span class="spinner" aria-hidden="true"></span>{/if}
+            {t.batch.status[item.status]}
+          </span>
+        </li>
+      {/each}
+    </ul>
 
-{#if editor.batchAsk}
-  <div class="scrim">
-    <PasswordDialog
-      wrong={editor.batchAsk.wrong}
-      fileName={editor.batchAsk.name}
-      cancelLabel={t.batch.skip}
-      submit={(password) => editor.answerBatchPassword(password)}
-      cancel={() => editor.answerBatchPassword(null)}
-    />
+    {#if editor.batchAsk}
+      <div class="scrim">
+        <PasswordDialog
+          wrong={editor.batchAsk.wrong}
+          fileName={editor.batchAsk.name}
+          cancelLabel={t.batch.skip}
+          submit={(password) => editor.answerBatchPassword(password)}
+          cancel={() => editor.answerBatchPassword(null)}
+        />
+      </div>
+    {/if}
   </div>
-{/if}
+</div>
 
 <style>
   .batch {
@@ -140,6 +153,14 @@
   .halted {
     color: var(--text-muted);
     font-size: var(--text-xs);
+  }
+
+  /* 겹판이 기대는 상자 — 위 막대는 이 바깥이라 언제나 누를 수 있다. */
+  .body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
   }
 
   .list {

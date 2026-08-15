@@ -15,6 +15,13 @@ export interface Unsupported {
 
 export type Detected = { kind: DocKind } | Unsupported;
 
+/**
+ * `detect`에 건네야 할 앞부분 길이. HWP 5.0 서명이 헤더 스트림 안에 있어 512바이트 밖일 수
+ * 있으므로 넉넉히 본다. 부르는 쪽마다 다른 숫자를 적으면 같은 파일이 자리에 따라 다르게
+ * 판별될 수 있어 한 곳에 둔다.
+ */
+export const HEAD_BYTES = 4096;
+
 const CFB = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 const ZIP = [0x50, 0x4b, 0x03, 0x04];
 
@@ -39,7 +46,7 @@ function firstZipEntryName(bytes: Uint8Array): string {
 function looksLikeHwp5(bytes: Uint8Array): boolean {
   // 서명 "HWP Document File"은 헤더 스트림 안에 있어 앞 512바이트 밖일 수 있다.
   // 넉넉히 훑어서 있으면 hwp로 본다.
-  const text = ascii(bytes, 0, Math.min(bytes.length, 4096));
+  const text = ascii(bytes, 0, Math.min(bytes.length, HEAD_BYTES));
   return text.includes("HWP Document File");
 }
 

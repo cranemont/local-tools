@@ -67,7 +67,9 @@
         <Icon name="refresh" size={15} />
         {t.engine.retry}
       </button>
-    {:else if editor.engine === "broken"}
+    {:else if editor.engine === "broken" && !editor.batchRunning}
+      <!-- 일괄 변환이 도는 중에는 내놓지 않는다 — 엔진이 죽어도 워드는 이어서 옮겨지는데,
+           여기서 새로고침하면 이미 옮긴 결과를 통째로 잃는다. 그동안의 안내는 목록이 맡는다. -->
       <button class="btn small danger" onclick={() => location.reload()} title={t.engine.broken}>
         <Icon name="refresh" size={15} />
         {t.engine.reload}

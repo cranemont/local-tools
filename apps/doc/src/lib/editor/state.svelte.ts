@@ -17,7 +17,7 @@ import {
   watchEngine,
 } from "../doc/engine";
 import type { EngineStatus } from "../doc/engine";
-import { detect } from "../doc/detect";
+import { HEAD_BYTES, detect } from "../doc/detect";
 import type { DocKind } from "../doc/detect";
 import {
   PasswordRequiredError,
@@ -50,8 +50,18 @@ import { docxHtml, renderDocx } from "../doc/docx";
 import { headingsOf, htmlToMarkdown } from "../doc/markdown";
 import type { ExtractedImage } from "../doc/markdown";
 import { saveBytes, saveMarkdown, saveZip, withExtension } from "../doc/save";
-import { haltRest, outputsOf, planBatch, setStatus, zipEntries } from "../doc/batch";
-import type { BatchItem, ZipEntry } from "../doc/batch";
+import {
+  haltEngineBound,
+  haltRest,
+  isRunning,
+  mergeHalt,
+  nextStep,
+  outputsOf,
+  planBatch,
+  setStatus,
+  zipEntries,
+} from "../doc/batch";
+import type { BatchItem, HaltCause, ZipEntry } from "../doc/batch";
 import { t } from "../i18n";
 
 export type Stage = "empty" | "opening" | "locked" | "ready" | "error" | "batch";
@@ -148,9 +158,14 @@ class EditorState {
   /** 여러 개를 놓았을 때의 목록. 편집기 대신 이 목록이 화면을 차지한다. */
   batch = $state<BatchItem[]>([]);
   /** 왜 멈췄는가 — 엔진 패닉이면 새로고침을 권하고, 사용자가 멈춘 것이면 그냥 멈춘다. */
-  batchHalt = $state<"panic" | "stopped" | null>(null);
+  batchHalt = $state<HaltCause | null>(null);
   /** 지금 비밀번호를 묻고 있는 파일(일괄 변환 중). 이 파일 하나만 기다린다. */
   batchAsk = $state<{ name: string; wrong: boolean } | null>(null);
+  /**
+   * 중단을 눌렀는가. 지금 돌고 있는 문서는 끝까지 가므로 목록은 한동안 그대로인데,
+   * 그 사이에도 **눌린 사실은 보여야 한다** — 화면이 이 값으로 버튼을 잠근다.
+   */
+  batchStopping = $state(false);
 
   private doc: HwpDocument | null = null;
   private bytes: Uint8Array | null = null;
@@ -162,7 +177,6 @@ class EditorState {
   private batchOutputs = new Map<number, ZipEntry[]>();
   /** 비밀번호 물음에 답할 자리 — 화면이 부르면 기다리던 변환이 이어진다. */
   private batchAnswer: ((password: string | null) => void) | null = null;
-  private batchStopped = false;
   /**
    * 몇 번째 일괄 변환인가. 도는 도중에 닫거나 새로 시작하면 이 값이 올라가고,
    * 뒤늦게 끝난 옛 작업은 자기 번호가 아닌 걸 보고 화면에 손대지 않는다.
@@ -224,7 +238,7 @@ class EditorState {
     this.batchOutputs = new Map();
     this.batchHalt = null;
     this.batchAsk = null;
-    this.batchStopped = false;
+    this.batchStopping = false;
   }
 
   /** 고쳐 놓고 저장하지 않았으면 한 번 묻는다 — 되돌릴 수 없는 일이므로. */
@@ -240,7 +254,7 @@ class EditorState {
     this.fileSize = file.size;
 
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const found = detect(file.name, bytes.subarray(0, 4096));
+    const found = detect(file.name, bytes.subarray(0, HEAD_BYTES));
     if (found.kind === null) {
       this.kind = null;
       this.error = found.reason;
@@ -337,27 +351,49 @@ class EditorState {
     await this.runBatch(files, run);
   }
 
+  /**
+   * 큐가 빌 때까지 앞에서부터 하나씩. 차례도, 갈래도 **`nextStep`이 고른다** — 인덱스로 세면
+   * 패닉으로 굳힌 항목을 건너뛰는 규칙이 이 루프 안에 또 생기고, 갈래를 여기서 늘어놓으면
+   * "패닉이 중단보다 먼저"라는 순서가 테스트에 잡히지 않는다.
+   */
   private async runBatch(files: File[], run: number): Promise<void> {
-    for (let id = 0; id < files.length; id++) {
+    for (;;) {
       if (run !== this.batchRun) return;
-      if (this.batchStopped) {
-        this.haltBatch("stopped", t.batch.reason.stopped);
-        return;
+
+      const step = nextStep(this.batch, {
+        engineBroken: engineStatus() === "broken",
+        // 이미 굳혔으면 다시 굳히지 않는다 — 그대로 돌면 같은 자리를 무한히 다시 밟는다.
+        frozen: this.batchHalt === "panic",
+        stopping: this.batchStopping,
+      });
+
+      if (step.kind === "finish") return;
+
+      // 엔진이 이미 죽었으면(앞 문서가 죽였다) 한글 문서는 시도조차 못 한다.
+      // 워드는 rhwp를 타지 않으므로 그대로 이어서 옮긴다 — 한 번만 가르고 다시 고른다.
+      if (step.kind === "freeze") {
+        // 굳히지 못했으면(중간에 새 작업이 시작됐다) 이 바퀴는 여기서 접는다.
+        if (!(await this.haltAfterPanic(files, run))) return;
+        continue;
       }
-      // 엔진이 이미 죽었으면(앞 문서가 죽였다) 남은 것은 시도조차 못 한다.
-      if (engineStatus() === "broken") {
-        this.haltBatch("panic", t.batch.reason.halted);
+
+      if (step.kind === "halt") {
+        this.haltBatch(
+          step.cause,
+          step.cause === "panic" ? t.batch.reason.halted : t.batch.reason.stopped,
+        );
         return;
       }
 
+      const id = step.item.id;
       this.batch = setStatus(this.batch, id, "running");
       await nextFrame();
       if (run !== this.batchRun) return;
 
       try {
-        const outputs = await this.convertOne(files[id], this.batch[id]);
+        const outputs = await this.convertOne(files[id], step.item);
         if (run !== this.batchRun) return;
-        if (outputs === null && this.batchStopped) {
+        if (outputs === null && this.batchStopping) {
           // 비밀번호를 묻던 중에 멈춘 것이다 — 이 문서도 '건너뜀'이 아니라 '못 함'이다.
           this.haltBatch("stopped", t.batch.reason.stopped);
           return;
@@ -371,24 +407,49 @@ class EditorState {
       } catch (error) {
         if (run !== this.batchRun) return;
         const message = error instanceof Error ? error.message : String(error);
-        // 이 문서는 진짜로 실패했다. 다만 엔진까지 죽였다면 뒤는 손댈 수조차 없다 —
-        // 그 문서들을 '실패'로 세면 거짓말이므로 여기서 멈추고 '못 함'으로 남긴다.
+        // 이 문서는 진짜로 실패했다. 엔진까지 죽였다면 남은 한글 문서는 다음 바퀴에서
+        // '못 함'으로 갈린다 — 그것들을 '실패'로 세면 거짓말이다.
         this.batch = setStatus(this.batch, id, "failed", message);
-        if (engineStatus() === "broken") {
-          this.haltBatch("panic", t.batch.reason.halted);
-          return;
-        }
       }
     }
   }
 
   /**
+   * 엔진이 죽은 뒤 남은 목록을 종류로 가른다. 한글 문서만 '못 함'이고, 워드는 대기로 남아
+   * 이어서 옮겨진다(순수 JS 경로라 패닉과 무관하다).
+   *
+   * 한 개씩 뒤집지 않고 **한 번에** 굳힌다 — 워드 열 개를 옮기는 내내 한글 항목이 하나씩
+   * '못 함'으로 변하면 목록이 요동치고, 무엇이 남았는지 읽을 수 없다.
+   * 종류는 확장자가 아니라 앞부분 바이트로 가른다(이름이 틀린 문서가 죽은 엔진을 또 부르지
+   * 않게). `batchHalt`는 마지막에 굳혀, 도중에 새 작업이 시작되면 그쪽을 건드리지 않는다 —
+   * 그렇게 접었을 때 false다.
+   */
+  private async haltAfterPanic(files: File[], run: number): Promise<boolean> {
+    const kinds = new Map<number, DocKind | null>();
+    for (const item of this.batch) {
+      const file = files[item.id];
+      if (!file || (item.status !== "pending" && item.status !== "running")) continue;
+      const head = new Uint8Array(await file.slice(0, HEAD_BYTES).arrayBuffer());
+      if (run !== this.batchRun) return false;
+      kinds.set(item.id, detect(item.name, head).kind);
+    }
+
+    this.batch = haltEngineBound(
+      this.batch,
+      (item) => kinds.get(item.id) ?? null,
+      t.batch.reason.halted,
+    );
+    this.batchHalt = mergeHalt(this.batchHalt, "panic");
+    return true;
+  }
+
+  /**
    * 문서 하나를 ZIP 항목으로. 비밀번호를 물었는데 건너뛰면 null이다(실패가 아니다).
-   * 워드 문서는 rhwp를 타지 않으므로 패닉과 무관하다.
+   * 워드 문서는 rhwp를 타지 않으므로 패닉과 무관하다 — 엔진이 죽은 뒤에도 여기로 온다.
    */
   private async convertOne(file: File, item: BatchItem): Promise<ZipEntry[] | null> {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const found = detect(file.name, bytes.subarray(0, 4096));
+    const found = detect(file.name, bytes.subarray(0, HEAD_BYTES));
     if (found.kind === null) throw new Error(found.reason);
 
     if (found.kind === "docx") {
@@ -437,18 +498,32 @@ class EditorState {
     this.batchAnswer?.(password);
   }
 
-  /** 남은 것을 '못 함'으로 굳힌다 — 이미 끝난 것은 그대로 남는다. */
-  private haltBatch(cause: "panic" | "stopped", reason: string): void {
+  /**
+   * 남은 것을 종류 가리지 않고 '못 함'으로 굳힌다 — 이미 끝난 것은 그대로 남는다.
+   * 사용자가 중단한 경우다. 이유는 겹칠 수 있으므로 덮어쓰지 않고 합친다(패닉이 이긴다).
+   */
+  private haltBatch(cause: HaltCause, reason: string): void {
     this.batch = haltRest(this.batch, reason);
-    this.batchHalt = cause;
+    this.batchHalt = mergeHalt(this.batchHalt, cause);
+    // 물음이 떠 있으면 **풀어 주고** 나간다. 참조만 버리면 그것을 기다리던 변환이
+    // 영원히 매달린 채 남는다(그 안에서 연 문서도 닫히지 않는다).
+    this.batchAnswer?.(null);
     this.batchAsk = null;
-    this.batchAnswer = null;
   }
 
   /** 사용자가 멈춘다. 기다리던 비밀번호 물음이 있으면 그것부터 풀어 준다. */
   stopBatch(): void {
-    this.batchStopped = true;
+    this.batchStopping = true;
     this.batchAnswer?.(null);
+  }
+
+  /**
+   * 목록이 아직 도는가. **새로고침을 권해도 되는 때인지**가 이 값으로 갈린다 —
+   * 패닉 뒤에도 워드는 이어서 옮겨지는데, 그때 새로고침하면 이미 옮긴 것을 통째로 잃는다.
+   * 그래서 이 목록의 배너뿐 아니라 위 막대의 엔진 버튼(App.svelte)도 이 값으로 숨는다.
+   */
+  get batchRunning(): boolean {
+    return this.stage === "batch" && isRunning(this.batch);
   }
 
   /** 지금까지 성공한 것만 ZIP 한 개로. 하나도 없으면 만들지 않는다. */

@@ -13,9 +13,18 @@
  *    죽어서 그 뒤 모든 호출이 실패한다(CLAUDE.md 17번). 3번째 파일에서 죽었는데 4~20번을
  *    "실패"로 세면 거짓말이다 — 그 문서들은 시도조차 못 했다. 그래서 손대지 못한 것은
  *    `halted`로 따로 세고, 이미 성공한 것은 그대로 남겨 ZIP으로 내려받게 한다.
+ *
+ *    다만 **발이 묶이는 것은 rhwp를 타는 문서뿐이다**(`needsEngine`). 워드는 mammoth·
+ *    turndown뿐인 순수 JS 경로라 엔진이 죽어도 멀쩡히 옮겨진다 — 스무 개 중 하나가 엔진을
+ *    죽였다고 워드 열다섯 개까지 '못 함'으로 세면 그것도 거짓말이다.
  */
 
+import type { DocKind } from "./detect";
+
 export type BatchStatus = "pending" | "running" | "done" | "failed" | "skipped" | "halted";
+
+/** 큐가 멈춘 이유. 화면이 새로고침을 권할지 말지가 여기서 갈린다. */
+export type HaltCause = "panic" | "stopped";
 
 export interface BatchItem {
   /** 목록에서의 자리이자 안정된 키 — 큐는 순서를 바꾸지 않는다. */
@@ -153,28 +162,121 @@ export function setStatus(
   );
 }
 
+/** 아직 손을 못 뗀 것 — 대기이거나 변환 중이거나. */
+const unfinished = (item: BatchItem): boolean =>
+  item.status === "pending" || item.status === "running";
+
+function haltedItem(item: BatchItem, reason: string): BatchItem {
+  return {
+    id: item.id,
+    name: item.name,
+    folder: item.folder,
+    path: item.path,
+    status: "halted",
+    reason,
+  };
+}
+
 /**
  * 남은 것을 **'못 함'으로** 굳힌다. 이미 끝난 것(완료·실패·건너뜀)은 건드리지 않는다.
  * 엔진이 죽은 뒤 손대지도 못한 문서를 '실패'로 세면 화면이 거짓말을 한다.
+ *
+ * 큐 전체를 세우는 것은 **사용자가 중단했을 때**다. 엔진 패닉은 종류를 가려야 하므로
+ * `haltEngineBound`로 간다.
  */
 export function haltRest(items: readonly BatchItem[], reason: string): BatchItem[] {
+  return items.map((item) => (unfinished(item) ? haltedItem(item, reason) : item));
+}
+
+/**
+ * 이 종류를 옮기는 데 한글 엔진(rhwp)이 필요한가 — **패닉에 발이 묶이는 것은 이것뿐**이다.
+ *
+ * 워드는 mammoth+turndown, 즉 순수 JS 경로라 wasm 인스턴스가 죽어도 그대로 돌아간다.
+ * 종류를 알 수 없는 파일(`null`)도 엔진을 기다리지 않는다 — 왜 못 여는지는 매직바이트만
+ * 보고도 말할 수 있으니 그 항목은 평소처럼 '실패'로 간다.
+ *
+ * 새 종류를 붙일 땐 여기에 명시적으로 더할 것. 빠뜨리면 조용히 "엔진 없이 된다"가 된다.
+ */
+export function needsEngine(kind: DocKind | null): boolean {
+  return kind === "hwp" || kind === "hwpx";
+}
+
+/**
+ * 엔진이 죽었다 — 남은 것 중 **한글 문서만** '못 함'으로 굳히고 워드는 대기 그대로 둔다.
+ * 그대로 남은 항목은 큐가 이어서 옮긴다(순차 규약은 `nextPending`이 그대로 지킨다).
+ *
+ * 종류는 확장자가 아니라 매직바이트로 가른 것이어야 한다(`detect`) — 메일로 온 문서는
+ * 이름이 자주 틀리는데, `.docx`라고 적힌 한글 문서를 계속 돌리면 죽은 엔진을 또 부른다.
+ */
+export function haltEngineBound(
+  items: readonly BatchItem[],
+  kindOf: (item: BatchItem) => DocKind | null,
+  reason: string,
+): BatchItem[] {
   return items.map((item) =>
-    item.status === "pending" || item.status === "running"
-      ? {
-          id: item.id,
-          name: item.name,
-          folder: item.folder,
-          path: item.path,
-          status: "halted" as const,
-          reason,
-        }
-      : item,
+    unfinished(item) && needsEngine(kindOf(item)) ? haltedItem(item, reason) : item,
   );
 }
 
-/** 다음에 손댈 항목(없으면 null). 순차 처리라 언제나 앞에서부터 하나씩이다. */
+/**
+ * 멈춘 이유는 겹칠 수 있다 — 패닉으로 한글이 묶인 뒤 워드를 이어 옮기는 동안 사용자가
+ * 중단을 누르는 경우다. 이때 **패닉이 이긴다**: 중단은 다시 놓으면 그만이지만 죽은 엔진은
+ * 새로고침 말고 살릴 길이 없고(CLAUDE.md 17번), `stopped`로 덮으면 화면에서 그 사실과
+ * 새로고침 버튼이 함께 사라진다.
+ */
+export function mergeHalt(current: HaltCause | null, next: HaltCause): HaltCause {
+  return current === "panic" || next === "panic" ? "panic" : next;
+}
+
+/**
+ * 다음에 손댈 항목(없으면 null). 순차 처리라 언제나 앞에서부터 하나씩이다.
+ *
+ * 일괄 변환 루프가 **실제로 이 차례를 따른다** — `nextStep`이 이 함수로 항목을 집고,
+ * `runBatch`는 그 결과만 본다. 그래서 패닉으로 굳힌 한글 문서는 저절로 건너뛰고 그 뒤의
+ * 워드가 다음 차례가 된다. 인덱스로 세는 루프로 되돌리면 "순차 처리다"라는 계약이
+ * 이 파일에서 사라진다.
+ */
 export function nextPending(items: readonly BatchItem[]): BatchItem | null {
   return items.find((item) => item.status === "pending") ?? null;
+}
+
+/** 루프가 다음에 할 일. `nextStep`이 고른다. */
+export type BatchStep =
+  | { kind: "convert"; item: BatchItem }
+  | { kind: "freeze" }
+  | { kind: "halt"; cause: HaltCause }
+  | { kind: "finish" };
+
+/** 루프 바깥에서 들어오는 신호들 — 큐만 봐서는 알 수 없는 것. */
+export interface BatchSignals {
+  /** rhwp가 패닉으로 죽었는가(`engineStatus() === "broken"`). */
+  engineBroken: boolean;
+  /** 그 사실을 목록에 이미 굳혔는가 — 두 번 굳히면 같은 자리를 무한히 다시 밟는다. */
+  frozen: boolean;
+  /** 사용자가 중단을 눌렀는가. */
+  stopping: boolean;
+}
+
+/**
+ * 큐가 다음에 할 일 하나. **갈래의 순서가 이 상태 기계의 전부**라 런타임 대신 여기에 둔다
+ * (`state.svelte.ts`의 `runBatch`가 이 함수로 갈래를 고른다).
+ *
+ *  - `finish` — 남은 것이 없다. 엔진이 죽었어도 굳힐 것이 없으면 그냥 끝이다.
+ *  - `freeze` — 엔진이 죽었다. 남은 것을 **종류로 갈라** 굳힐 차례다(`haltEngineBound`).
+ *  - `halt`   — 사용자가 중단했다. 남은 것을 종류 가리지 않고 굳힌다(`haltRest`).
+ *  - `convert`— 평소. 이 항목을 옮긴다.
+ *
+ * **패닉이 중단보다 먼저 온다.** 중단을 누른 그 문서가 엔진을 죽인 경우 중단부터 처리하면,
+ * 남은 한글 문서에 '중단해서 손대지 못했어요'라고 적히고 멈춘 이유도 `stopped`가 되어
+ * 화면에서 새로고침 버튼이 사라진다 — 엔진은 여전히 죽어 있는데. 굳히고 나면 그다음 바퀴에서
+ * 중단이 나머지를 마저 세우고, 이유는 `mergeHalt`가 패닉으로 지킨다.
+ */
+export function nextStep(items: readonly BatchItem[], signals: BatchSignals): BatchStep {
+  const item = nextPending(items);
+  if (!item) return { kind: "finish" };
+  if (signals.engineBroken && !signals.frozen) return { kind: "freeze" };
+  if (signals.stopping) return { kind: "halt", cause: "stopped" };
+  return { kind: "convert", item };
 }
 
 /** 아직 손댈 것이 남았는가. */

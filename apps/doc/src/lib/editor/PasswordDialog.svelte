@@ -37,7 +37,19 @@
     submit(password);
     password = "";
   }
+
+  /**
+   * Esc는 취소와 같다 — 일괄 변환에서는 이 물음이 목록 위를 덮고 있어서, 빠져나갈 길이
+   * 버튼 하나뿐이면 갇힌 것처럼 느껴진다. 셸의 단축키는 `ready` 단계에서만 도므로 겹치지 않는다.
+   */
+  function onKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    cancel();
+  }
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 <div class="wrap">
   <form class="card" onsubmit={onSubmit}>

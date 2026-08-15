@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  haltEngineBound,
   haltRest,
   isRunning,
+  mergeHalt,
+  needsEngine,
   nextPending,
+  nextStep,
   outputsOf,
   planBatch,
   progressOf,
@@ -11,7 +15,8 @@ import {
   setStatus,
   zipEntries,
 } from "../apps/doc/src/lib/doc/batch";
-import type { BatchItem, ZipEntry } from "../apps/doc/src/lib/doc/batch";
+import type { BatchItem, HaltCause, ZipEntry } from "../apps/doc/src/lib/doc/batch";
+import type { DocKind } from "../apps/doc/src/lib/doc/detect";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // apps/doc의 일괄 변환 명세.
@@ -21,6 +26,8 @@ import type { BatchItem, ZipEntry } from "../apps/doc/src/lib/doc/batch";
 //    똑같이 `images/1.png`라, 폴더로 가르지 않으면 뒤 문서가 앞 문서의 그림을 덮는다.
 //  ② 큐의 상태 — 특히 rhwp가 패닉한 뒤 **손대지 못한 문서를 '실패'로 세지 않는 것**
 //    (CLAUDE.md 17번). 시도조차 못 한 것을 실패로 세면 화면이 거짓말을 한다.
+//    그리고 발이 묶이는 것은 **rhwp를 타는 한글 문서뿐**이다 — 워드는 순수 JS 경로라
+//    엔진이 죽어도 계속 옮겨진다. 그 경계가 `needsEngine`·`haltEngineBound`다.
 //
 // 기대값은 구현을 베끼지 않고 손으로 적은 것이다.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -272,6 +279,314 @@ describe("패닉 뒤: 손대지 못한 것은 '실패'가 아니라 '못 함'이
     expect(isRunning(items)).toBe(false);
     expect(nextPending(items)).toBeNull();
     expect(progressOf(items).finished).toBe(5);
+  });
+});
+
+describe("패닉에 발이 묶이는 것은 rhwp를 타는 문서뿐이다", () => {
+  /**
+   * 종류는 **매직바이트로 가른 결과**가 들어온다(detect.ts). 이름에서 유도하지 않는 것이
+   * 요점이라, 여기서도 id별 표로 건넨다 — 메일로 온 문서는 확장자가 자주 틀린다.
+   */
+  const table =
+    (kinds: (DocKind | null)[]) =>
+    (item: BatchItem): DocKind | null =>
+      kinds[item.id] ?? null;
+
+  const REASON = "앞 문서에서 엔진이 멈췄어요";
+
+  it("한글 문서만 엔진을 탄다", () => {
+    expect(needsEngine("hwp")).toBe(true);
+    expect(needsEngine("hwpx")).toBe(true);
+    // 워드는 mammoth+turndown, 순수 JS 경로다.
+    expect(needsEngine("docx")).toBe(false);
+  });
+
+  it("종류를 알 수 없는 파일은 엔진을 기다리지 않는다", () => {
+    // 왜 못 여는지는 앞 몇 바이트만 보고 말할 수 있다 — 그 항목은 평소처럼 '실패'로 간다.
+    expect(needsEngine(null)).toBe(false);
+  });
+
+  it("남은 것이 전부 한글이면 전부 못 함이다", () => {
+    const items = haltEngineBound(
+      queue(["가.hwp", "나.hwpx", "다.hwp"], { 0: "failed" }),
+      table(["hwp", "hwpx", "hwp"]),
+      REASON,
+    );
+    expect(items.map((item) => item.status)).toEqual(["failed", "halted", "halted"]);
+    expect(items[1].reason).toBe(REASON);
+    expect(isRunning(items)).toBe(false);
+  });
+
+  it("남은 것이 전부 워드면 아무것도 굳지 않는다 — 큐가 그대로 이어 돈다", () => {
+    const before = queue(["가.hwp", "나.docx", "다.docx"], { 0: "failed" });
+    const after = haltEngineBound(before, table(["hwp", "docx", "docx"]), REASON);
+    expect(after.map((item) => item.status)).toEqual(["failed", "pending", "pending"]);
+    expect(after[1]).toBe(before[1]); // 손대지 않은 항목은 같은 객체다
+    expect(isRunning(after)).toBe(true);
+  });
+
+  it("섞여 있으면 한글만 굳고 워드는 대기로 남는다", () => {
+    const items = haltEngineBound(
+      queue(["가.hwp", "나.docx", "다.hwp", "라.docx"], { 0: "failed" }),
+      table(["hwp", "docx", "hwp", "docx"]),
+      REASON,
+    );
+    expect(items.map((item) => item.status)).toEqual(["failed", "pending", "halted", "pending"]);
+  });
+
+  it("남은 것이 하나도 없으면 아무 일도 없다", () => {
+    const before = queue(["가.hwp", "나.docx"], { 0: "done", 1: "failed" });
+    const after = haltEngineBound(before, table(["hwp", "docx"]), REASON);
+    expect(after.map((item) => item.status)).toEqual(["done", "failed"]);
+    expect(haltEngineBound([], table([]), REASON)).toEqual([]);
+  });
+
+  it("이미 끝난 것은 한글이어도 그대로다", () => {
+    const items = haltEngineBound(
+      queue(["가.hwp", "나.hwp", "다.hwp", "라.hwp"], {
+        0: "done",
+        1: "failed",
+        2: "skipped",
+      }),
+      table(["hwp", "hwp", "hwp", "hwp"]),
+      REASON,
+    );
+    expect(items.map((item) => item.status)).toEqual(["done", "failed", "skipped", "halted"]);
+  });
+
+  it("변환 중이던 한글 문서도 굳는다", () => {
+    const items = haltEngineBound(
+      queue(["가.hwp"], { 0: "running" }),
+      table(["hwp"]),
+      REASON,
+    );
+    expect(items[0].status).toBe("halted");
+  });
+
+  it("이름이 .docx인 한글 문서도 굳는다 — 가르는 것은 확장자가 아니다", () => {
+    const items = haltEngineBound(planBatch(["가짜.docx"]), table(["hwp"]), REASON);
+    expect(items[0].status).toBe("halted");
+  });
+
+  it("굳힌 뒤 다음 차례는 그 뒤의 워드다 — 루프가 nextPending으로 고른다", () => {
+    // 앞의 한글이 굳어 대기에서 빠지므로, 인덱스를 세지 않아도 저절로 워드가 걸린다.
+    const items = haltEngineBound(
+      queue(["가.hwp", "나.hwp", "다.docx", "라.hwp", "마.docx"], { 0: "failed" }),
+      table(["hwp", "hwp", "docx", "hwp", "docx"]),
+      REASON,
+    );
+    expect(nextPending(items)?.id).toBe(2);
+    expect(nextPending(setStatus(items, 2, "done"))?.id).toBe(4);
+  });
+});
+
+describe("루프의 갈래: 무엇을 먼저 보는가", () => {
+  // 런타임(state.svelte.ts의 runBatch)이 매 바퀴 이 함수 하나로 갈래를 고른다.
+  const calm = { engineBroken: false, frozen: false, stopping: false };
+  const names = ["가.hwp", "나.docx", "다.hwp"];
+
+  it("평소에는 앞에서부터 하나를 집는다", () => {
+    expect(nextStep(planBatch(names), calm)).toEqual({
+      kind: "convert",
+      item: planBatch(names)[0],
+    });
+    const step = nextStep(queue(names, { 0: "done" }), calm);
+    expect(step.kind === "convert" && step.item.id).toBe(1);
+  });
+
+  it("남은 것이 없으면 끝이다", () => {
+    expect(nextStep([], calm)).toEqual({ kind: "finish" });
+    expect(nextStep(queue(names, { 0: "done", 1: "failed", 2: "halted" }), calm)).toEqual({
+      kind: "finish",
+    });
+  });
+
+  it("마지막 문서에서 엔진이 죽어도 굳힐 것이 없으면 그냥 끝이다", () => {
+    // 남은 것이 없는데 굳히러 들어가면 파일을 다시 훑고도 아무것도 못 바꾼다.
+    const items = queue(names, { 0: "done", 1: "done", 2: "failed" });
+    expect(nextStep(items, { engineBroken: true, frozen: false, stopping: false })).toEqual({
+      kind: "finish",
+    });
+  });
+
+  it("엔진이 죽었으면 먼저 굳힌다", () => {
+    expect(nextStep(planBatch(names), { ...calm, engineBroken: true })).toEqual({ kind: "freeze" });
+  });
+
+  it("중단을 눌렀어도 굳히는 것이 먼저다 — 그러지 않으면 패닉이 화면에서 사라진다", () => {
+    // 중단을 누른 그 문서가 엔진을 죽인 경우다. 중단부터 처리하면 남은 한글이
+    // '중단해서 못 했어요'로 적히고 멈춘 이유도 stopped가 되어, 새로고침 버튼이 사라진다.
+    expect(nextStep(planBatch(names), { engineBroken: true, frozen: false, stopping: true })).toEqual(
+      { kind: "freeze" },
+    );
+  });
+
+  it("한 번 굳힌 뒤에는 다시 굳히지 않는다 — 워드가 이어서 차례를 받는다", () => {
+    // 굳은 뒤의 목록: 한글은 못 함, 워드만 대기로 남는다.
+    const items = queue(names, { 0: "halted", 2: "halted" });
+    const step = nextStep(items, { engineBroken: true, frozen: true, stopping: false });
+    expect(step.kind === "convert" && step.item.id).toBe(1);
+  });
+
+  it("굳힌 뒤에 중단하면 남은 워드를 세운다", () => {
+    const items = queue(names, { 0: "halted", 2: "halted" });
+    expect(nextStep(items, { engineBroken: true, frozen: true, stopping: true })).toEqual({
+      kind: "halt",
+      cause: "stopped",
+    });
+  });
+
+  it("엔진이 멀쩡한데 중단했으면 그대로 세운다", () => {
+    expect(nextStep(planBatch(names), { ...calm, stopping: true })).toEqual({
+      kind: "halt",
+      cause: "stopped",
+    });
+  });
+});
+
+describe("멈춘 이유가 겹칠 때: 패닉이 이긴다", () => {
+  it("패닉 뒤에 중단해도 패닉으로 남는다", () => {
+    // 'stopped'로 덮으면 화면에서 새로고침 버튼이 사라진다 — 엔진은 여전히 죽어 있는데.
+    expect(mergeHalt("panic", "stopped")).toBe("panic");
+  });
+
+  it("중단해 놓은 큐에서 패닉이 나면 패닉이 이긴다", () => {
+    expect(mergeHalt("stopped", "panic")).toBe("panic");
+  });
+
+  it("아직 이유가 없으면 온 것이 그대로 이유가 된다", () => {
+    expect(mergeHalt(null, "stopped")).toBe("stopped");
+    expect(mergeHalt(null, "panic")).toBe("panic");
+  });
+
+  it("같은 이유가 두 번 와도 그대로다", () => {
+    expect(mergeHalt("stopped", "stopped")).toBe("stopped");
+    expect(mergeHalt("panic", "panic")).toBe("panic");
+  });
+
+  it("패닉으로 한글이 굳은 뒤 중단하면, 남은 워드는 '중단'으로 굳고 이유는 패닉이다", () => {
+    let items = haltEngineBound(
+      queue(["가.hwp", "나.docx", "다.hwp"], { 0: "failed" }),
+      (item) => (["hwp", "docx", "hwp"] as DocKind[])[item.id],
+      "앞 문서에서 엔진이 멈췄어요",
+    );
+    expect(items[1].status).toBe("pending");
+
+    items = haltRest(items, "중단해서 손대지 못했어요");
+    expect(items.map((item) => item.status)).toEqual(["failed", "halted", "halted"]);
+    expect(items[1].reason).toBe("중단해서 손대지 못했어요");
+    expect(items[2].reason).toBe("앞 문서에서 엔진이 멈췄어요"); // 먼저 굳은 이유는 그대로다
+    expect(mergeHalt("panic", "stopped")).toBe("panic");
+  });
+
+  it("중단을 누른 그 문서가 엔진을 죽여도 새로고침 안내는 살아남는다", () => {
+    // 런타임이 부르는 순서 그대로 재생한다: 중단을 눌러 둔 채 0번이 패닉으로 실패하고,
+    // 다음 바퀴에서 nextStep이 무엇을 고르는가가 이 시나리오의 전부다.
+    const names = ["가.hwp", "나.docx", "다.hwp"];
+    const kinds: DocKind[] = ["hwp", "docx", "hwp"];
+    let items = setStatus(planBatch(names), 0, "failed", "문서 엔진이 멈췄어요");
+    let cause: HaltCause | null = null; // 아직 아무 이유도 굳지 않았다
+
+    // ① 중단이 눌린 채 엔진이 죽었다 → 굳히는 것이 먼저다.
+    const first = nextStep(items, { engineBroken: true, frozen: cause === "panic", stopping: true });
+    expect(first).toEqual({ kind: "freeze" });
+    items = haltEngineBound(items, (item) => kinds[item.id], "앞 문서에서 엔진이 멈췄어요");
+    cause = mergeHalt(cause, "panic");
+
+    // ② 그다음에야 중단이 남은 워드를 세운다.
+    const second = nextStep(items, {
+      engineBroken: true,
+      frozen: cause === "panic",
+      stopping: true,
+    });
+    expect(second).toEqual({ kind: "halt", cause: "stopped" });
+    items = haltRest(items, "중단해서 손대지 못했어요");
+    cause = mergeHalt(cause, "stopped");
+
+    expect(items.map((item) => item.status)).toEqual(["failed", "halted", "halted"]);
+    expect(items[2].reason).toBe("앞 문서에서 엔진이 멈췄어요"); // 한글은 '중단'이 아니다
+    expect(cause).toBe("panic"); // 화면의 새로고침 버튼이 여기에 달려 있다
+  });
+});
+
+describe("패닉을 지나 끝까지 간 일괄 변환", () => {
+  // 여섯 개를 놓았다. 세 번째(id 2)가 엔진을 죽이고, 워드 둘은 그 뒤에도 옮겨진다.
+  const names = ["가.hwp", "나.docx", "다.hwp", "라.docx", "마.hwp", "바.hwpx"];
+  const kinds: DocKind[] = ["hwp", "docx", "hwp", "docx", "hwp", "hwpx"];
+
+  /** 런타임(state.svelte.ts의 runBatch)이 부르는 것과 같은 순서로 재생한다. */
+  function replay(): { items: BatchItem[]; outputs: Map<number, ZipEntry[]> } {
+    let items = planBatch(names);
+    const outputs = new Map<number, ZipEntry[]>();
+
+    const finish = (id: number): void => {
+      items = setStatus(items, id, "running");
+      outputs.set(id, outputsOf(items[id], items[id].folder, [{ path: "images/1.png", bytes: bytes(1) }]));
+      items = setStatus(items, id, "done");
+    };
+
+    finish(nextPending(items)?.id ?? -1); // 0
+    finish(nextPending(items)?.id ?? -1); // 1
+    // 2가 엔진을 죽였다 — 그 문서 자신은 진짜로 실패다.
+    items = setStatus(items, 2, "failed", "문서 엔진이 멈췄어요");
+    // 남은 것을 종류로 한 번에 가른다.
+    items = haltEngineBound(items, (item) => kinds[item.id], "앞 문서에서 엔진이 멈췄어요");
+    // 그 뒤로도 워드는 차례가 온다.
+    finish(nextPending(items)?.id ?? -1); // 3
+    return { items, outputs };
+  }
+
+  it("한글은 못 함, 워드는 완료 — 패닉이 워드를 끌고 가지 않는다", () => {
+    expect(replay().items.map((item) => item.status)).toEqual([
+      "done",
+      "done",
+      "failed",
+      "done",
+      "halted",
+      "halted",
+    ]);
+  });
+
+  it("다 끝나야 남은 일이 없다 — 그때에야 새로고침을 권할 수 있다", () => {
+    const { items } = replay();
+    expect(isRunning(items)).toBe(false);
+    expect(nextPending(items)).toBeNull();
+  });
+
+  it("워드가 아직 남아 있는 동안은 '도는 중'이다", () => {
+    // 화면이 이 값으로 새로고침 버튼을 가린다 — 도는 중에 누르면 옮겨 놓은 것을 잃는다.
+    let items = planBatch(names);
+    items = setStatus(items, 0, "done");
+    items = setStatus(items, 1, "done");
+    items = setStatus(items, 2, "failed", "문서 엔진이 멈췄어요");
+    items = haltEngineBound(items, (item) => kinds[item.id], "앞 문서에서 엔진이 멈췄어요");
+    expect(isRunning(items)).toBe(true);
+    expect(nextPending(items)?.id).toBe(3);
+  });
+
+  it("진행률은 정직하다 — 완료 셋, 실패 하나, 못 함 둘", () => {
+    expect(progressOf(replay().items)).toMatchObject({
+      total: 6,
+      done: 3,
+      failed: 1,
+      halted: 2,
+      finished: 6,
+      percent: 100,
+    });
+  });
+
+  it("ZIP에는 패닉 앞뒤의 완료가 함께 담긴다", () => {
+    const { items, outputs } = replay();
+    expect(Object.keys(zipEntries(items, outputs) ?? {}).sort()).toEqual(
+      [
+        "가/가.md",
+        "가/images/1.png",
+        "나/나.md",
+        "나/images/1.png",
+        "라/라.md", // 패닉 뒤에 옮긴 워드 문서
+        "라/images/1.png",
+      ].sort(),
+    );
   });
 });
 
