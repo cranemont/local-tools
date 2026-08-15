@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fmtTime, t } from "../i18n";
+  import { freeIntervals } from "../video/segments";
   import { drawTimelineStrip } from "../video/thumbs";
   import { editor } from "./state.svelte";
 
@@ -38,11 +39,14 @@
   });
 
   // ── 위치 계산 ─────────────────────────────────────
-  const startPct = $derived(editor.duration ? (editor.trimStart / editor.duration) * 100 : 0);
-  const endPct = $derived(editor.duration ? (editor.trimEnd / editor.duration) * 100 : 100);
-  const playPct = $derived(
-    editor.duration ? Math.min(100, (editor.currentTime / editor.duration) * 100) : 0,
-  );
+  function pct(tS: number): number {
+    return editor.duration ? (tS / editor.duration) * 100 : 0;
+  }
+  const startPct = $derived(pct(editor.trimStart));
+  const endPct = $derived(editor.duration ? pct(editor.trimEnd) : 100);
+  const playPct = $derived(Math.min(100, pct(editor.currentTime)));
+  /** 어느 구간에도 안 덮인 자리 — 흐리게 깐다. 겹침이 있어도 한 번만 그린다. */
+  const gaps = $derived(freeIntervals(editor.segments, editor.duration));
   /** 무손실 모드에서만 키프레임 눈금 표시 (너무 많으면 생략). */
   const keyframeTicks = $derived(
     editor.cutMode === "lossless" && editor.duration && editor.keyframes.length <= 500
@@ -109,12 +113,27 @@
   onpointercancel={up}
 >
   <canvas bind:this={canvas} class="strip" style="height: {STRIP_H}px"></canvas>
-  {#each keyframeTicks as pct (pct)}
-    <div class="kf" style="left: {pct}%"></div>
+  {#each keyframeTicks as tick (tick)}
+    <div class="kf" style="left: {tick}%"></div>
   {/each}
-  <div class="shade" style="left: 0; width: {startPct}%"></div>
-  <div class="shade" style="left: {endPct}%; width: {100 - endPct}%"></div>
-  <div class="range" style="left: {startPct}%; width: {endPct - startPct}%"></div>
+  {#each gaps as gap (gap.start)}
+    <div
+      class="shade"
+      style="left: {pct(gap.start)}%; width: {pct(gap.end) - pct(gap.start)}%"
+    ></div>
+  {/each}
+  {#each editor.segments as seg, i (seg.id)}
+    <button
+      type="button"
+      class="range"
+      class:active={i === editor.activeIndex}
+      style="left: {pct(seg.start)}%; width: {pct(seg.end) - pct(seg.start)}%"
+      aria-label={t.panel.segmentPick(i + 1)}
+      onpointerdown={() => editor.selectSegment(i, false)}
+    >
+      {#if editor.isMultiSegment}<span class="ord">{i + 1}</span>{/if}
+    </button>
+  {/each}
   <div class="playhead" style="left: {playPct}%"></div>
   <div
     class="handle"
@@ -177,14 +196,34 @@
     opacity: 0.9;
     pointer-events: none;
   }
+  /* 구간 하나. 선택된 것만 테두리가 진하고, 나머지는 덮인 자리라는 표시만 한다. */
   .range {
     position: absolute;
     top: 0;
     bottom: 0;
-    border: 2px solid var(--accent);
-    border-left: 0;
-    border-right: 0;
-    pointer-events: none;
+    padding: 0;
+    border: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    cursor: pointer;
+  }
+  .range.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+  .ord {
+    position: absolute;
+    top: 2px;
+    left: 3px;
+    min-width: 15px;
+    padding: 0 3px;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    line-height: 15px;
+    font-variant-numeric: tabular-nums;
   }
   .playhead {
     position: absolute;

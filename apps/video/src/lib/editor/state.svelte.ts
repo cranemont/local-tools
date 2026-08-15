@@ -6,6 +6,14 @@ import {
   probeVideo,
   type VideoMeta,
 } from "../video/probe";
+import {
+  MIN_SEGMENT_S,
+  moveSegment,
+  nextSegmentSlot,
+  normalizeSegments,
+  totalLength,
+  type Segment,
+} from "../video/segments";
 import type {
   AudioFormatId,
   ContainerId,
@@ -14,8 +22,11 @@ import type {
   Rotation,
 } from "../video/transcode";
 
+/** 여러 구간을 어떻게 내보내는가. */
+export type ExportMode = "join" | "each";
+
 /** 트림 구간의 최소 길이(초). */
-export const MIN_RANGE_S = 0.1;
+export const MIN_RANGE_S = MIN_SEGMENT_S;
 /** "사실상 전체" 판정 여유(초) — 부동소수점·핸들 스냅 오차 흡수. */
 const FULL_EPS_S = 0.01;
 
@@ -40,8 +51,16 @@ export class EditorState {
   /** 같은 설정으로 이어서 처리할 대기 파일들(활성 파일 제외). */
   queue = $state<File[]>([]);
 
-  trimStart = $state(0);
-  trimEnd = $state(0);
+  /**
+   * 잘라 낼 구간 목록. 목록 순서가 곧 이어붙이는 순서다(segments.ts 첫머리 주석).
+   * 파일을 열면 전체를 덮는 구간 하나로 시작한다.
+   */
+  segments = $state<Segment[]>([]);
+  /** 핸들·시작/끝 입력이 건드리는 구간. */
+  activeIndex = $state(0);
+  exportMode = $state<ExportMode>("join");
+  #nextId = 1;
+
   /** 플레이헤드 위치(초) — Player가 갱신. */
   currentTime = $state(0);
   /** 구간 재생 중 여부 — trimEnd 도달 시 Player가 멈춘다. */
@@ -84,9 +103,18 @@ export class EditorState {
   cancelCurrent: (() => void) | null = null;
 
   readonly duration = $derived(this.meta?.durationS ?? 0);
+  /** 핸들이 붙은 구간. 목록이 비면 null. */
+  readonly active = $derived<Segment | null>(this.segments[this.activeIndex] ?? null);
+  readonly trimStart = $derived(this.active?.start ?? 0);
+  readonly trimEnd = $derived(this.active?.end ?? this.duration);
   readonly rangeLength = $derived(Math.max(0, this.trimEnd - this.trimStart));
+  readonly isMultiSegment = $derived(this.segments.length > 1);
+  /** 내보낼 총 길이 — 겹친 구간은 결과에 두 번 나오므로 두 번 센다. */
+  readonly segmentsTotal = $derived(totalLength(this.segments));
   readonly isTrimmed = $derived(
-    this.trimStart > FULL_EPS_S || this.trimEnd < this.duration - FULL_EPS_S,
+    this.segments.length > 1 ||
+      this.trimStart > FULL_EPS_S ||
+      this.trimEnd < this.duration - FULL_EPS_S,
   );
   /** 프레임 한 장의 길이(초) — 단축키·스텝 버튼의 보폭. */
   readonly frameStep = $derived(1 / (this.meta?.fps || FALLBACK_FPS));
@@ -112,7 +140,8 @@ export class EditorState {
       this.file = file;
       this.meta = meta;
       this.videoUrl = URL.createObjectURL(file);
-      this.trimEnd = meta.durationS;
+      this.segments = [{ id: this.#nextId++, start: 0, end: meta.durationS }];
+      this.activeIndex = 0;
       this.touch();
       // 키프레임 스캔은 편집을 막지 않도록 백그라운드로.
       void getKeyframeTimes(file).then((times) => {
@@ -156,8 +185,8 @@ export class EditorState {
     this.meta = null;
     this.videoUrl = "";
     this.queue = [];
-    this.trimStart = 0;
-    this.trimEnd = 0;
+    this.segments = [];
+    this.activeIndex = 0;
     this.currentTime = 0;
     this.rangePlaying = false;
     this.keyframes = [];
@@ -182,32 +211,98 @@ export class EditorState {
   }
 
   setTrimStart(v: number): void {
+    const seg = this.active;
+    if (!seg) return;
     const snapped = this.#snapToKeyframe(v);
-    const next = Math.min(Math.max(0, snapped), this.trimEnd - MIN_RANGE_S);
-    if (next === this.trimStart) return;
-    this.trimStart = next;
+    const next = Math.min(Math.max(0, snapped), seg.end - MIN_RANGE_S);
+    if (next === seg.start) return;
+    seg.start = next;
     this.touch();
   }
 
   setTrimEnd(v: number): void {
-    const next = Math.max(Math.min(this.duration, v), this.trimStart + MIN_RANGE_S);
-    if (next === this.trimEnd) return;
-    this.trimEnd = next;
+    const seg = this.active;
+    if (!seg) return;
+    const next = Math.max(Math.min(this.duration, v), seg.start + MIN_RANGE_S);
+    if (next === seg.end) return;
+    seg.end = next;
     this.touch();
   }
 
   resetTrim(): void {
     if (!this.isTrimmed) return;
-    this.trimStart = 0;
-    this.trimEnd = this.duration;
+    this.segments = [{ id: this.#nextId++, start: 0, end: this.duration }];
+    this.activeIndex = 0;
     this.touch();
+  }
+
+  // ── 구간 목록 ─────────────────────────────────────
+  // 겹침·순서 뒤바뀜을 여기서 고치지 않는다. 화면이 배지로 알리고 사용자가 정한다.
+
+  /** 재생 위치의 빈 자리에 구간을 하나 붙이고 그것을 선택한다. */
+  addSegment(): void {
+    const slot = nextSegmentSlot(this.segments, this.duration, this.currentTime);
+    if (!slot) return;
+    const start = this.#snapToKeyframe(slot.start);
+    this.segments = [
+      ...this.segments,
+      {
+        id: this.#nextId++,
+        start,
+        end: Math.max(slot.end, start + MIN_RANGE_S),
+      },
+    ];
+    this.activeIndex = this.segments.length - 1;
+    this.touch();
+  }
+
+  /** 구간 하나는 남긴다 — 목록이 비면 내보낼 것이 없어진다. */
+  removeSegment(index: number): void {
+    if (this.segments.length <= 1 || index < 0 || index >= this.segments.length) return;
+    this.segments = this.segments.filter((_, i) => i !== index);
+    // 앞의 것을 지우면 뒤 번호가 하나씩 당겨진다 — 보던 구간을 계속 보게 맞춘다.
+    const shifted = index < this.activeIndex ? this.activeIndex - 1 : this.activeIndex;
+    this.activeIndex = Math.min(Math.max(0, shifted), this.segments.length - 1);
+    this.touch();
+  }
+
+  /** 목록에서 delta칸 옮긴다 — 이어붙이는 순서가 바뀐다. */
+  moveSegmentBy(index: number, delta: number): void {
+    const to = index + delta;
+    if (to < 0 || to >= this.segments.length) return;
+    this.segments = moveSegment(this.segments, index, to);
+    if (this.activeIndex === index) this.activeIndex = to;
+    else if (this.activeIndex === to) this.activeIndex = index;
+    this.touch();
+  }
+
+  /** 구간을 고른다. 타임라인에서 누를 때는 클릭 지점으로 따로 이동하므로 seek을 끈다. */
+  selectSegment(index: number, seekToStart = true): void {
+    if (index < 0 || index >= this.segments.length) return;
+    this.activeIndex = index;
+    if (seekToStart) this.seek(this.segments[index].start);
+  }
+
+  setExportMode(mode: ExportMode): void {
+    if (mode === this.exportMode) return;
+    this.exportMode = mode;
+    this.touch();
+  }
+
+  /** 내보내기 직전의 구간 목록 — 경계 clamp·최소 길이 미만 제거를 거친 값. */
+  exportSegments(): Segment[] {
+    return normalizeSegments(this.segments, this.duration);
   }
 
   setCutMode(mode: CutMode): void {
     if (mode === this.cutMode) return;
     this.cutMode = mode;
     if (mode === "lossless") {
-      this.setTrimStart(this.trimStart); // 기존 시작점도 스냅
+      // 모든 구간의 시작을 키프레임으로 내린다 — 하나라도 어긋나면 복사가 아니라 재인코딩이 된다.
+      for (const seg of this.segments) {
+        const snapped = this.#snapToKeyframe(seg.start);
+        if (snapped !== seg.start) seg.start = Math.min(snapped, seg.end - MIN_RANGE_S);
+      }
       // 반전은 픽셀을 다시 그려야 해서 복사 경로에 없다 — 켜 둔 채 무시하지 않는다.
       this.flipH = false;
       this.flipV = false;

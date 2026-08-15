@@ -15,6 +15,8 @@
     | "pause"
     | "stepBack"
     | "stepForward"
+    | "arrowUp"
+    | "arrowDown"
     | "rotate"
     | "flipH"
     | "flipV"
@@ -78,6 +80,12 @@
   {:else if name === "stepForward"}
     <path d="m5 4 10 8-10 8V4Z" />
     <path d="M19 5v14" />
+  {:else if name === "arrowUp"}
+    <path d="M12 19V5" />
+    <path d="m6 11 6-6 6 6" />
+  {:else if name === "arrowDown"}
+    <path d="M12 5v14" />
+    <path d="m6 13 6 6 6-6" />
   {:else if name === "rotate"}
     <path d="M21 12a9 9 0 1 1-2.64-6.36" />
     <path d="M21 3v5h-5" />

@@ -2,11 +2,23 @@
   import type { AudioCodec } from "mediabunny";
   import Icon from "../Icon.svelte";
   import { fmtTime, t } from "../i18n";
+  import { concatSegments, containerAcceptsAudio } from "../video/concat";
   import { probeVideo, type VideoMeta } from "../video/probe";
   import { downloadBlob, formatBytes } from "../video/save";
   import {
+    checkLosslessConcat,
+    hasOverlap,
+    isOutOfOrder,
+    overallProgress,
+    segmentLength,
+    segmentWeights,
+    totalLength,
+    type Segment,
+  } from "../video/segments";
+  import {
     audioFormatCodec,
     AUDIO_FORMAT_IDS,
+    combineRotation,
     encodableAudioCodecs,
     extractAudio,
     isLosslessAudioCodec,
@@ -14,6 +26,7 @@
     rotatedSize,
     rotationBreaksCopy,
     transcodeMp4,
+    trimStartBreaksCopy,
     type AudioFormatId,
     type PresetId,
     type TranscodeOptions,
@@ -75,19 +88,68 @@
     return { w, h };
   });
 
+  // ── 구간 목록 ─────────────────────────────────────
+  /** 내보내기가 실제로 쓰는 목록 — 경계 clamp·최소 길이 미만 제거를 거친 값. */
+  const exportSegs = $derived(editor.exportSegments());
+  const joining = $derived(exportSegs.length > 1 && editor.exportMode === "join");
+  const overlapping = $derived(hasOverlap(editor.segments));
+  const reordered = $derived(isOutOfOrder(editor.segments));
+
   // ── "무손실"이라 적어 놓고 실제로는 굽는 경우 ─────
-  // 둘 다 조건이 참일 때만 배지로 뜬다. 화면이 조용히 거짓말하는 것을 막는 게 전부다.
+  // 조건이 참일 때만 배지로 뜬다. 화면과 산출물이 어긋나지 않게 하는 것이 전부다.
   /** 원본 코덱을 고른 컨테이너에 못 담아 재인코딩되는가. */
-  const losslessRecode = $derived(
-    editor.cutMode === "lossless" &&
-      editor.meta !== null &&
-      !losslessCompatible(editor.meta.videoCodec, editor.exportFormat),
+  const videoCodecFits = $derived(
+    editor.meta !== null &&
+      losslessCompatible(editor.meta.videoCodec, editor.exportFormat),
+  );
+  /**
+   * 파일에 적힌 회전 + 사용자가 더한 회전. 복사 판정은 이 합을 본다 — 세로로 찍은 영상은
+   * 회전을 안 걸어도 90이 적혀 있고, 그 값도 WebM에서는 픽셀에 구워야 한다.
+   */
+  const totalRotate = $derived(
+    combineRotation(editor.meta?.rotation ?? 0, editor.rotate),
   );
   /** 회전이 패킷 복사를 깨는가 (WebM은 회전 메타데이터를 안 쓴다). */
   const rotateBreaksCopy = $derived(
     editor.cutMode === "lossless" &&
-      rotationBreaksCopy(editor.rotate, editor.exportFormat),
+      rotationBreaksCopy(totalRotate, editor.exportFormat),
   );
+  /** 이어붙이기를 패킷 복사로 끝낼 수 있는가. */
+  const losslessCheck = $derived(
+    checkLosslessConcat({
+      segments: exportSegs,
+      keyframes: editor.keyframes,
+      videoCodecFits,
+      audioCodecFits:
+        editor.muteAudio ||
+        containerAcceptsAudio(editor.meta?.audioCodec ?? null, editor.exportFormat),
+      rotationBreaksCopy: rotationBreaksCopy(totalRotate, editor.exportFormat),
+    }),
+  );
+  /** 이어붙이기가 복사로 끝나는가 — 엔진 분기와 배지가 같은 값을 본다. */
+  const joinCopies = $derived(
+    joining && editor.cutMode === "lossless" && losslessCheck.copies,
+  );
+  /**
+   * "무손실"인데 재인코딩되는 이유. null이면 배지를 띄우지 않는다.
+   * 이어붙이기는 concat.ts가 패킷을 직접 옮기므로 키프레임만 맞으면 복사가 된다.
+   * 나머지 경로는 mediabunny Conversion이 맡는데, 시작을 자른 순간 복사가 꺼진다.
+   */
+  const recodeWhy = $derived.by(() => {
+    if (editor.cutMode !== "lossless" || !editor.meta) return null;
+    if (!videoCodecFits) return t.panel.badgeRecodeWhy;
+    if (rotateBreaksCopy) return t.panel.badgeRotateRecodeWhy;
+    if (joining) {
+      if (losslessCheck.copies) return null;
+      if (editor.keyframes.length === 0) return t.panel.badgeKeyframeScanWhy;
+      if (losslessCheck.misaligned.length > 0) return t.panel.badgeKeyframeWhy;
+      // 남는 조건은 소리뿐이다 — 컨테이너가 원본 오디오 코덱을 못 담는다.
+      return t.panel.badgeAudioRecodeWhy;
+    }
+    return exportSegs.some((s) => trimStartBreaksCopy(s.start))
+      ? t.panel.badgeTrimRecodeWhy
+      : null;
+  });
 
   /** 원본보다 작은 해상도 칩만 노출. */
   const resChips = $derived(
@@ -173,10 +235,19 @@
     return file.name.replace(/\.[^.]+$/, "") || "video";
   }
 
+  /** 진행률 표시 한 곳 — 오버레이 막대와 글자가 같은 값을 본다. */
+  function report(p: number) {
+    editor.progress = p;
+    editor.busyMsg = t.panel.encoding(Math.round(p * 100));
+  }
+
   // ── 인코딩 → 용량 확인 → 저장 ─────────────────────
   async function make() {
     if (!editor.file || !editor.meta || editor.busy) return;
     if (editor.isBatch) return void makeBatch();
+    const segs = exportSegs;
+    if (segs.length === 0) return;
+    if (segs.length > 1 && editor.exportMode === "each") return void makeEach(segs);
     editor.videoEl?.pause();
     editor.error = "";
     status = "";
@@ -184,19 +255,36 @@
     editor.progress = 0;
     editor.busyMsg = t.panel.encoding(0);
     const revision = editor.revision;
+    const meta = editor.meta;
+    const total = totalLength(segs);
     try {
-      const res = await transcodeMp4(editor.file, {
-        ...buildOptions(
-          editor.meta,
-          editor.isTrimmed ? { start: editor.trimStart, end: editor.trimEnd } : null,
-          editor.isTrimmed ? editor.rangeLength : editor.duration,
-        ),
-        onProgress: (p) => {
-          editor.progress = p;
-          editor.busyMsg = t.panel.encoding(Math.round(p * 100));
-        },
-        registerCancel: (cancel) => (editor.cancelCurrent = cancel),
-      });
+      const res =
+        segs.length > 1
+          ? await concatSegments({
+              file: editor.file,
+              segments: segs,
+              container: editor.exportFormat,
+              mute: editor.muteAudio,
+              copy: joinCopies,
+              rotate: editor.rotate,
+              // 이어붙일 조각은 언제나 같은 설정으로 다시 인코딩한다 — 조각마다 코덱
+              // 파라미터가 달라지면 2단계 remux가 거부한다. 복사 경로는 concat.ts가 따로 간다.
+              transcodeOptions: (seg) => ({
+                ...buildOptions(meta, { start: seg.start, end: seg.end }, total),
+                mode: "exact",
+              }),
+              onProgress: report,
+              registerCancel: (cancel) => (editor.cancelCurrent = cancel),
+            })
+          : await transcodeMp4(editor.file, {
+              ...buildOptions(
+                meta,
+                editor.isTrimmed ? { start: segs[0].start, end: segs[0].end } : null,
+                editor.isTrimmed ? segmentLength(segs[0]) : editor.duration,
+              ),
+              onProgress: report,
+              registerCancel: (cancel) => (editor.cancelCurrent = cancel),
+            });
       if (res.blob) {
         result = {
           blob: res.blob,
@@ -208,6 +296,58 @@
       } else {
         status = t.panel.canceled;
       }
+    } catch (err) {
+      editor.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      editor.busy = false;
+      editor.busyMsg = "";
+      editor.progress = null;
+      editor.cancelCurrent = null;
+    }
+  }
+
+  // ── 구간마다 한 파일 — 만드는 대로 하나씩 내려받는다 ──
+  // ZIP으로 묶지 않는 이유는 apps/video에 fflate가 없어서다(새 의존성은 apps/stack의
+  // 서드파티 목록 검사와 함께 움직여야 한다). 크롬은 첫 파일 뒤에 "여러 파일 다운로드"를
+  // 한 번 묻고, 허용하면 나머지가 이어서 내려온다.
+  async function makeEach(segs: Segment[]) {
+    if (!editor.file || !editor.meta) return;
+    editor.videoEl?.pause();
+    editor.error = "";
+    status = "";
+    result = null;
+    editor.busy = true;
+    editor.progress = 0;
+    const meta = editor.meta;
+    const weights = segmentWeights(segs);
+    let done = 0;
+    let aborted = false;
+    try {
+      for (let i = 0; i < segs.length; i++) {
+        if (aborted) break;
+        editor.busyMsg = t.panel.batchProgress(i + 1, segs.length);
+        const res = await transcodeMp4(editor.file, {
+          // 파일이 구간마다 하나씩 나오므로 타깃 용량·비트레이트는 그 구간 길이로 역산한다.
+          // 합계 길이를 넘기면 파일마다 타깃의 (구간 길이/합계)만큼만 나온다.
+          ...buildOptions(
+            meta,
+            { start: segs[i].start, end: segs[i].end },
+            segmentLength(segs[i]),
+          ),
+          onProgress: (p) => (editor.progress = overallProgress(weights, i, p)),
+          registerCancel: (cancel) =>
+            (editor.cancelCurrent = () => {
+              aborted = true;
+              cancel();
+            }),
+        });
+        if (!res.blob) break;
+        downloadBlob(res.blob, `${cleanName()}-${i + 1}.${editor.exportFormat}`);
+        done++;
+      }
+      const parts = done > 0 ? [t.panel.batchDone(done)] : [];
+      if (done < segs.length) parts.push(t.panel.canceled);
+      status = parts.join(" · ");
     } catch (err) {
       editor.error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -356,6 +496,85 @@
         </span>
       {/if}
     </div>
+    <!-- 목록 순서가 곧 이어붙이는 순서다. 위/아래 버튼이 그 순서를 바꾼다. -->
+    <ul class="seglist">
+      {#each editor.segments as seg, i (seg.id)}
+        <li class="segrow" class:active={i === editor.activeIndex}>
+          <button
+            type="button"
+            class="segpick"
+            aria-label={t.panel.segmentPick(i + 1)}
+            aria-pressed={i === editor.activeIndex}
+            onclick={() => editor.selectSegment(i)}
+          >
+            <span class="ord">{i + 1}</span>
+            <span class="segtime">{fmtTime(seg.start)}–{fmtTime(seg.end)}</span>
+          </button>
+          {#if editor.isMultiSegment}
+            <button
+              type="button"
+              class="icon-btn tool"
+              aria-label={t.panel.segmentUp}
+              title={t.panel.segmentUp}
+              disabled={i === 0}
+              onclick={() => editor.moveSegmentBy(i, -1)}
+            >
+              <Icon name="arrowUp" size={13} />
+            </button>
+            <button
+              type="button"
+              class="icon-btn tool"
+              aria-label={t.panel.segmentDown}
+              title={t.panel.segmentDown}
+              disabled={i === editor.segments.length - 1}
+              onclick={() => editor.moveSegmentBy(i, 1)}
+            >
+              <Icon name="arrowDown" size={13} />
+            </button>
+            <button
+              type="button"
+              class="icon-btn tool"
+              aria-label={t.panel.segmentRemove}
+              title={t.panel.segmentRemove}
+              onclick={() => editor.removeSegment(i)}
+            >
+              <Icon name="trash" size={13} />
+            </button>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+
+    <div class="chiprow">
+      <button
+        type="button"
+        class="btn small ghost"
+        onclick={() => editor.addSegment()}
+        disabled={editor.duration <= 0}
+      >
+        <Icon name="plus" size={13} /> {t.panel.segmentAdd}
+      </button>
+      {#if editor.isTrimmed}
+        <!-- 구간이 여럿일 땐 목록까지 지운다 — 되돌리기가 없으니 title로 미리 적는다. -->
+        <button
+          type="button"
+          class="btn small ghost"
+          title={editor.isMultiSegment ? t.panel.trimResetWhy : undefined}
+          onclick={() => editor.resetTrim()}
+        >
+          {t.panel.trimReset}
+        </button>
+      {/if}
+      {#if overlapping}
+        <span class="badge" title={t.panel.badgeOverlapWhy}>{t.panel.badgeOverlap}</span>
+      {/if}
+      {#if reordered}
+        <span class="badge" title={t.panel.badgeReorderedWhy}>
+          {t.panel.badgeReordered}
+        </span>
+      {/if}
+    </div>
+
     <div class="row">
       <label class="lbl" for="trim-start">{t.panel.trimStart}</label>
       <input
@@ -385,13 +604,35 @@
       />
     </div>
     <div class="row">
-      <span class="info">{t.panel.trimLength(fmtTime(editor.rangeLength))}</span>
-      {#if editor.isTrimmed}
-        <button type="button" class="btn small ghost" onclick={() => editor.resetTrim()}>
-          {t.panel.trimReset}
-        </button>
-      {/if}
+      <span class="info">
+        {#if editor.isMultiSegment}
+          {t.panel.segmentTotal(editor.segments.length, fmtTime(editor.segmentsTotal))}
+        {:else}
+          {t.panel.trimLength(fmtTime(editor.rangeLength))}
+        {/if}
+      </span>
     </div>
+
+    {#if editor.isMultiSegment}
+      <div class="chips" role="group" aria-label={t.panel.exportOrder}>
+        <button
+          type="button"
+          class="chip"
+          class:active={editor.exportMode === "join"}
+          onclick={() => editor.setExportMode("join")}
+        >
+          {t.panel.exportJoin}
+        </button>
+        <button
+          type="button"
+          class="chip"
+          class:active={editor.exportMode === "each"}
+          onclick={() => editor.setExportMode("each")}
+        >
+          {t.panel.exportEach}
+        </button>
+      </div>
+    {/if}
   </section>
 
   <!-- 컷 방식 -->
@@ -594,10 +835,8 @@
           WebM
         </button>
       </div>
-      {#if losslessRecode}
-        <span class="badge warn" title={t.panel.badgeRecodeWhy}>
-          {t.panel.badgeRecode}
-        </span>
+      {#if recodeWhy}
+        <span class="badge warn" title={recodeWhy}>{t.panel.badgeRecode}</span>
       {/if}
     </div>
     {#if editor.meta?.hasAudio}
@@ -627,11 +866,15 @@
       type="button"
       class="btn primary"
       onclick={make}
-      disabled={editor.busy || !editor.file}
+      disabled={editor.busy || !editor.file || (!editor.isBatch && exportSegs.length === 0)}
     >
       <Icon name="film" size={15} />
       {#if editor.isBatch}
         {t.panel.batchAction(editor.batch.length, fmtLabel)}
+      {:else if exportSegs.length > 1}
+        {editor.exportMode === "each"
+          ? t.panel.eachAction(exportSegs.length, fmtLabel)
+          : t.panel.joinAction(exportSegs.length, fmtLabel)}
       {:else}
         {result ? t.panel.reEncode : t.panel.encodeAction(fmtLabel)}
       {/if}
@@ -662,7 +905,14 @@
   <!-- 소리만 저장 -->
   {#if editor.meta?.hasAudio}
     <section class="sec">
-      <h3>{t.panel.audio}</h3>
+      <div class="head">
+        <h3>{t.panel.audio}</h3>
+        {#if editor.isMultiSegment}
+          <span class="badge" title={t.panel.badgeAudioOneWhy}>
+            {t.panel.badgeAudioOne}
+          </span>
+        {/if}
+      </div>
       <div class="chips" role="group" aria-label={t.panel.audioFormat}>
         {#each audioFormats as id (id)}
           <button
@@ -764,6 +1014,64 @@
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     flex: 1;
+  }
+
+  /* 구간 목록 — 위에서 아래가 곧 이어붙이는 순서다. */
+  .seglist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3xs);
+  }
+  .segrow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3xs);
+    border-radius: var(--radius-sm);
+  }
+  .segrow.active {
+    background: var(--accent-weak);
+  }
+  .segpick {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    padding: var(--space-3xs) var(--space-2xs);
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: var(--text-sm);
+    text-align: left;
+    border-radius: var(--radius-sm);
+  }
+  .segrow.active .segpick {
+    color: var(--text);
+  }
+  .ord {
+    flex: none;
+    min-width: 16px;
+    padding: 0 var(--space-3xs);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .segrow.active .ord {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .segtime {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
 
   .chips {

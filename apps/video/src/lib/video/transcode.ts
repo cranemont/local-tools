@@ -63,9 +63,29 @@ export function losslessCompatible(
  */
 const ROTATION_METADATA: Record<ContainerId, boolean> = { mp4: true, webm: false };
 
-/** 무손실 컷인데 회전 때문에 패킷 복사가 깨지는지(= 조용히 재인코딩되는지). */
+/**
+ * 무손실 컷인데 회전 때문에 패킷 복사가 깨지는지(= 조용히 재인코딩되는지).
+ * 인자는 파일에 적힌 회전까지 더한 값이어야 한다 — mediabunny도 둘의 합으로 판정한다
+ * (conversion.js의 `totalRotation !== 0 && !canUseRotationMetadata`).
+ */
 export function rotationBreaksCopy(rotate: Rotation, container: ContainerId): boolean {
   return rotate !== 0 && !ROTATION_METADATA[container];
+}
+
+/** 파일에 적힌 회전 + 사용자가 더한 회전. 결과는 0·90·180·270 중 하나다. */
+export function combineRotation(innate: number, added: number): Rotation {
+  return ((((Math.round((innate + added) / 90) * 90) % 360) + 360) % 360) as Rotation;
+}
+
+/**
+ * 무손실 컷인데 시작을 잘라서 패킷 복사가 깨지는지.
+ * mediabunny의 Conversion은 `firstTimestamp < trim.start`면 재인코딩으로 넘어간다
+ * (mediabunny 1.52.3의 src/conversion.ts, needsTranscode 계산). 복사 경로가 앞쪽 패킷을
+ * 버릴 방법이 없어서다. 구간을 여럿 잇는 경로는 concat.ts가 패킷을 직접 옮기므로
+ * 이 제약을 받지 않는다.
+ */
+export function trimStartBreaksCopy(startS: number, firstTimestampS = 0): boolean {
+  return startS > firstTimestampS + 1e-6;
 }
 
 const PRESET_QUALITY: Record<PresetId, Quality> = {
