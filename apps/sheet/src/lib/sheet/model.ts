@@ -88,9 +88,9 @@ export function clearContents(sheet: SheetDoc, area: Area, rows?: number[]): voi
   }
 }
 
-/** 서식만 지운다. */
-export function clearStyles(sheet: SheetDoc, area: Area): void {
-  for (let r = area.top; r <= area.bottom; r++) {
+/** 서식만 지운다. `rows`를 주면 그 줄만(=필터가 걸린 표의 보이는 줄만). */
+export function clearStyles(sheet: SheetDoc, area: Area, rows?: number[]): void {
+  for (const r of rows ?? areaRows(area)) {
     for (let c = area.left; c <= area.right; c++) {
       const key = cellKey(r, c);
       const cell = sheet.cells.get(key);
@@ -103,13 +103,21 @@ export function clearStyles(sheet: SheetDoc, area: Area): void {
   }
 }
 
-/** 영역에 서식을 덮어쓴다. 값이 undefined인 키는 그 속성을 지운다는 뜻이다. */
-export function applyStyle(sheet: SheetDoc, area: Area, patch: Partial<CellStyle>): void {
+/**
+ * 영역에 서식을 덮어쓴다. 값이 undefined인 키는 그 속성을 지운다는 뜻이다.
+ * `rows`를 주면 그 줄만 — 필터가 걸린 표에서 **보이는 칸에만** 걸기 위한 것이다.
+ */
+export function applyStyle(
+  sheet: SheetDoc,
+  area: Area,
+  patch: Partial<CellStyle>,
+  rows?: number[],
+): void {
   // 표시 형식을 손대면 "원문 그대로 보이고 원문 그대로 나간다"는 약속이 깨진다 —
   // 사용자가 형식을 골랐다는 건 그 형식으로 보고 싶다는 뜻이므로 원문을 놓아 준다.
   const dropRaw = "numFmt" in patch;
 
-  for (let r = area.top; r <= area.bottom; r++) {
+  for (const r of rows ?? areaRows(area)) {
     for (let c = area.left; c <= area.right; c++) {
       const key = cellKey(r, c);
       const cell = sheet.cells.get(key) ?? { v: null };
@@ -140,10 +148,11 @@ export function applyStyle(sheet: SheetDoc, area: Area, patch: Partial<CellStyle
  * 전화번호·주민번호·송장번호 열이 수로 읽혔을 때 되돌리는 통로다. 원문이 남아
  * 있으면 그 원문이 그대로 값이 되므로 파일에 적힌 글자를 정확히 되찾는다.
  * 수식 셀은 건드리지 않는다(값이 아니라 식을 지우게 된다). 바뀐 칸 수를 준다.
+ * `rows`를 주면 그 줄만 — 보이는 글자를 값으로 굳히는 조작이라 서식과 같은 갈래다.
  */
-export function forceText(sheet: SheetDoc, area: Area): number {
+export function forceText(sheet: SheetDoc, area: Area, rows?: number[]): number {
   let changed = 0;
-  for (let r = area.top; r <= area.bottom; r++) {
+  for (const r of rows ?? areaRows(area)) {
     for (let c = area.left; c <= area.right; c++) {
       const key = cellKey(r, c);
       const cell = sheet.cells.get(key);
@@ -155,6 +164,39 @@ export function forceText(sheet: SheetDoc, area: Area): number {
     }
   }
   return changed;
+}
+
+/**
+ * 첫 줄을 아래로 채운다(Ctrl+D).
+ *
+ * `rows`가 채울 줄 **전부**다 — 맨 앞이 원본이고 나머지가 대상이다. 필터가 걸려
+ * 있으면 보이는 줄만 들어오므로 원본도 "화면에서 맨 위 줄"이 된다(엑셀과 같다).
+ * 수식은 원본과의 **실제 행 차이**만큼 옮긴다 — 건너뛴 숨은 줄만큼 어긋나면
+ * A2를 참조하던 식이 엉뚱한 줄을 가리킨다.
+ */
+export function fillDown(
+  sheet: SheetDoc,
+  area: Area,
+  rows: number[],
+  shift: (formula: string, dRow: number) => string,
+): void {
+  if (rows.length < 2) return;
+  const from = rows[0];
+  for (let c = area.left; c <= area.right; c++) {
+    const source = sheet.cells.get(cellKey(from, c));
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!source) {
+        sheet.cells.delete(cellKey(r, c));
+        continue;
+      }
+      putCell(sheet, r, c, {
+        v: source.v,
+        f: source.f ? shift(source.f, r - from) : undefined,
+        s: source.s,
+      });
+    }
+  }
 }
 
 /** 실제로 내용이 있는 범위. 비어 있으면 A1 한 칸. */

@@ -30,10 +30,14 @@ import {
 } from "../sheet/csv";
 import { exportText, readJson, type ExportFormat } from "../sheet/convert";
 import {
+  hiddenCovered,
+  rowsForOp,
+  spanRows,
   uniqueValues,
   visibleRows as filterRows,
   type ColumnFilter,
   type FilterColumn,
+  type FilterOp,
   type SheetFilter,
   type UniqueValue,
 } from "../sheet/filter";
@@ -46,6 +50,7 @@ import {
   deleteCols,
   deleteRows,
   deleteRowSet,
+  fillDown as fillDownRows,
   filterCellAt,
   forceText,
   getCell,
@@ -363,6 +368,34 @@ export class EditorState {
       out.push(rows[i]);
     }
     return out;
+  }
+
+  /**
+   * 이 조작이 실제로 닿을 행 번호. 필터가 없으면 **undefined**(=영역 전체)다.
+   *
+   * 어느 조작이 보이는 행만 다루고 어느 조작이 전부에 닿는지는 이 클래스가 정하지
+   * 않는다 — `filter.ts`의 `OP_SCOPE` 표 하나가 정하고, 조작들은 전부 여기를 지난다.
+   */
+  private rowsFor(op: FilterOp, area: Area): number[] | undefined {
+    const visible = this.visibleRowsIn(area);
+    if (!visible) return undefined;
+    return rowsForOp(op, area, visible);
+  }
+
+  /**
+   * 이 구간에 붙여 넣으면 덮이는 숨은 줄 수. 필터가 없으면 0.
+   *
+   * 붙여넣기는 갈래가 "전부"라 숨은 줄을 그냥 덮는다(엑셀과 같다) — 그 사실이
+   * 보이지 않으면 안 되므로 상태줄에 몇 줄을 덮었는지 띄우려고 센다.
+   */
+  private hiddenUnder(top: number, height: number): number {
+    const sheet = this.doc.sheets[this.doc.active];
+    const bottom = Math.min(top + height - 1, sheet.rows - 1);
+    if (bottom < top) return 0;
+    const span: Area = { top, left: 0, bottom, right: 0 };
+    const visible = this.visibleRowsIn(span);
+    if (!visible) return 0;
+    return hiddenCovered("paste", span, visible);
   }
 
   /** 걸러진 줄에 있는 행 번호를 가장 가까운 보이는 줄로 옮긴다. */
@@ -732,23 +765,25 @@ export class EditorState {
 
   /** Delete — 필터가 걸려 있으면 보이는 칸만 지운다(엑셀과 같다). */
   clearSelection(): void {
-    const rows = this.visibleRowsIn(this.selection);
+    const rows = this.rowsFor("clear", this.selection);
     this.mutate(() => {
-      clearContents(this.doc.sheets[this.doc.active], this.selection, rows ?? undefined);
+      clearContents(this.doc.sheets[this.doc.active], this.selection, rows);
     });
   }
 
   clearSelectionFormat(): void {
+    const rows = this.rowsFor("clearFormat", this.selection);
     this.mutate(() => {
-      clearStyles(this.doc.sheets[this.doc.active], this.selection);
+      clearStyles(this.doc.sheets[this.doc.active], this.selection, rows);
     }, { recalc: false });
   }
 
   // ── 서식 ─────────────────────────────────────────────────────
 
   applyFormat(patch: Partial<CellStyle>): void {
+    const rows = this.rowsFor("format", this.selection);
     this.mutate(() => {
-      applyStyle(this.doc.sheets[this.doc.active], this.selection, patch);
+      applyStyle(this.doc.sheets[this.doc.active], this.selection, patch, rows);
     }, { recalc: false });
   }
 
@@ -779,7 +814,7 @@ export class EditorState {
    */
   deleteRowsAt(): void {
     const area = this.selection;
-    const visible = this.visibleRowsIn(area);
+    const visible = this.rowsFor("deleteRows", area);
     if (visible) {
       if (visible.length === 0) return;
       this.mutate(() => {
@@ -904,10 +939,11 @@ export class EditorState {
       bottom: Math.min(area.bottom, used.bottom),
       right: Math.min(area.right, used.right),
     };
+    const rows = this.rowsFor("asText", target);
 
     let changed = 0;
     this.mutate(() => {
-      changed = forceText(sheet, target);
+      changed = forceText(sheet, target, rows);
       if (changed === 0) return false;
     });
     if (changed > 0) this.flash(t.edit.textDone(changed));
@@ -1012,11 +1048,7 @@ export class EditorState {
 
   /** 복사 대상 행 — 필터가 걸려 있으면 보이는 줄만 나간다(엑셀과 같다). */
   private copyRows(area: Area): number[] {
-    const visible = this.visibleRowsIn(area);
-    if (visible) return visible;
-    const out: number[] = [];
-    for (let r = area.top; r <= area.bottom; r++) out.push(r);
-    return out;
+    return this.rowsFor("copy", area) ?? spanRows(area);
   }
 
   /** 선택 영역을 TSV로 — 클립보드 텍스트이자 외부 앱과의 접점. */
@@ -1079,6 +1111,8 @@ export class EditorState {
   private pasteRich(clip: ClipBuffer): void {
     const target = this.cursor;
     const dCol = target.col - clip.area.left;
+    // 붙이기 전에 세어야 한다 — 붙이고 나면 그 줄이 필터에 걸릴지가 이미 달라져 있다.
+    const hidden = this.hiddenUnder(target.row, clip.cells.length);
 
     this.mutate(() => {
       const sheet = this.doc.sheets[this.doc.active];
@@ -1107,6 +1141,7 @@ export class EditorState {
         col: clamp(target.col + (clip.cells[0]?.length ?? 1) - 1, 0, MAX_COLS - 1),
       };
     });
+    if (hidden > 0) this.flash(t.filter.pasteHidden(hidden));
   }
 
   private pastePlain(text: string): void {
@@ -1118,6 +1153,7 @@ export class EditorState {
       .map((line) => splitDelimited(line, delimiter));
 
     const target = this.cursor;
+    const hidden = this.hiddenUnder(target.row, rows.length);
     this.mutate(() => {
       const sheet = this.doc.sheets[this.doc.active];
       rows.forEach((cols, r) => {
@@ -1138,6 +1174,7 @@ export class EditorState {
         col: clamp(target.col + Math.max(...rows.map((r) => r.length), 1) - 1, 0, MAX_COLS - 1),
       };
     });
+    if (hidden > 0) this.flash(t.filter.pasteHidden(hidden));
   }
 
   /** 붙여넣기·채우기가 시트 밖으로 나가면 시트를 넓힌다. */
@@ -1147,26 +1184,18 @@ export class EditorState {
     if (cols + 3 > sheet.cols) sheet.cols = Math.min(MAX_COLS, cols + 10);
   }
 
-  /** Ctrl+D — 선택 영역의 첫 줄을 아래로 채운다. */
+  /**
+   * Ctrl+D — 선택 영역의 첫 줄을 아래로 채운다.
+   * 필터가 걸려 있으면 **보이는 줄만** 채운다(엑셀과 같다) — 원본도 화면의 맨 위 줄이다.
+   */
   fillDown(): void {
     const area = this.selection;
-    if (areaHeight(area) < 2) return;
+    const rows = this.rowsFor("fillDown", area) ?? spanRows(area);
+    if (rows.length < 2) return;
     this.mutate(() => {
-      const sheet = this.doc.sheets[this.doc.active];
-      for (let c = area.left; c <= area.right; c++) {
-        const source = sheet.cells.get(cellKey(area.top, c));
-        for (let r = area.top + 1; r <= area.bottom; r++) {
-          if (!source) {
-            sheet.cells.delete(cellKey(r, c));
-            continue;
-          }
-          putCell(sheet, r, c, {
-            v: source.v,
-            f: source.f ? translateFormula(source.f, r - area.top, 0) : undefined,
-            s: source.s,
-          });
-        }
-      }
+      fillDownRows(this.doc.sheets[this.doc.active], area, rows, (f, dRow) =>
+        translateFormula(f, dRow, 0),
+      );
     });
   }
 
@@ -1405,7 +1434,10 @@ export class EditorState {
 
   // ── 찾기·바꾸기 ──────────────────────────────────────────────
 
-  /** 찾기. 걸러진 행은 결과에서 뺀다 — 갈 수 없는 자리를 세어 주면 개수만 거짓말이 된다. */
+  /**
+   * 찾기. 걸러진 행은 결과에서 뺀다 — 갈 수 없는 자리를 세어 주면 개수만 거짓말이 된다.
+   * 모두 바꾸기도 이 목록만 고치므로 갈래가 "보이는 행만"이다(`OP_SCOPE.replace`).
+   */
   findMatches(query: string, matchCase: boolean): Pos[] {
     void this.revision;
     if (!query) return [];

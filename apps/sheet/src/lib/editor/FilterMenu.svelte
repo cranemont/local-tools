@@ -1,3 +1,11 @@
+<script module lang="ts">
+  /**
+   * 메뉴 폭. 여는 쪽(Grid)이 단추 오른쪽에 맞춰 x를 잡을 때 같은 값을 써야 한다 —
+   * 예전엔 Grid가 244, 여기가 268이라 메뉴가 단추보다 24px 왼쪽에서 열렸다.
+   */
+  export const MENU_WIDTH = 268;
+</script>
+
 <script lang="ts">
   /**
    * 열 하나의 필터 메뉴.
@@ -113,7 +121,7 @@
   // ── 자리·닫기 ─────────────────────────────────────────────────
 
   const place = $derived.by(() => {
-    const width = 268;
+    const width = MENU_WIDTH;
     const height = 420;
     const left = Math.max(8, Math.min(x, window.innerWidth - width - 8));
     const top = Math.max(8, Math.min(y, window.innerHeight - height - 8));

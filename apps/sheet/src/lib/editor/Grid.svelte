@@ -19,7 +19,7 @@
   import Icon from "../Icon.svelte";
   import { areaContains, cellName } from "../sheet/a1";
   import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, isError } from "../sheet/types";
-  import FilterMenu from "./FilterMenu.svelte";
+  import FilterMenu, { MENU_WIDTH } from "./FilterMenu.svelte";
   import { editor } from "./state.svelte";
   import { t } from "../i18n";
 
@@ -195,7 +195,7 @@
     event.stopPropagation();
     if (closed.col === col && performance.now() - closed.at < 300) return;
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    menu = { col, x: rect.right - 244, y: rect.bottom + 4 };
+    menu = { col, x: rect.right - MENU_WIDTH, y: rect.bottom + 4 };
   }
 
   function hasFilter(col: number): boolean {
@@ -275,6 +275,9 @@
     if (!scroller) return;
     scrollTop = scroller.scrollTop;
     scrollLeft = scroller.scrollLeft;
+    // 메뉴는 fixed라 그리드를 굴려도 열린 자리에 남는다 — 따라다니게 만들기보다 닫는다.
+    // (`closed`는 남기지 않는다. 굴린 직후 단추를 눌러도 다시 열려야 한다.)
+    if (menu) menu = null;
   }
 
   function cellMouseDown(event: MouseEvent, row: number, col: number): void {

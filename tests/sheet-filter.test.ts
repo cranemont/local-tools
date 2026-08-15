@@ -9,6 +9,11 @@
  *   ② 수 100과 글자 "100"은 화면에 똑같이 보인다 — 필터에서 갈리면 설명할 길이 없다.
  *   ③ 고유값 목록은 **표시 문자열** 기준이다. 원문이 남은 칸("1.50")은 그 글자가 정체다
  *      (CLAUDE.md 23번). 목록엔 "1.5", 화면엔 "1.50"이면 같은 칸을 두 이름으로 부른다.
+ *
+ * 뒤쪽 절반은 두 번째 질문이다: **필터가 걸렸을 때 조작이 어디까지 닿는가.**
+ * 그 갈래는 `OP_SCOPE` 표 하나가 정하고(서식·채우기는 보이는 행만, 붙여넣기는 전부),
+ * 화면 상태는 그 표에 물어보기만 한다. 마지막 describe에는 고치지 않기로 한 한계를
+ * 못 박아 두었다 — 라이브 필터라 갓 삽입한 빈 줄이 곧바로 사라진다.
  */
 
 import { describe, it, expect } from "vitest";
@@ -17,20 +22,32 @@ import { cellKey } from "../apps/sheet/src/lib/sheet/a1";
 import { DEFAULT_CSV_WRITE, readCsv, writeCsv } from "../apps/sheet/src/lib/sheet/csv";
 import { exportText } from "../apps/sheet/src/lib/sheet/convert";
 import {
+  hiddenCovered,
   isBlank,
   matchesFilter,
   opArity,
+  OP_SCOPE,
   predicateOf,
+  rowsForOp,
+  scopeOf,
+  spanRows,
   uniqueValues,
   visibleRows,
   type ColumnFilter,
   type ConditionOp,
   type FilterCell,
+  type FilterOp,
 } from "../apps/sheet/src/lib/sheet/filter";
 import {
+  applyStyle,
   cellText,
+  clearContents,
+  clearStyles,
   deleteRowSet,
+  fillDown,
   filterCellAt,
+  forceText,
+  insertRows,
   parseInput,
   putCell,
 } from "../apps/sheet/src/lib/sheet/model";
@@ -390,6 +407,230 @@ describe("보이는 행 목록", () => {
       { filter: condition("contains", "서"), cells: [cell("서울"), cell("부산"), cell("서귀포")] },
     ]);
     expect(kept).toEqual([3, 5]);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// 필터가 걸렸을 때 조작이 어디까지 닿는가.
+//
+// 갈래를 정하는 곳은 `OP_SCOPE` 표 하나다(filter.ts). 화면 쪽 상태(state.svelte.ts)는
+// 그 표에 물어보기만 한다 — 그래서 여기 적힌 것이 곧 앱의 동작이다.
+
+/** 머리글 한 줄 + 다섯 줄. A열은 도시, B열은 수. */
+function cityTable(): SheetDoc {
+  const sheet = emptySheet("Sheet1", 12, 5);
+  ["도시", "서울", "부산", "서울", "대구", "서울"].forEach((v, r) => putCell(sheet, r, 0, { v }));
+  [null, 10, 20, 30, 40, 50].forEach((v, r) => {
+    if (v !== null) putCell(sheet, r, 1, { v });
+  });
+  return sheet;
+}
+
+/** "서울"만 남기는 필터 — cityTable에서는 1·3·5행이 남는다. */
+const SEOUL: ColumnFilter = { kind: "values", picked: new Set(["서울"]) };
+
+function visibleIn(sheet: SheetDoc, top: number, bottom: number): number[] {
+  const range = spanRows({ top, bottom });
+  return visibleRows(range, [{ filter: SEOUL, cells: range.map((r) => filterCellAt(sheet, r, 0)) }]);
+}
+
+/** B열 한 줄짜리 세로 영역. */
+const B_COLUMN = { top: 1, left: 1, bottom: 5, right: 1 };
+
+describe("조작이 닿는 범위 — OP_SCOPE", () => {
+  const VISIBLE: FilterOp[] = [
+    "clear",
+    "format",
+    "clearFormat",
+    "asText",
+    "fillDown",
+    "deleteRows",
+    "copy",
+    "replace",
+  ];
+  const ALL: FilterOp[] = ["paste", "insertRows", "sort", "merge"];
+
+  it("고른 영역을 다루는 조작은 보이는 행만 — 숨은 줄은 고른 적이 없다", () => {
+    for (const op of VISIBLE) expect([op, scopeOf(op)]).toEqual([op, "visible"]);
+  });
+
+  it("붙여넣기·행 삽입·정렬·병합은 전부에 닿는다 — 이어진 덩어리이거나 표의 짜임이다", () => {
+    for (const op of ALL) expect([op, scopeOf(op)]).toEqual([op, "all"]);
+  });
+
+  it("갈래가 없는 조작은 없다 — 표가 곧 규약이다", () => {
+    expect(new Set(Object.keys(OP_SCOPE))).toEqual(new Set([...VISIBLE, ...ALL]));
+  });
+
+  it("보이는 행만 다루는 조작은 받은 그 목록을 그대로 쓴다", () => {
+    expect(rowsForOp("format", { top: 1, bottom: 5 }, [1, 3, 5])).toEqual([1, 3, 5]);
+    expect(rowsForOp("fillDown", { top: 1, bottom: 5 }, [1, 3, 5])).toEqual([1, 3, 5]);
+  });
+
+  it("전부에 닿는 조작은 구간을 통째로 쓴다", () => {
+    expect(rowsForOp("paste", { top: 1, bottom: 5 }, [1, 3, 5])).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("필터가 아무 줄도 안 걸렀으면 두 갈래가 같은 답을 준다", () => {
+    const all = [1, 2, 3, 4, 5];
+    expect(rowsForOp("format", { top: 1, bottom: 5 }, all)).toEqual(all);
+    expect(rowsForOp("paste", { top: 1, bottom: 5 }, all)).toEqual(all);
+  });
+});
+
+describe("서식·텍스트 굳히기는 보이는 칸만", () => {
+  it("서식은 준 줄에만 걸린다", () => {
+    const sheet = cityTable();
+    applyStyle(sheet, B_COLUMN, { bold: true }, visibleIn(sheet, 1, 5));
+    expect([1, 2, 3, 4, 5].map((r) => sheet.cells.get(cellKey(r, 1))?.s?.bold ?? false)).toEqual([
+      true,
+      false,
+      true,
+      false,
+      true,
+    ]);
+  });
+
+  it("서식 지우기도 같은 갈래다 — 걸 때와 지울 때가 다르면 왕복이 안 맞는다", () => {
+    const sheet = cityTable();
+    applyStyle(sheet, B_COLUMN, { bold: true });
+    clearStyles(sheet, B_COLUMN, visibleIn(sheet, 1, 5));
+    expect([1, 2, 3, 4, 5].map((r) => sheet.cells.get(cellKey(r, 1))?.s?.bold ?? false)).toEqual([
+      false,
+      true,
+      false,
+      true,
+      false,
+    ]);
+  });
+
+  it("텍스트로 굳히기는 보이는 칸만 바꾸고 그 수를 준다", () => {
+    const sheet = cityTable();
+    expect(forceText(sheet, B_COLUMN, visibleIn(sheet, 1, 5))).toBe(3);
+    expect([1, 2, 3, 4, 5].map((r) => sheet.cells.get(cellKey(r, 1))?.v)).toEqual([
+      "10",
+      20,
+      "30",
+      40,
+      "50",
+    ]);
+  });
+
+  it("Delete도 보이는 칸만 비운다 — 서식은 남는다", () => {
+    const sheet = cityTable();
+    applyStyle(sheet, B_COLUMN, { bold: true });
+    clearContents(sheet, B_COLUMN, visibleIn(sheet, 1, 5));
+    expect([1, 2, 3, 4, 5].map((r) => sheet.cells.get(cellKey(r, 1))?.v ?? null)).toEqual([
+      null,
+      20,
+      null,
+      40,
+      null,
+    ]);
+    expect(sheet.cells.get(cellKey(1, 1))?.s?.bold).toBe(true);
+  });
+
+  it("줄 목록을 안 주면 영역 전체다 — 필터가 없을 때의 길이다", () => {
+    const sheet = cityTable();
+    applyStyle(sheet, B_COLUMN, { bold: true });
+    expect([1, 2, 3, 4, 5].every((r) => sheet.cells.get(cellKey(r, 1))?.s?.bold)).toBe(true);
+  });
+});
+
+describe("아래로 채우기 — fillDown", () => {
+  const noop = (f: string): string => f;
+
+  it("준 줄만 채우고, 맨 앞 줄이 원본이다 — 화면에서 맨 위 줄이 원본이 된다", () => {
+    const sheet = cityTable();
+    fillDown(sheet, B_COLUMN, visibleIn(sheet, 1, 5), noop);
+    expect([1, 2, 3, 4, 5].map((r) => sheet.cells.get(cellKey(r, 1))?.v)).toEqual([
+      10,
+      20,
+      10,
+      40,
+      10,
+    ]);
+  });
+
+  it("수식은 원본과의 **실제 행 차이**만큼 옮긴다 — 건너뛴 숨은 줄을 세지 않는다", () => {
+    const sheet = cityTable();
+    putCell(sheet, 1, 1, { v: null, f: "A1" });
+    fillDown(sheet, B_COLUMN, [1, 3, 5], (f, dRow) => `${f}+${dRow}`);
+    expect([3, 5].map((r) => sheet.cells.get(cellKey(r, 1))?.f)).toEqual(["A1+2", "A1+4"]);
+  });
+
+  it("채울 줄이 하나뿐이면 아무것도 하지 않는다", () => {
+    const sheet = cityTable();
+    fillDown(sheet, B_COLUMN, [1], noop);
+    expect([1, 2, 3, 4, 5].map((r) => sheet.cells.get(cellKey(r, 1))?.v)).toEqual([
+      10, 20, 30, 40, 50,
+    ]);
+  });
+
+  it("원본이 빈 칸이면 대상도 비운다", () => {
+    const sheet = cityTable();
+    sheet.cells.delete(cellKey(1, 1));
+    fillDown(sheet, B_COLUMN, [1, 3, 5], noop);
+    expect([1, 2, 3, 4, 5].map((r) => sheet.cells.get(cellKey(r, 1))?.v ?? null)).toEqual([
+      null,
+      20,
+      null,
+      40,
+      null,
+    ]);
+  });
+});
+
+describe("붙여넣기는 숨은 줄을 건너뛰지 않는다", () => {
+  /**
+   * 엑셀도 그렇다. 붙일 블록은 이어진 직사각형이라 줄을 건너뛰면 원본과 모양이
+   * 달라지고, 어느 줄이 어디로 갔는지 셀 수 없게 된다. 대신 **덮은 숨은 줄 수**를
+   * 알려 준다 — 그 수가 상태줄에 뜬다.
+   */
+  it("닿는 줄은 구간 전체다", () => {
+    const sheet = cityTable();
+    expect(rowsForOp("paste", { top: 1, bottom: 5 }, visibleIn(sheet, 1, 5))).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+  });
+
+  it("덮은 숨은 줄 수를 셀 수 있다", () => {
+    expect(hiddenCovered("paste", { top: 1, bottom: 5 }, [1, 3, 5])).toBe(2);
+    expect(hiddenCovered("paste", { top: 1, bottom: 5 }, [1, 2, 3, 4, 5])).toBe(0);
+  });
+
+  it("보이는 행만 다루는 조작은 덮을 숨은 줄이 없다 — 알릴 것도 없다", () => {
+    expect(hiddenCovered("clear", { top: 1, bottom: 5 }, [1, 3, 5])).toBe(0);
+  });
+});
+
+describe("알려진 한계", () => {
+  /**
+   * 필터는 **라이브**다 — 리비전마다 다시 걸러진다. 그래서 갓 삽입한 빈 줄은
+   * 고른 값 목록에 없어서 그리자마자 사라진다. 엑셀은 '다시 적용'을 누를 때까지
+   * 남겨 두지만, 그러려면 "지금 무엇이 보이는가"를 캐시로 들고 있어야 한다 —
+   * 이 시트의 "언제나 맞다" 규약(CLAUDE.md 14·15번)과 정면으로 부딪힌다.
+   * **고치지 않기로 한 것이다.**
+   */
+  it("필터가 걸린 채 행을 삽입하면 새 빈 줄이 곧바로 걸러진다", () => {
+    const sheet = cityTable();
+    expect(visibleIn(sheet, 1, 5)).toEqual([1, 3, 5]);
+
+    insertRows(sheet, 2, 1, (f) => f);
+    // 2행이 새로 생기고 아래가 한 칸씩 밀렸다. 새 줄은 빈 칸이라 "서울"이 아니다.
+    expect(visibleIn(sheet, 1, 6)).toEqual([1, 4, 6]);
+    expect(filterCellAt(sheet, 2, 0)).toEqual({ v: null, text: "" });
+  });
+
+  /**
+   * 병합이 걸러진 줄을 걸치면 화면에서 그만큼 낮아진다(그리드가 높이를 **보이는 줄
+   * 수**로 재기 때문이다). 데이터는 그대로이고 필터를 풀면 원래 높이로 돌아온다.
+   */
+  it("병합이 걸치는 줄이 걸러지면 그 안에서 보이는 줄 수가 준다", () => {
+    const sheet = cityTable();
+    // 1~3행을 걸치는 병합이라면, 필터가 2행을 걸러 화면에는 두 줄 높이로 보인다.
+    expect(visibleIn(sheet, 1, 3)).toEqual([1, 3]);
+    expect(visibleIn(sheet, 1, 3)).toHaveLength(2);
   });
 });
 

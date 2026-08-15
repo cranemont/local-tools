@@ -221,6 +221,100 @@ export function visibleRows(rows: number[], columns: FilterColumn[]): number[] {
   return out;
 }
 
+// ── 조작이 닿는 범위 ─────────────────────────────────────────────
+//
+// 필터는 셀을 하나도 바꾸지 않는 뷰 상태다. 그런데 그 상태에서 한 조작이 **화면에
+// 없는 줄**까지 바꾸면 사용자는 무엇이 바뀌었는지 볼 수도 없다. 그래서 조작마다
+// 갈래를 정해 두고, 그 갈래는 아래 표 하나가 정한다(기준은 엑셀).
+//
+//   보이는 행만 — 고른 영역은 곧 "화면에서 고른 것"이다. 숨은 줄은 고른 적이 없다.
+//   전부       — 이어진 한 덩어리를 다루거나, 표의 짜임 자체를 바꾸는 조작들.
+//
+// 붙여넣기가 "전부"인 것이 유일하게 놀라운 자리다. 엑셀도 숨은 줄을 덮는다 —
+// 붙일 블록은 이어진 직사각형이라 줄을 건너뛰면 원본과 모양이 달라지고, 어느 줄이
+// 어디로 갔는지 아무도 셀 수 없게 된다. 대신 **덮은 숨은 줄 수를 알려 준다**.
+//
+// 열 삽입·열 삭제는 표에 없다. 행 갈래를 물을 것이 없는 조작이라서다 — 한 열은
+// 보이는 줄에서만 사라질 수 없다(엑셀도 열을 통째로 지운다).
+
+/** 조작 하나가 닿는 범위. */
+export type FilterScope = "visible" | "all";
+
+/** 갈래를 물어볼 수 있는 조작들. */
+export type FilterOp =
+  | "clear"
+  | "format"
+  | "clearFormat"
+  | "asText"
+  | "fillDown"
+  | "deleteRows"
+  | "copy"
+  | "replace"
+  | "paste"
+  | "insertRows"
+  | "sort"
+  | "merge";
+
+/** ★ 규약의 정본. "이 조작은 보이는 행만, 저 조작은 전부"가 여기 한 곳에 있다. */
+export const OP_SCOPE: Record<FilterOp, FilterScope> = {
+  /** Delete — 안 보이는 칸이 함께 비워지면 무엇을 잃었는지 볼 방법이 없다. */
+  clear: "visible",
+  /** 굵게·색·표시 형식 — 서식은 눈으로 고르는 것이라 눈에 보이는 칸에만 걸린다. */
+  format: "visible",
+  /** 서식 지우기 — 서식을 거는 것과 같은 갈래여야 왕복이 맞는다. */
+  clearFormat: "visible",
+  /** 텍스트로 굳히기 — 보이는 글자를 값으로 굳히는 조작이라 서식과 같은 갈래다. */
+  asText: "visible",
+  /** Ctrl+D — 엑셀도 보이는 칸만 채운다(필터 걸고 채우기가 이 기능의 쓰임새다). */
+  fillDown: "visible",
+  /** 행 삭제 — 걸러진 줄까지 지우면 되돌리기 말고는 확인할 길이 없다. */
+  deleteRows: "visible",
+  /** 복사 — 화면에 보이는 것이 복사된다. 숨은 줄이 딸려 가면 붙인 쪽에서 알 수 없다. */
+  copy: "visible",
+  /** 모두 바꾸기 — 찾기가 못 세는 자리는 바꾸지도 않는다. */
+  replace: "visible",
+  /** 붙여넣기 — 숨은 줄도 덮는다(위 설명). 엑셀과 같다. */
+  paste: "all",
+  /** 행 삽입 — 자리를 미는 조작이라 보이는 줄만 밀 수가 없다. */
+  insertRows: "all",
+  /** 정렬 — 표 전체를 옮겨야 필터를 풀었을 때 표가 성하다. */
+  sort: "all",
+  /** 병합 — 이어진 직사각형 하나를 만드는 조작이라 줄을 건너뛸 수 없다. */
+  merge: "all",
+};
+
+export function scopeOf(op: FilterOp): FilterScope {
+  return OP_SCOPE[op];
+}
+
+/** 조작이 노린 행 구간 — 위아래 끝(행 번호). */
+export interface RowSpan {
+  top: number;
+  bottom: number;
+}
+
+/** 구간이 덮는 행 번호 전부. */
+export function spanRows(span: RowSpan): number[] {
+  const out: number[] = [];
+  for (let r = span.top; r <= span.bottom; r++) out.push(r);
+  return out;
+}
+
+/**
+ * 이 조작이 실제로 닿을 행 번호.
+ *
+ * `visible`은 **그 구간에서 보이는 행들**이다(필터가 걸려 있을 때만 부른다).
+ * 갈래가 "보이는 행만"이면 그것을 그대로, "전부"면 구간을 통째로 돌려준다.
+ */
+export function rowsForOp(op: FilterOp, span: RowSpan, visible: number[]): number[] {
+  return OP_SCOPE[op] === "visible" ? visible : spanRows(span);
+}
+
+/** 이 구간에서 조작이 덮는 숨은 줄 수 — "전부"인 조작이 무엇을 덮었는지 알릴 때 쓴다. */
+export function hiddenCovered(op: FilterOp, span: RowSpan, visible: number[]): number {
+  return rowsForOp(op, span, visible).length - visible.length;
+}
+
 /** 고유값 하나 — 체크박스 한 줄. */
 export interface UniqueValue {
   /** 표시 문자열. 이것이 곧 값의 정체다(ValuesFilter.picked에 들어가는 키). */

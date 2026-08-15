@@ -128,6 +128,7 @@ export const t = {
     },
     hidden: (n: number) => `${n}행 숨김`,
     hiddenHint: "필터에 걸러진 행이에요 — 저장하면 전부 나가요",
+    pasteHidden: (n: number) => `숨은 ${n}행에도 붙여 넣었어요`,
     visibleOnly: "보이는 행만 내보내기",
     visibleOnlyHint: "CSV·JSON·표 복사에만 걸려요. 엑셀은 언제나 전부 나가요",
   },
