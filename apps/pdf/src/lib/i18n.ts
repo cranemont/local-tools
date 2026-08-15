@@ -150,7 +150,9 @@ export const t = {
     targetPlaceholder: "MB",
 
     fileName: "저장 파일 이름",
-    run: "용량 줄이기",
+    // 모드 칩이 "용량 줄이기"라 실행 버튼은 다른 말이어야 한다 — 한 화면에 같은
+    // 글자의 버튼이 둘이면 무엇을 누르는지 알 수 없다.
+    run: "줄여서 저장",
     preparing: "압축 엔진 준비 중… (최초 1회)",
     processing: "다시 압축하는 중…",
     rendering: (i: number, total: number) => `이미지로 그리는 중… (${i}/${total})`,
@@ -163,7 +165,15 @@ export const t = {
     textBadge: "글자 사라짐",
     textDetail: "이 PDF에는 글자가 들어 있어요 — 이미지로 다시 만들면 선택·검색·복사가 안 돼요",
     scanBadge: "글자 없음",
-    scanDetail: "글자가 없는 PDF예요 — 이미지로 다시 만들어도 잃을 것이 없어요",
+    scanDetail: "모든 쪽에 글자가 없어요 — 이미지로 다시 만들어도 잃을 것이 없어요",
+    // 큰 문서는 시간 상한에 걸려 다 못 훑는다. 그때는 훑은 범위를 배지에 적는다.
+    scanPartBadge: (scanned: number, total: number) =>
+      `${scanned}/${total}쪽에 글자 없음`,
+    scanPartDetail:
+      "훑어본 쪽에는 글자가 없었어요 — 나머지 쪽은 확인하지 않았어요",
+    probeFailBadge: "살펴보기 실패",
+    probeFailDetail:
+      "이 문서를 열어 보지 못했어요 — 이미지로 다시 그릴 수 없지만 다시 압축은 할 수 있어요",
     missedBadge: "목표 못 맞춤",
     missedDetail: "이보다 더 줄이려면 해상도나 품질을 낮춰 주세요",
 
@@ -171,12 +181,10 @@ export const t = {
     resultSame: (size: string) => `${size} → 그대로`,
     noGain: "줄지 않아서 원본을 그대로 내려받았어요.",
     done: "줄인 파일을 다운로드했어요.",
-    underTarget: "이미 목표 용량보다 작아요.",
     encrypted: "암호가 걸린 PDF예요 — 암호 해제를 먼저 해 주세요.",
     failed: "용량 줄이기에 실패했어요.",
     canceled: "비밀번호 입력을 취소했어요.",
     onlyPdf: "PDF 파일만 선택할 수 있어요.",
-    openFailed: "PDF를 열 수 없어요 — 파일이 손상됐을 수 있어요.",
   },
 
   pw: {

@@ -14,12 +14,14 @@ import {
   nextValue,
   planOutcome,
   plannedAttempts,
+  probeOrder,
   rasterStepAt,
   rasterSteps,
   recordAttempt,
   searchTarget,
   sizeReport,
   targetBytesFromMb,
+  textVerdict,
   type AttemptInfo,
   type RasterStep,
 } from "../apps/pdf/src/lib/pdf/compress";
@@ -35,6 +37,7 @@ import {
 //   ④ 축의 맨 위는 사용자가 고른 (해상도, 품질)이다 — 목표 용량이 그보다 좋은 결과를
 //      만들지 않는다.
 //   ⑤ 압축 결과가 원본보다 크거나 같으면 원본을 그대로 돌려준다.
+//   ⑥ 글자 유무 배지는 그 판단의 근거 범위를 넘겨 말하지 않는다.
 // ①②③은 단조 가정(값이 클수록 크다)이 깨져도 지켜져야 한다 — 재인코딩은 단조가 아니다.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -389,6 +392,64 @@ describe("래스터 사다리 — 해상도 × 품질을 축 하나로 세운다
   });
 });
 
+describe("★ 글자를 찾는 순서 — 중간에 멈춰도 앞부분만 본 것이 아니게", () => {
+  it("모든 쪽이 한 번씩 나온다", () => {
+    for (const n of [1, 2, 3, 7, 12, 40, 199, 500]) {
+      const order = probeOrder(n);
+      expect(order.length).toBe(n);
+      expect(new Set(order).size).toBe(n);
+      expect(Math.min(...order)).toBe(0);
+      expect(Math.max(...order)).toBe(n - 1);
+    }
+  });
+
+  it("첫 쪽과 마지막 쪽을 먼저 본다", () => {
+    expect(probeOrder(200).slice(0, 2)).toEqual([0, 199]);
+    expect(probeOrder(2)).toEqual([0, 1]);
+    expect(probeOrder(1)).toEqual([0]);
+  });
+
+  it("★ 앞 8쪽만 봐도 문서의 네 구간에 모두 걸린다", () => {
+    // 예전 규칙(앞 5쪽)이 놓친 것이 이것이다 — 6쪽부터 글자가 시작하면 못 봤다.
+    for (const n of [40, 200, 500]) {
+      const head = probeOrder(n).slice(0, 8);
+      const quarters = new Set(head.map((i) => Math.min(3, Math.floor((i / n) * 4))));
+      expect(quarters.size).toBe(4);
+    }
+  });
+
+  it("쪽 수가 0이거나 이상하면 볼 것이 없다", () => {
+    expect(probeOrder(0)).toEqual([]);
+    expect(probeOrder(-3)).toEqual([]);
+    expect(probeOrder(Number.NaN)).toEqual([]);
+    expect(probeOrder(Number.POSITIVE_INFINITY)).toEqual([]);
+  });
+});
+
+describe("★ 글자 유무 배지는 근거의 범위를 넘겨 말하지 않는다", () => {
+  it("다 훑고 못 찾았을 때만 '글자 없음'이다", () => {
+    expect(textVerdict({ hasText: false, scannedPages: 200, complete: true })).toBe(
+      "none",
+    );
+  });
+
+  it("★ 훑다 만 문서는 '글자 없음'이 아니다 — 래스터는 되돌릴 수 없다", () => {
+    expect(textVerdict({ hasText: false, scannedPages: 57, complete: false })).toBe(
+      "sampled",
+    );
+  });
+
+  it("한 쪽에서라도 찾았으면 범위와 무관하게 '글자 있음'이다", () => {
+    expect(textVerdict({ hasText: true, scannedPages: 1, complete: false })).toBe(
+      "text",
+    );
+  });
+
+  it("문서를 못 열었으면 글자 유무를 말하지 않는다", () => {
+    expect(textVerdict(null)).toBe("unknown");
+  });
+});
+
 describe("★ 결과가 원본보다 크면 원본을 그대로 돌려준다", () => {
   // 실측: 이미 압축된 2394바이트 PDF에 qpdf를 돌리면 2437바이트(101.8%)가 된다.
   it("커진 경우 원본을 고르고 그렇게 말한다", () => {
@@ -570,6 +631,8 @@ describe("목표 용량 입력", () => {
     }
   });
 
+  // 참이면 "사다리를 짚을 것이 없다"는 뜻이다. "만들 것이 없다"가 아니다 —
+  // 화면은 고른 설정으로 한 번 그려서 내려받게 한다(Compress.svelte의 runRaster).
   it("★ 목표가 원본보다 크면 짚어 볼 것이 없다", () => {
     expect(alreadyUnderTarget(1_000_000, 2_000_000)).toBe(true);
     expect(alreadyUnderTarget(2_000_000, 2_000_000)).toBe(true);

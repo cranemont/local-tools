@@ -9,8 +9,8 @@
     rasterStepAt,
     rasterSteps,
     searchTarget,
-    sizeReport,
     targetBytesFromMb,
+    textVerdict,
     type RasterStep,
     type SizeReport,
   } from "../pdf/compress";
@@ -52,11 +52,22 @@
 
   let file = $state<{ name: string; bytes: Uint8Array } | null>(null);
   let probe = $state<PdfProbe | null>(null);
+  /**
+   * pdf.js가 이 문서를 못 열었다. 파일은 그대로 들고 있는다 — 다시 압축(qpdf)은
+   * 쪽 수도 글자 유무도 안 쓰므로 pdf.js가 못 여는 문서에서도 돌아간다.
+   * 이미지로 다시 그리는 길만 막는다(그쪽은 pdf.js로 렌더한다).
+   */
+  let probeFailed = $state(false);
   let way = $state<Way>("repack");
   let images = $state<Images>("normal");
   let dpi = $state(144);
   let quality = $state(70);
-  /** 비우면 목표를 안 쓴다 — 고른 설정으로 한 번만 그린다. */
+  /**
+   * 비우면 목표를 안 쓴다 — 고른 설정으로 한 번만 그린다.
+   *
+   * 파일을 바꿔도 남는 설정이다(apps/image의 목표 용량과 같은 규약). 그래서 원본이
+   * 이미 목표보다 작은 경우가 흔하고, 그때도 파일은 나와야 한다 — 아래 runRaster를 볼 것.
+   */
   let targetMb = $state("");
   let outName = $state("");
   /** 진행 오버레이를 띄울지. */
@@ -90,6 +101,8 @@
 
   const defaultBase = $derived(file ? `${stripExt(file.name)}-small` : "");
   const isRaster = $derived(way === "raster");
+  /** 글자 유무를 화면이 뭐라고 말해도 되는가 — 근거의 범위까지 담긴 값이다. */
+  const verdict = $derived(textVerdict(probe));
 
   $effect(() => onBusy?.(working));
 
@@ -108,6 +121,7 @@
     const bytes = new Uint8Array(await f.arrayBuffer());
     file = { name: f.name, bytes };
     probe = null;
+    probeFailed = false;
     report = null;
     missed = false;
     outName = "";
@@ -119,11 +133,12 @@
     busyMsg = t.shrink.checking;
     try {
       probe = await probeWithUnlock(f.name, bytes);
-      if (!probe) file = null;
+      if (!probe) file = null; // 비밀번호 입력을 취소했다
     } catch {
-      // pdf.js가 던지는 말은 영어다("Invalid PDF structure.") — 화면에는 i18n 문구만 낸다.
-      file = null;
-      error = t.shrink.openFailed;
+      // pdf.js가 못 여는 문서다. 파일은 놓지 않는다 — qpdf는 pdf.js를 안 쓰므로
+      // 다시 압축은 여기서도 된다. 배지가 그 사정을 적고 이미지 칩만 잠근다.
+      probeFailed = true;
+      way = "repack";
     } finally {
       working = false;
       busy = false;
@@ -186,7 +201,8 @@
 
   async function run() {
     const doc = file;
-    if (!doc || !probe || working) return;
+    // probe가 없어도 다시 압축은 돌린다 — 못 여는 문서에서 막히는 것은 래스터뿐이다.
+    if (!doc || working || (isRaster && !probe)) return;
     // 저장 이름은 시작한 문서에서 정한다 — 끝날 때 `file`을 읽으면 도중에 바뀐
     // 파일 이름이 붙는다(앞 문서의 결과가 뒤 문서의 이름으로 저장됐다).
     const base = `${stripExt(doc.name)}-small`;
@@ -198,7 +214,7 @@
     missed = false;
     try {
       const made = isRaster ? await runRaster(doc) : await runRepack(doc);
-      if (!made) return; // 이미 목표 아래이거나, 짚어 본 것이 없다
+      if (!made) return; // 탐색이 한 번도 못 만들었다
       const choice = chooseSmaller(
         { bytes: doc.bytes.length, data: doc.bytes },
         made,
@@ -239,14 +255,13 @@
     const cap: RasterStep = { dpi, quality };
     const target = targetBytesFromMb(targetMb);
 
-    if (target === null) {
+    // 목표가 없거나 원본이 이미 그 아래면 짚어 볼 것이 없다 — 고른 설정으로 한 번 그리고,
+    // 그것이 원본보다 크면 chooseSmaller가 원본을 돌려준다. 예전에는 이 자리에서
+    // 안내만 내고 아무것도 만들지 않았다. 목표 용량은 파일을 바꿔도 남는 설정이라,
+    // 2.4kB 문서를 떨어뜨리면 앞 문서의 목표 9MB에 걸려 실행이 아무 파일도 안 내놓았다.
+    if (target === null || alreadyUnderTarget(doc.bytes.length, target)) {
       const out = await render(doc, cap, 0, 0);
       return { bytes: out.length, data: out };
-    }
-    if (alreadyUnderTarget(doc.bytes.length, target)) {
-      report = sizeReport(doc.bytes.length, doc.bytes.length);
-      status = t.shrink.underTarget;
-      return null;
     }
 
     const max = attemptBudget(probe?.pageCount ?? 1);
@@ -329,7 +344,10 @@
               class="segbtn"
               class:active={way === w.id}
               aria-pressed={way === w.id}
-              title={w.hint}
+              disabled={w.id === "raster" && probeFailed}
+              title={w.id === "raster" && probeFailed
+                ? t.shrink.probeFailDetail
+                : w.hint}
               onclick={() => {
                 way = w.id;
                 reset();
@@ -341,12 +359,23 @@
         </div>
         {#if !isRaster}
           <span class="badge" title={t.shrink.netDetail}>{t.shrink.netBadge}</span>
-        {:else if probe?.hasText}
+        {/if}
+        <!-- 글자 유무 배지는 근거의 범위까지 말한다 — 훑다 만 문서에 "글자 없음"을
+             붙이면 되돌릴 수 없는 래스터를 안심하고 누르게 된다. -->
+        {#if probeFailed}
+          <span class="badge" title={t.shrink.probeFailDetail}>
+            {t.shrink.probeFailBadge}
+          </span>
+        {:else if isRaster && verdict === "text"}
           <span class="badge warn" title={t.shrink.textDetail}>
             {t.shrink.textBadge}
           </span>
-        {:else if probe}
+        {:else if isRaster && verdict === "none"}
           <span class="badge" title={t.shrink.scanDetail}>{t.shrink.scanBadge}</span>
+        {:else if isRaster && verdict === "sampled" && probe}
+          <span class="badge" title={t.shrink.scanPartDetail}>
+            {t.shrink.scanPartBadge(probe.scannedPages, probe.pageCount)}
+          </span>
         {/if}
       </div>
 
@@ -444,7 +473,7 @@
         type="button"
         class="btn primary large run"
         onclick={run}
-        disabled={working || !probe}
+        disabled={working || (isRaster && !probe)}
       >
         <Icon name="shrink" size={15} />
         {t.shrink.run}
@@ -605,6 +634,11 @@
     background: var(--surface);
     box-shadow: var(--shadow-1);
     color: var(--text);
+  }
+  /* base.css의 .btn:disabled와 같은 값 — 칩은 .btn이 아니라 여기서 한 번 더 적는다. */
+  .segbtn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .target {

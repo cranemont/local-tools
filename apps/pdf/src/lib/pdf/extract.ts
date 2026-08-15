@@ -1,4 +1,5 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { probeOrder } from "./compress";
 import { isPasswordException, PdfPasswordError } from "./engine";
 import { pdfjsLib } from "./pdfjs";
 import { RangeSpecError, resolveRange } from "./range";
@@ -126,24 +127,37 @@ export async function extractPdfText(
   };
 }
 
-/** 문서를 열어 본 결과 — 쪽 수와 글자 레이어 유무. */
+/** 문서를 열어 본 결과 — 쪽 수, 글자 레이어 유무, 그리고 그 판단의 근거 범위. */
 export interface PdfProbe {
   pageCount: number;
-  /** 글자가 한 자라도 있는가. 거짓이면 스캔한 PDF다. */
+  /** 글자가 한 자라도 있는가. 거짓이면 아래 두 값과 같이 읽어야 한다. */
   hasText: boolean;
+  /** 글자를 찾느라 실제로 열어 본 쪽 수. */
+  scannedPages: number;
+  /** 모든 쪽을 열어 봤는가. 거짓이면 hasText=false는 "훑은 범위에는 없다"는 뜻이다. */
+  complete: boolean;
 }
 
-/** 글자를 찾느라 훑는 쪽 수의 상한 — 표지만 그림인 문서를 놓치지 않을 만큼만 본다. */
-const PROBE_PAGES = 5;
+/**
+ * 글자를 찾느라 문서를 훑는 시간의 상한(ms).
+ *
+ * 쪽당 비용을 재 보면(node 24, pdfjs-dist v6, 합성 문서) 글자 없는 쪽은 싸다 —
+ * 쪽마다 JPEG 한 장인 스캔본 모양이 0.1~0.35ms/쪽이라 500쪽이 62ms고, 선 400개짜리
+ * 도형 쪽이 0.6ms/쪽이다. 비싼 것은 선 2만 개짜리 도면으로 26ms/쪽이라 200쪽이면
+ * 5.3초다. 그래서 쪽 수가 아니라 시간으로 끊고, 끊긴 경우 몇 쪽을 봤는지 화면에 적는다.
+ */
+const PROBE_BUDGET_MS = 1500;
 
 /**
- * 용량 줄이기 화면이 결정에 쓰는 두 값을 잰다.
+ * 용량 줄이기 화면이 결정에 쓰는 값을 잰다.
  *
  * 쪽 수는 시도 횟수를 깎는 데 쓰고(compress.ts의 `attemptBudget`), 글자 레이어
  * 유무는 "이미지로 다시 만들기"에 경고를 띄울지 정하는 데 쓴다. 글을 재구성하지
  * 않고 조각이 하나라도 있는지만 보므로 `extractPdfText`보다 값싸다.
  *
- * 앞 5쪽만 본다. 200쪽을 다 열면 경고 하나 띄우려고 문서를 두 번 읽는 셈이 된다.
+ * 예전에는 앞 5쪽만 봤다. 6쪽부터 글자가 시작하는 문서에 "글자 없음"이 붙어서,
+ * 글자를 영구히 잃는 래스터를 안심하고 누르게 됐다. 지금은 전 쪽을 훑되 순서를
+ * 문서 전체에 흩고(`probeOrder`) 시간 상한에 걸리면 멈춘 자리를 그대로 돌려준다.
  */
 export async function probePdf(
   name: string,
@@ -159,17 +173,33 @@ export async function probePdf(
   }
 
   try {
-    const limit = Math.min(doc.numPages, PROBE_PAGES);
-    for (let i = 0; i < limit; i++) {
+    const order = probeOrder(doc.numPages);
+    const started = performance.now();
+    let scanned = 0;
+    for (const i of order) {
       const page = await doc.getPage(i + 1);
       const content = await page.getTextContent();
       const found = content.items.some(
         (item) => "str" in item && item.str.trim() !== "",
       );
       page.cleanup();
-      if (found) return { pageCount: doc.numPages, hasText: true };
+      scanned++;
+      if (found) {
+        return {
+          pageCount: doc.numPages,
+          hasText: true,
+          scannedPages: scanned,
+          complete: scanned === order.length,
+        };
+      }
+      if (performance.now() - started >= PROBE_BUDGET_MS) break;
     }
-    return { pageCount: doc.numPages, hasText: false };
+    return {
+      pageCount: doc.numPages,
+      hasText: false,
+      scannedPages: scanned,
+      complete: scanned === order.length,
+    };
   } finally {
     await loadingTask.destroy();
   }

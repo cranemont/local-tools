@@ -298,6 +298,76 @@ export function rasterStepAt(value: number, cap: RasterStep): RasterStep {
   return ladder[ladder.length - 1 - clampInt(value, 0, ladder.length - 1)];
 }
 
+// ── 글자 유무를 어디서 확인하는가 ───────────────────────────────────────────
+// "이미지로 다시 그리기"는 글자를 영구히 없앤다. 그 경고를 띄울지 말지가 몇 쪽을
+// 열어 봤는지에 달려 있으므로, 순서와 판정을 여기 순수 함수로 둔다(실제로 여는 일은
+// extract.ts의 probePdf).
+
+/**
+ * 글자를 찾느라 쪽을 열어 보는 순서. 앞에서부터가 아니라 문서 전체에 흩어 놓는다.
+ *
+ * 첫 쪽과 마지막 쪽을 먼저 보고, 그다음부터 남은 구간을 반씩 쪼개 가운데를 본다.
+ * 모든 쪽이 한 번씩 나오되, 도중에 멈춰도 본 것이 앞부분만은 아니다 — probePdf가
+ * 시간 상한에 걸려 중간에 끊는 경우가 그것이다.
+ */
+export function probeOrder(pageCount: number): number[] {
+  const n = Number.isFinite(pageCount) ? Math.floor(pageCount) : 0;
+  if (n <= 0) return [];
+
+  const seen = new Uint8Array(n);
+  const order: number[] = [];
+  const push = (i: number) => {
+    if (i < 0 || i >= n || seen[i]) return;
+    seen[i] = 1;
+    order.push(i);
+  };
+
+  push(0);
+  push(n - 1);
+  // 남은 구간을 너비 우선으로 쪼갠다 — 같은 깊이의 가운데들이 먼저 나온다.
+  const queue: [number, number][] = [[1, n - 2]];
+  for (let head = 0; head < queue.length; head++) {
+    const [lo, hi] = queue[head];
+    if (lo > hi) continue;
+    const mid = Math.floor((lo + hi) / 2);
+    push(mid);
+    queue.push([lo, mid - 1], [mid + 1, hi]);
+  }
+  return order;
+}
+
+/** 화면이 뭐라고 말해도 되는가. probe 결과에서 그대로 나온다. */
+export type TextVerdict =
+  /** 글자를 찾았다 — 래스터로 가면 잃는다. */
+  | "text"
+  /** 모든 쪽을 열어 봤고 글자가 없었다. */
+  | "none"
+  /** 훑은 범위에는 없었다. 나머지 쪽은 모른다. */
+  | "sampled"
+  /** 문서를 못 열었다 — 글자 유무를 말할 수 없다. */
+  | "unknown";
+
+export interface TextEvidence {
+  hasText: boolean;
+  /** 글자를 찾느라 실제로 열어 본 쪽 수. */
+  scannedPages: number;
+  /** 모든 쪽을 열어 봤는가. */
+  complete: boolean;
+}
+
+/**
+ * 근거의 범위를 화면 문구로 옮긴다.
+ *
+ * `hasText`가 참이면 범위는 상관없다 — 한 쪽에서 찾았어도 문서에 글자가 있다.
+ * 거짓일 때만 몇 쪽을 봤는지가 뜻을 바꾼다. 훑다 만 문서에 "글자 없음"을 붙이면
+ * 되돌릴 수 없는 래스터를 안심하고 누르게 된다.
+ */
+export function textVerdict(probe: TextEvidence | null): TextVerdict {
+  if (!probe) return "unknown";
+  if (probe.hasText) return "text";
+  return probe.complete ? "none" : "sampled";
+}
+
 // ── 결과 판정 ───────────────────────────────────────────────────────────────
 
 /** 원본 대비 결과. `same`은 바이트 수가 같은 경우다. */
