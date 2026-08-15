@@ -50,7 +50,7 @@ export interface Pipeline {
   steps: Step[];
 }
 
-/** 어느 앱이든 저장은 같은 문으로 나간다 — 다섯 앱에 같은 save.ts가 복제돼 있다. */
+/** 어느 앱이든 저장은 같은 문으로 나간다 — 일곱 앱에 같은 save.ts가 복제돼 있다. */
 const exitStep = (src: string, form: string): Step => ({
   label: "다운로드",
   tech: "adownload",
@@ -131,12 +131,65 @@ export const PIPELINES: Pipeline[] = [
       {
         label: "ZIP 묶기",
         tech: "fflate",
-        note: "여러 장이면 파일 하나로 묶는다 — 다운로드가 여러 번 뜨지 않게.",
+        // zipnames.ts는 이름만 손대지만 흐름 위에 있다 — 항목 이름이 곧 ZIP 안의
+        // 신원이라, 겹치면 뒤엣것이 앞엣것을 덮어 파일 하나가 여기서 사라진다.
+        // 그래서 별도 단계로 세우지 않고 묶는 단계 안에 적어 둔다(이름 짓기는
+        // 화물의 모습을 바꾸지 않으므로 궤짝이 하나 더 생길 일이 아니다).
+        note: "여러 장이면 파일 하나로 묶는다 — 다운로드가 여러 번 뜨지 않게. 항목 이름이 겹치면 번호를 붙여 비켜 둔다(이름이 같은 PDF 두 개를 함께 넣은 경우).",
         src: "apps/pdf/src/lib/pdf/save.ts",
         feat: "pdf-toimage",
         cargo: { count: 1, scale: 0.7, form: "ZIP 하나" },
       },
       exitStep("apps/pdf/src/lib/pdf/save.ts", "ZIP 하나"),
+    ],
+  },
+  {
+    id: "pdf-to-text",
+    label: "PDF → 텍스트",
+    input: ".pdf",
+    output: ".txt · 여러 개면 .zip",
+    steps: [
+      {
+        label: "워커에서 문서 파싱",
+        tech: "worker",
+        note: "이미지 갈래와 같은 워커·같은 쪽 범위 표기를 쓴다. 암호가 걸린 문서를 만나면 그쪽과 똑같이 한 번 풀고 들어온다.",
+        src: "apps/pdf/src/lib/pdf/pdfjs.ts",
+        feat: "pdf-text",
+        cargo: { count: 1, scale: 1, form: "PDF 한 덩어리" },
+      },
+      {
+        label: "텍스트 레이어 꺼내기",
+        tech: "pdfjs",
+        note: "쪽마다 글자 조각과 그 변환 행렬이 나온다. 회전은 여기서 걷어낸다 — 뷰포트 행렬로 한 번, 그러고도 글이 누워 있으면(쪽은 돌렸는데 내용은 그대로인 문서) 조각들이 가리키는 방향을 재서 한 번 더. 그래야 다음 단계가 '가로로 눕고 위에서 아래로 읽는' 한 가지 경우만 알면 된다.",
+        src: "apps/pdf/src/lib/pdf/extract.ts",
+        feat: "pdf-text",
+        cargo: { count: 12, scale: 0.3, form: "좌표 붙은 글자 조각" },
+      },
+      {
+        label: "줄·문단으로 되돌리기",
+        tech: "textlayout",
+        note: "기준선 y가 같은 조각을 한 줄로 묶고, 글자 한 개 폭에 견줘 틈이 벌어진 자리에 공백을 끼우고, 줄 간격이 그 쪽 평소 간격(중앙값)의 1.5배를 넘으면 문단을 나눈다. 2단 조판은 두 단이 한 줄로 이어지는 알려진 한계가 있다.",
+        src: "apps/pdf/src/lib/pdf/text.ts",
+        feat: "pdf-text",
+        cargo: { count: 6, scale: 0.2, form: "쪽마다 글줄" },
+      },
+      {
+        label: "문서 한 장으로 잇기",
+        tech: "textlayout",
+        note: "쪽 사이에 쪽 경계 문자(\\f — pdftotext의 관례)를 넣어 잇는다. 글자가 없는 쪽도 자리를 지킨다 — 안 그러면 쪽 번호가 밀린다. 저장 단위가 문서라서 여러 개를 넣었을 때만 ZIP이 생긴다.",
+        src: "apps/pdf/src/lib/pdf/text.ts",
+        feat: "pdf-text",
+        cargo: { count: 1, scale: 0.15, form: ".txt 한 장" },
+      },
+      {
+        label: "여러 개면 ZIP",
+        tech: "fflate",
+        note: "문서마다 파일 하나라 이름이 곧 원본 이름이다. 같은 이름이 둘이면 번호를 붙여 비켜 둔다 — 그대로 넣으면 한 개가 조용히 사라지는데 상태 줄은 '파일 2개'라고 적혀 있다.",
+        src: "apps/pdf/src/lib/pdf/save.ts",
+        feat: "pdf-text",
+        cargo: { count: 1, scale: 0.3, form: "ZIP 하나" },
+      },
+      exitStep("apps/pdf/src/lib/pdf/save.ts", "txt 또는 ZIP"),
     ],
   },
   {
@@ -199,11 +252,27 @@ export const PIPELINES: Pipeline[] = [
         cargo: { count: 1, scale: 0.52, form: "작아진 픽셀" },
       },
       {
+        label: "PNG이면 색 줄이기",
+        tech: "quantize",
+        note: "PNG일 때만 지나는 갈래다 — 색 수를 직접 골랐거나(기본은 꺼짐), 목표 용량 탐색이 색을 줄이는 칸을 짚었을 때. 팔레트를 뽑아 가장 가까운 색으로 매핑한 사본 캔버스를 만들고 스테이지 픽셀은 읽기만 한다. 탐색이 같은 스테이지를 색 수만 바꿔 여러 번 굽기 때문이다.",
+        src: "apps/image/src/lib/image/quantize.ts",
+        feat: "image-quantize",
+        cargo: { count: 1, scale: 0.5, palette: true, form: "색이 줄어든 픽셀" },
+      },
+      {
         label: "인코딩",
         tech: "canvas2d",
         note: "WebP·JPEG·PNG는 브라우저가 굽고, AVIF만 wasm 인코더가 맡는다.",
         src: "apps/image/src/lib/image/pipeline.ts",
         cargo: { count: 1, scale: 0.38, form: "압축된 파일" },
+      },
+      {
+        label: "목표 용량이면 다시 굽기",
+        tech: "sizesearch",
+        note: "잰 바이트가 목표보다 크면 품질을(PNG면 색 수·축소 배율 사다리를) 낮춰 앞 두 단계를 다시 짚는다 — 양 끝을 먼저 보고 안쪽을 좁히며 최대 아홉 번. 품질 축은 캔버스를 한 번만 그리고 인코딩만 다시 돌고, PNG는 배율이 바뀌는 칸에서만 다시 그린다. 못 맞추면 가장 작은 결과를 두고 '목표 초과'라고 적는다.",
+        src: "apps/image/src/lib/image/target.ts",
+        feat: "image-target",
+        cargo: { count: 1, scale: 0.3, form: "목표 이하로 떨어진 파일" },
       },
       {
         label: "EXIF 재삽입",
@@ -259,6 +328,14 @@ export const PIPELINES: Pipeline[] = [
         cargo: { count: 8, scale: 0.42, form: "프레임 여러 장" },
       },
       {
+        label: "텍스트가 있으면 얹기",
+        tech: "overlaytext",
+        note: "변형을 되돌린 뒤 출력 캔버스 좌표에 찍는다 — 그림이 90° 돌아도 자막은 화면 기준 수평으로 읽혀야 하니까. 이 자리는 미리보기가 지나는 자리와 같은 함수다.",
+        src: "apps/gif/src/lib/gif/overlay.ts",
+        feat: "gif-text",
+        cargo: { count: 8, scale: 0.42, form: "글자가 얹힌 프레임" },
+      },
+      {
         label: "팔레트 양자화·인코딩",
         tech: "gifenc",
         note: "프레임마다 팔레트를 뽑아 256색으로 줄이고 GIF로 굽는다.",
@@ -287,6 +364,14 @@ export const PIPELINES: Pipeline[] = [
         note: "편집 상태를 적용해 최종 픽셀을 만든다.",
         src: "apps/gif/src/lib/gif/transform.ts",
         cargo: { count: 8, scale: 0.5, form: "편집 반영됨" },
+      },
+      {
+        label: "텍스트가 있으면 얹기",
+        tech: "overlaytext",
+        note: "네 내보내기가 전부 같은 렌더 함수를 지나므로, 형식을 바꿔도 글자의 자리·크기가 달라지지 않는다.",
+        src: "apps/gif/src/lib/gif/overlay.ts",
+        feat: "gif-text",
+        cargo: { count: 8, scale: 0.5, form: "글자가 얹힌 프레임" },
       },
       {
         label: "정지 WebP 인코딩",
@@ -326,6 +411,14 @@ export const PIPELINES: Pipeline[] = [
         cargo: { count: 8, scale: 0.6, form: "프레임 여러 장" },
       },
       {
+        label: "텍스트가 있으면 얹기",
+        tech: "overlaytext",
+        note: "글자는 렌더 캔버스에 먼저 얹히고, 그 캔버스가 다음 단계에서 짝수 캔버스로 옮겨진다.",
+        src: "apps/gif/src/lib/gif/overlay.ts",
+        feat: "gif-text",
+        cargo: { count: 8, scale: 0.6, form: "글자가 얹힌 프레임" },
+      },
+      {
         label: "짝수 캔버스에 다시 얹기",
         tech: "offscreencanvas",
         note: "H.264는 짝수 치수만 안전해서 렌더 캔버스를 짝수 캔버스에 한 번 더 그린다. MP4는 투명이 없어 흰 배경을 먼저 깐다.",
@@ -361,6 +454,14 @@ export const PIPELINES: Pipeline[] = [
         note: "추출도 편집과 같은 디코더를 쓴다 — 한 번 푼 프레임은 LRU에 남는다.",
         src: "apps/gif/src/lib/gif/decode.ts",
         cargo: { count: 8, scale: 0.6, form: "프레임 여러 장" },
+      },
+      {
+        label: "텍스트가 있으면 얹기",
+        tech: "overlaytext",
+        note: "낱장 PNG에도 화면에서 보던 글자가 그대로 들어간다 — 추출만 예외로 두면 '보던 것과 다른 그림'이 나온다.",
+        src: "apps/gif/src/lib/gif/overlay.ts",
+        feat: "gif-text",
+        cargo: { count: 8, scale: 0.6, form: "글자가 얹힌 프레임" },
       },
       {
         label: "변형 적용해 PNG로",
@@ -494,6 +595,14 @@ export const PIPELINES: Pipeline[] = [
         cargo: { count: 6, scale: 1, form: "읽히는 글자" },
       },
       {
+        label: "필터를 켜 두었다면 보이는 행만",
+        tech: "sheetfilter",
+        note: "자동 필터는 뷰 상태라 저장에 끼어들지 않는 것이 기본이다 — 화면에서 안 보인다는 이유로 파일에서 조용히 사라지는 게 최악이라서. 저장 메뉴에서 명시적으로 켰을 때만 걸러진 줄을 빼고 쓰고, 그렇게 나간 파일은 '저장했다'로 세지 않는다.",
+        src: "apps/sheet/src/lib/sheet/filter.ts",
+        feat: "sheet-filter",
+        cargo: { count: 4, scale: 1, form: "남은 줄만" },
+      },
+      {
         label: "CSV로 되돌리기",
         note: "화면에 보이는 글자 그대로 쓴다 — 손대지 않은 칸은 파일에서 읽은 원문이 곧 그 글자다. 엑셀이 한글을 깨뜨리지 않도록 UTF-8 BOM을 앞에 붙이는 게 기본값이다.",
         src: "apps/sheet/src/lib/sheet/csv.ts",
@@ -565,6 +674,14 @@ export const PIPELINES: Pipeline[] = [
         src: "apps/sheet/src/lib/sheet/numfmt.ts",
         feat: "sheet-format",
         cargo: { count: 6, scale: 1, form: "굳은 글자" },
+      },
+      {
+        label: "필터를 켜 두었다면 보이는 행만",
+        tech: "sheetfilter",
+        note: "CSV 저장과 같은 규약이다 — 기본은 표 전체이고, 거르는 것은 저장 메뉴에서 켜야 한다. 클립보드로 복사할 때도 같은 목록을 쓴다.",
+        src: "apps/sheet/src/lib/sheet/filter.ts",
+        feat: "sheet-filter",
+        cargo: { count: 4, scale: 1, form: "남은 줄만" },
       },
       {
         label: "머리글을 키로",
@@ -676,6 +793,55 @@ export const PIPELINES: Pipeline[] = [
       exitStep("apps/doc/src/lib/doc/save.ts", "md 또는 hwpx"),
     ],
   },
+  {
+    id: "doc-batch",
+    label: "여러 문서 한꺼번에",
+    input: ".hwp · .hwpx · .docx 여러 개",
+    output: ".zip",
+    steps: [
+      {
+        label: "ZIP 안 자리 정하기",
+        tech: "batchqueue",
+        note: "문서마다 폴더를 하나씩 준다. 마크다운이 가리키는 그림 경로가 문서마다 images/1.png로 같아서, 한 폴더에 쏟으면 두 번째 문서의 그림이 첫 번째 것을 덮는다. 이름이 겹치거나 폴더로 못 쓰는 글자가 섞였으면 여기서 다듬는다.",
+        src: "apps/doc/src/lib/doc/batch.ts",
+        feat: "doc-batch",
+        cargo: { count: 4, scale: 1, form: "문서마다 폴더 하나" },
+      },
+      {
+        label: "한 문서씩 열기",
+        tech: "rhwp",
+        note: "동시에 열지 않고 앞에서부터 차례로 연다. 한글은 이 엔진이, 워드는 docx-preview·mammoth 쪽이 연다 — 종류는 확장자가 아니라 매직바이트로 가른다. 잠긴 문서는 그것 하나만 되묻는다(하나 때문에 나머지가 멈추지 않게).",
+        src: "apps/doc/src/lib/doc/hwp.ts",
+        feat: "doc-hwp",
+        cargo: { count: 4, scale: 1, form: "문서 모델" },
+      },
+      {
+        label: "마크다운으로",
+        tech: "turndown",
+        note: "한 장씩 옮기는 길은 혼자 열었을 때와 똑같다 — 표 규칙도, 그림을 떼어 내는 방식도 같은 코드다.",
+        src: "apps/doc/src/lib/doc/markdown.ts",
+        feat: "doc-markdown",
+        cargo: { count: 8, scale: 0.4, form: "md + 그림" },
+      },
+      {
+        label: "엔진이 죽으면 그 갈래만 '못 함'",
+        tech: "batchqueue",
+        note: "한글 엔진은 한 번 패닉하면 인스턴스가 통째로 죽어 이후 모든 호출이 실패한다. 3번째에서 죽었는데 4~20번을 '실패'로 세면 거짓말이라 손도 못 댄 것은 따로 센다. 다만 발이 묶이는 것은 그 엔진을 타는 한글 문서뿐이고, 순수 JS로 가는 워드는 뒤이어 계속 옮겨진다. 이미 성공한 것은 그대로 남는다.",
+        src: "apps/doc/src/lib/doc/batch.ts",
+        feat: "doc-batch",
+        cargo: { count: 4, scale: 0.4, form: "끝난 것 · 손도 못 댄 것" },
+      },
+      {
+        label: "완료된 것만 ZIP",
+        tech: "fflate",
+        note: "성공한 문서의 폴더만 담는다. 하나도 없으면 아예 만들지 않는다 — 전부 실패했는데 빈 ZIP을 내려 주면 '뭔가 받았다'는 거짓 신호가 된다.",
+        src: "apps/doc/src/lib/doc/batch.ts",
+        feat: "doc-batch",
+        cargo: { count: 1, scale: 0.6, form: "ZIP 하나" },
+      },
+      exitStep("apps/doc/src/lib/doc/save.ts", "ZIP 하나"),
+    ],
+  },
 
   // ── 드롭 ─────────────────────────────────────────────────────
   // 이 흐름만 궤짝이 아니라 전용 무대(랑데부)로 재생된다 — 단계마다 장소가 바뀌는 게
@@ -729,6 +895,13 @@ export const PIPELINES: Pipeline[] = [
         tech: "webrtc",
         note: "버퍼가 차면 멈췄다 잇고, 디스크가 밀리면 상대를 세운다. 파일은 두 기기 사이만 지나고 메모리에 쌓이지 않는다.",
         src: "apps/drop/src/lib/rtc/transfer.ts",
+      },
+      {
+        label: "앉은 만큼 되알리기 (ack)",
+        tech: "ackledger",
+        note: "받는 쪽은 디스크에 앉힌 바이트를 256KB마다(덜 쌓였어도 0.5초마다) 알리고, 파일을 닫은 뒤 최종 ack를 한 번 더 보낸다. 보내는 쪽의 진행률·속도·'완료'는 전부 그 숫자에서 나온다 — 데이터 채널에 건넨 바이트는 내 송신 버퍼에 쌓인 양이지 상대가 받은 양이 아니다.",
+        src: "apps/drop/src/lib/rtc/progress.ts",
+        feat: "drop-transfer",
       },
     ],
   },

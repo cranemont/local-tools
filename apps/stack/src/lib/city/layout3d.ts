@@ -298,7 +298,8 @@ export function computeCity(): CityLayout {
 
   sized.forEach((s) => {
     const isCenter = s.app.id === "common";
-    // 링 위 6구역은 북쪽(-90°)부터 시계방향으로. 중앙은 공통 기반.
+    // 링 위 구역은 북쪽(-90°)부터 시계방향으로 — 개수는 흐름이 지나는 앱 수에서 나온다
+    // (숫자를 적어 두면 앱이 늘 때마다 주석만 낡는다). 중앙은 공통 기반.
     const idx = ringApps.findIndex((a) => a.id === s.app.id);
     const angle = isCenter ? 0 : -Math.PI / 2 + (idx * Math.PI * 2) / ringApps.length;
     const cx = isCenter ? 0 : Math.cos(angle) * ring;

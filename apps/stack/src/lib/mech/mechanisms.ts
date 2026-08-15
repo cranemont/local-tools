@@ -183,14 +183,16 @@ export const MECHANISMS: Mechanism[] = [
     id: "webrtc-connect",
     title: "중간 서버 없이 통로 뚫기",
     subtitle:
-      "연결 정보를 한 덩어리로 만들어 한 번에 교환한다. 파일은 이 통로가 열린 뒤에야 움직인다.",
+      "연결 정보를 한 덩어리로 만들어 한 번에 교환한다. 파일은 이 통로가 열린 뒤에야 움직이고, 얼마나 갔는지는 상대가 되알려 주는 숫자로만 센다.",
     kind: "sequence",
     features: ["drop-peer", "drop-sdp", "drop-transfer"],
-    techs: ["webrtc", "compressionstream", "sdpcodec"],
+    techs: ["webrtc", "compressionstream", "sdpcodec", "ackledger"],
     src: [
       "apps/drop/src/lib/rtc/peer.ts",
       "apps/drop/src/lib/rtc/signal.ts",
       "apps/drop/src/lib/rtc/transfer.ts",
+      "apps/drop/src/lib/rtc/frames.ts",
+      "apps/drop/src/lib/rtc/progress.ts",
     ],
     sequence: {
       actors: [
@@ -226,8 +228,41 @@ export const MECHANISMS: Mechanism[] = [
           from: "host",
           to: "guest",
           label: "DTLS 핸드셰이크 → DataChannel 열림",
+          detail: "여기서부터 중간이 없다. 이 관 위를 도는 프레임은 11종뿐이다.",
+        },
+        {
+          from: "host",
+          to: "guest",
+          label: "hello (ack: true)",
           detail:
-            "여기서부터 중간이 없다. 받는 쪽이 수락하면 64KB 청크로 쪼개 보내고, 버퍼가 차거나 상대 디스크가 밀리면 멈췄다 잇는다.",
+            "채널이 열리자마자 양쪽이 하나씩 보내는 능력 교환. 채널이 ordered라 hello는 언제나 accept보다 먼저 도착한다 — 첫 바이트를 밀기 전에 상대가 받은 양을 확인해 주는 판인지 알 수 있다는 뜻이다. 안 오면 예전 판이다.",
+        },
+        {
+          from: "host",
+          to: "guest",
+          label: "offer(목록·총량) → accept",
+          detail:
+            "묻지도 않고 남의 파일이 디스크에 앉지 않게, 그리고 저장 위치를 묻는 피커가 사용자 제스처 안에서만 열리기 때문에 수락 단계가 구조적으로 필요하다.",
+        },
+        {
+          from: "host",
+          to: "guest",
+          label: "file → 64KB 청크 …",
+          detail:
+            "송신 버퍼가 8MB를 넘으면 멈추고 1MB로 빠지면 잇는다. 받는 쪽 디스크가 밀려 쓰지 못한 양이 4MB를 넘으면 flow 프레임으로 우리를 세운다.",
+        },
+        {
+          from: "guest",
+          to: "host",
+          label: "ack (앉은 바이트, 끝이면 fin)",
+          detail:
+            "받는 쪽이 디스크에 앉힌 만큼을 256KB마다(덜 쌓였어도 0.5초마다) 알린다. 보내는 쪽의 진행률·속도·'완료'는 이 숫자에서만 나온다 — 예전에는 채널에 건넨 바이트를 썼는데, 그건 내 송신 버퍼에 쌓인 양이라 첫 구간의 속도가 부풀고 '완료'가 상대가 다 쓰기 전에 떴다.",
+        },
+        {
+          from: "host",
+          label: "eof 뒤 최종 ack를 기다린다",
+          detail:
+            "최종 ack가 와야 완료다. ack를 한 장도 못 봤고 상대가 아는 판인지도 모르면 20초 뒤 예전처럼 낙관 모드로 닫고, 오던 ack가 30초 끊기면 상대가 멈춘 것으로 본다. 다 썼다면서 숫자가 모자라면 '완료'라고 말하지 않는다.",
         },
       ],
       sees: {
