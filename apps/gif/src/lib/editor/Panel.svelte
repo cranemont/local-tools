@@ -12,16 +12,19 @@
     GIF_COLOR_CHOICES,
     QUALITY_PRESETS,
     type DelayMode,
+    type ExportFormat,
     type PresetId,
   } from "./state.svelte";
   import { formatMinDelayMs, isDelayFloored } from "../gif/timing";
+  import { unseenOverlayCount } from "../gif/overlay";
   import type {
     OverlayAlign,
+    OverlayPatch,
     OverlayScope,
     OverlayVAlign,
-    TextOverlay,
   } from "../gif/overlay";
-  import { encodeGif, isAbortError, type RenderPlan } from "../gif/encode";
+  import { snapshotPlan, type RenderPlan } from "../gif/plan";
+  import { encodeGif, isAbortError } from "../gif/encode";
   import { encodeWebp } from "../gif/webp";
   import { encodeMp4 } from "../gif/mp4";
   import { extractPngFrames } from "../gif/extract";
@@ -66,7 +69,9 @@
   let delayInput = $state(100);
   let rangeFrom = $state(1);
   let rangeTo = $state(1);
-  let result = $state<{ blob: Blob; revision: number; fmt: string } | null>(null);
+  /** 만들어 둔 결과는 **자기 형식을 들고 있다** — 다 만든 뒤 형식 칩을 바꿔도
+   *  파일 이름의 확장자와 배지가 실제로 만든 것을 가리킨다. */
+  let result = $state<{ blob: Blob; revision: number; fmt: ExportFormat } | null>(null);
   let status = $state("");
   /** 지금 도는 인코딩·추출을 멈추는 손잡이. */
   let aborter: AbortController | null = null;
@@ -120,16 +125,19 @@
     return clean || fallback;
   }
 
+  /** 지금 상태를 굳혀 이번 인코딩이 끝까지 볼 계획을 만든다.
+   *  인코딩은 프레임마다 await로 멈추므로, 살아 있는 상태를 그대로 넘기면 그 틈의 편집이
+   *  뒤쪽 프레임에만 들어가 결과 파일 하나가 자기 안에서 앞뒤로 갈린다(plan.ts 참고). */
   function plan(): RenderPlan {
-    return {
+    return snapshotPlan({
       frames: editor.frames,
       sources: editor.sources,
-      transform: $state.snapshot(editor.transform),
-      overlays: $state.snapshot(editor.overlays),
+      transform: editor.transform,
+      overlays: editor.overlays,
       baseW: editor.base.w,
       baseH: editor.base.h,
       signal: aborter?.signal,
-    };
+    });
   }
 
   /** 긴 작업 시작 — 오버레이의 취소 버튼이 여기서 만든 신호를 끊는다. */
@@ -152,24 +160,27 @@
     editor.error = "";
     status = "";
     beginBusy();
-    editor.busyMsg = t.panel.encoding(0, editor.frames.length);
+    // 이 아래로는 살아 있는 상태를 읽지 않는다 — 형식·화질·배속까지 여기서 값으로 굳힌다.
+    const frozen = plan();
     const revision = editor.revision;
+    const fmt = editor.exportFormat;
+    editor.busyMsg = t.panel.encoding(0, frozen.frames.length);
     const onProgress = (done: number, total: number) =>
       (editor.busyMsg = t.panel.encoding(done, total));
     try {
       let blob: Blob;
-      if (editor.exportFormat === "gif") {
+      if (fmt === "gif") {
         blob = await encodeGif({
-          ...plan(),
+          ...frozen,
           speed: editor.speed,
           repeat: editor.repeat,
           maxColors: editor.gifColors,
           dither: editor.gifDither,
           onProgress,
         });
-      } else if (editor.exportFormat === "webp") {
+      } else if (fmt === "webp") {
         blob = await encodeWebp({
-          ...plan(),
+          ...frozen,
           speed: editor.speed,
           loop: editor.webpLoop,
           quality: editor.webpQuality,
@@ -177,13 +188,13 @@
         });
       } else {
         blob = await encodeMp4({
-          ...plan(),
+          ...frozen,
           speed: editor.speed,
           quality: editor.mp4Quality,
           onProgress,
         });
       }
-      result = { blob, revision, fmt: fmtLabel };
+      result = { blob, revision, fmt };
     } catch (err) {
       if (isAbortError(err)) status = t.panel.canceled;
       else editor.error = err instanceof Error ? err.message : String(err);
@@ -194,7 +205,7 @@
 
   function saveResult() {
     if (!result) return;
-    downloadBlob(result.blob, `${cleanName("animation")}.${ext}`);
+    downloadBlob(result.blob, `${cleanName("animation")}.${result.fmt}`);
   }
 
   // ── 프레임 PNG 추출 (여러 장이면 ZIP 한 개) ────────
@@ -280,10 +291,11 @@
 
   // ── 텍스트 오버레이 ───────────────────────────────
   const active = $derived(editor.activeOverlay);
-  /** 범위가 '선택'인데 선택된 프레임이 없으면 이 텍스트는 어디에도 안 그려진다. */
-  const overlayUnseen = $derived(active?.scope === "selected" && editor.selectedCount === 0);
+  /** 어디에도 안 그려지는 글자의 수 — 편집 중인 것만이 아니라 목록 전체를 센다. */
+  const unseenCount = $derived(
+    unseenOverlayCount(editor.overlays, editor.frames.length, editor.selectedCount),
+  );
 
-  type OverlayPatch = Partial<Omit<TextOverlay, "id">>;
   type OverlayNumberKey = "fontSize" | "strokeWidth" | "dx" | "dy" | "from" | "to";
 
   function patchActive(patch: OverlayPatch) {
@@ -552,9 +564,9 @@
       <button type="button" class="btn small" onclick={() => editor.addOverlay()}>
         <Icon name="text" size={14} /> {t.panel.textAdd}
       </button>
-      {#if overlayUnseen}
-        <span class="badge" title={t.panel.textNoSelectionHint}>
-          {t.panel.textNoSelection}
+      {#if unseenCount > 0}
+        <span class="badge" title={t.panel.textUnseenHint(unseenCount)}>
+          {t.panel.textUnseen(unseenCount)}
         </span>
       {/if}
     </div>
@@ -853,7 +865,9 @@
 
     {#if result}
       <div class="result" class:stale>
-        <p class="result-size">{t.panel.resultReady(result.fmt, formatBytes(result.blob.size))}</p>
+        <p class="result-size">
+          {t.panel.resultReady(FORMAT_LABELS[result.fmt], formatBytes(result.blob.size))}
+        </p>
         {#if stale}
           <p class="result-note">{t.panel.resultStale}</p>
         {/if}

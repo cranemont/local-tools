@@ -120,9 +120,10 @@ export const t = {
     textScopeAll: "전체",
     textScopeSelected: "선택",
     textScopeRange: "구간",
-    /** 범위가 '선택'인데 선택된 프레임이 없을 때만 뜬다 — 아무 프레임에도 안 나온다는 뜻. */
-    textNoSelection: "선택 없음",
-    textNoSelectionHint: "선택한 프레임이 없어 이 텍스트는 어디에도 안 나와요",
+    /** 적용 범위에 걸리는 프레임이 없는 글자가 있을 때만 뜬다(목록 전체를 센다). */
+    textUnseen: (n: number) => `${n}개 안 나옴`,
+    textUnseenHint: (n: number) =>
+      `적용 범위에 걸리는 프레임이 없어 텍스트 ${n}개가 결과에 안 나와요`,
 
     loop: "반복",
     loopForever: "무한 반복",

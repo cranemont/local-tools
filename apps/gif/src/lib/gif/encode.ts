@@ -3,21 +3,7 @@ import { t } from "../i18n";
 import { getFrameBitmap } from "./decode";
 import { effectiveDelayMs } from "./timing";
 import { outputSize, renderFrame } from "./transform";
-import type { TextOverlay } from "./overlay";
-import type { Frame, FrameSource, Transform } from "./types";
-
-/** 인코딩·추출이 공유하는 렌더 입력. */
-export interface RenderPlan {
-  frames: Frame[];
-  sources: Map<string, FrameSource>;
-  transform: Transform;
-  /** 프레임 위에 얹을 텍스트 — 어느 프레임에 붙는지는 renderFrame이 고른다. */
-  overlays: readonly TextOverlay[];
-  baseW: number;
-  baseH: number;
-  /** 중단 신호 — 네 인코더가 프레임 루프 머리에서 함께 확인한다. */
-  signal?: AbortSignal;
-}
+import type { RenderPlan } from "./plan";
 
 /** 사용자가 취소한 경우인가 (에러 배너 대신 조용히 넘길 것). */
 export function isAbortError(err: unknown): boolean {

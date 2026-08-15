@@ -1,7 +1,7 @@
 import { t } from "../i18n";
 import { getFrameBitmap } from "./decode";
 import { outputSize, renderFrame } from "./transform";
-import type { RenderPlan } from "./encode";
+import type { RenderPlan } from "./plan";
 
 export interface PngFrame {
   name: string;

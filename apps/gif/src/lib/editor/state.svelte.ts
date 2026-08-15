@@ -8,10 +8,10 @@ import {
   type ExtractOptions,
 } from "../gif/video";
 import {
-  clampFontSize,
-  clampStrokeWidth,
+  applyOverlayPatch,
   newOverlay,
   selectionAffectsOverlays,
+  type OverlayPatch,
   type TextOverlay,
 } from "../gif/overlay";
 import type { ExportFormat } from "../gif/timing";
@@ -710,28 +710,16 @@ export class EditorState {
     this.activeOverlayId = id;
   }
 
-  /** 칸 하나를 고친다. 되돌리기 지점을 남기지 않는다(위 Snapshot 주석 참고). */
-  updateOverlay(id: string, patch: Partial<Omit<TextOverlay, "id">>): void {
+  /** 칸 하나를 고친다. 되돌리기 지점을 남기지 않는다(위 Snapshot 주석 참고).
+   *  값을 가두는 규칙은 전부 applyOverlayPatch에 있다 — 구간 번호를 손대지 않은 편집이
+   *  구간을 줄이지 않는 것도 거기서 지킨다. */
+  updateOverlay(id: string, patch: OverlayPatch): void {
     const i = this.overlays.findIndex((o) => o.id === id);
     if (i < 0) return;
-    const merged = { ...this.overlays[i], ...patch };
-    // 화면에서 들어온 수는 비어 있거나 범위 밖일 수 있다 — 캔버스로 나가기 전에 가둔다.
-    merged.fontSize = clampFontSize(merged.fontSize);
-    merged.strokeWidth = clampStrokeWidth(merged.strokeWidth);
-    merged.dx = Number.isFinite(merged.dx) ? Math.round(merged.dx) : 0;
-    merged.dy = Number.isFinite(merged.dy) ? Math.round(merged.dy) : 0;
-    merged.from = this.#clampFrameNo(merged.from);
-    merged.to = this.#clampFrameNo(merged.to);
     const next = [...this.overlays];
-    next[i] = merged;
+    next[i] = applyOverlayPatch(this.overlays[i], patch, this.frames.length);
     this.overlays = next;
     this.touch();
-  }
-
-  #clampFrameNo(n: number): number {
-    const last = Math.max(1, this.frames.length);
-    if (!Number.isFinite(n)) return 1;
-    return Math.min(last, Math.max(1, Math.round(n)));
   }
 }
 

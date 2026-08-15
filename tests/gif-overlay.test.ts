@@ -8,10 +8,13 @@ import {
   OVERLAY_MAX_FONT_SIZE,
   OVERLAY_MAX_STROKE,
   OVERLAY_MIN_FONT_SIZE,
+  applyOverlayPatch,
   clampFontSize,
+  clampFrameNo,
   clampStrokeWidth,
   isOverlayDrawable,
   isOverlayOnFrame,
+  isOverlayUnseen,
   layoutOverlay,
   newOverlay,
   overlayFont,
@@ -19,11 +22,14 @@ import {
   overlayMetrics,
   overlaysForFrame,
   selectionAffectsOverlays,
+  unseenOverlayCount,
   wrapLines,
   type OverlayAlign,
   type OverlayVAlign,
   type TextOverlay,
 } from "../apps/gif/src/lib/gif/overlay";
+import { snapshotPlan } from "../apps/gif/src/lib/gif/plan";
+import type { Frame, FrameSource, Transform } from "../apps/gif/src/lib/gif/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 이 파일이 apps/gif 텍스트 오버레이의 명세다.
@@ -487,6 +493,126 @@ describe("글꼴은 내려받지 않는다 (단일 HTML 오프라인 원칙)", (
   });
 });
 
+describe("칸 하나 편집 (applyOverlayPatch)", () => {
+  // 패널은 칸 하나씩 보낸다. 값을 가두는 규칙이 여기 한 곳에만 있어야
+  // "화면에 보이는 수"와 "캔버스로 나가는 수"가 갈리지 않는다.
+  it("적어 둔 구간은 손대지 않은 편집에서 그대로 남는다 — 프레임이 줄어도 줄지 않는다", () => {
+    // 20프레임짜리에 1~20 구간을 걸어 두고, 프레임을 5장으로 줄인 뒤 글자만 고친 상황.
+    const o = ov({ scope: "range", from: 1, to: 20 });
+    const edited = applyOverlayPatch(o, { text: "고친 글자" }, 5);
+    expect(edited.to).toBe(20);
+    expect(edited.from).toBe(1);
+  });
+
+  it("프레임을 다시 늘리면 구간이 그대로 살아 있다 — 조용히 줄어든 값은 안 돌아온다", () => {
+    let o = ov({ scope: "range", from: 2, to: 8 });
+    o = applyOverlayPatch(o, { text: "가" }, 3); // 프레임 3장으로 줄었을 때 글자만 고침
+    o = applyOverlayPatch(o, { color: "#ff0000" }, 3);
+    // 프레임이 10장으로 돌아오면 2~8이 다시 그대로 걸린다.
+    expect(isOverlayOnFrame(o, 1, false)).toBe(true); // 2번
+    expect(isOverlayOnFrame(o, 7, false)).toBe(true); // 8번
+    expect(isOverlayOnFrame(o, 8, false)).toBe(false); // 9번
+  });
+
+  it("구간 칸을 직접 적으면 그 칸만 1..프레임 수로 갇힌다", () => {
+    const o = ov({ scope: "range", from: 1, to: 20 });
+    expect(applyOverlayPatch(o, { to: 99 }, 5).to).toBe(5);
+    expect(applyOverlayPatch(o, { from: 0 }, 5).from).toBe(1);
+    // 적지 않은 쪽은 그대로 — 한 칸을 고쳤다고 다른 칸이 따라 움직이지 않는다.
+    expect(applyOverlayPatch(o, { from: 3 }, 5).to).toBe(20);
+  });
+
+  it("빈 칸(NaN)을 적으면 1번으로 떨어진다", () => {
+    const o = ov({ scope: "range", from: 2, to: 4 });
+    expect(applyOverlayPatch(o, { from: Number.NaN }, 5).from).toBe(1);
+  });
+
+  it("프레임이 없을 때 적은 번호는 1이다 (0으로 내려가지 않는다)", () => {
+    expect(clampFrameNo(7, 0)).toBe(1);
+    expect(clampFrameNo(7, Number.NaN)).toBe(1);
+    expect(clampFrameNo(2.6, 10)).toBe(3);
+  });
+
+  it("글자 크기·외곽선·이동값은 편집할 때마다 갇힌다 (범위와 달리 바깥 상태를 안 본다)", () => {
+    const o = ov({ fontSize: 20, strokeWidth: 2, dx: 0, dy: 0 });
+    const edited = applyOverlayPatch(
+      o,
+      { fontSize: 1e6, strokeWidth: -3, dx: 4.6, dy: Number.NaN },
+      10,
+    );
+    expect(edited.fontSize).toBe(OVERLAY_MAX_FONT_SIZE);
+    expect(edited.strokeWidth).toBe(0);
+    expect(edited.dx).toBe(5);
+    expect(edited.dy).toBe(0);
+  });
+
+  it("id는 바뀌지 않고 원본 객체도 그대로다 — 새 객체로 갈아 끼운다", () => {
+    const o = ov({ id: "keep", text: "원본" });
+    const edited = applyOverlayPatch(o, { text: "새 글자" }, 10);
+    expect(edited.id).toBe("keep");
+    expect(edited).not.toBe(o);
+    expect(o.text).toBe("원본");
+  });
+});
+
+describe("어디에도 안 그려지는 글자를 센다 (unseenOverlayCount)", () => {
+  // 배지는 편집 중인 것만 보면 안 된다 — 다른 오버레이가 같은 상태여도 조용하면
+  // 사용자는 글자가 왜 안 나오는지 알 길이 없다.
+  it("'선택' 범위인데 선택한 프레임이 없으면 안 나온다", () => {
+    expect(isOverlayUnseen(ov({ scope: "selected" }), 10, 0)).toBe(true);
+    expect(isOverlayUnseen(ov({ scope: "selected" }), 10, 1)).toBe(false);
+  });
+
+  it("목록 전체를 센다 — 편집 중이 아닌 것도 함께 잡힌다", () => {
+    const list = [
+      ov({ id: "a", scope: "selected" }),
+      ov({ id: "b", scope: "selected" }),
+      ov({ id: "c", scope: "all" }),
+    ];
+    expect(unseenOverlayCount(list, 10, 0)).toBe(2);
+    expect(unseenOverlayCount(list, 10, 3)).toBe(0);
+  });
+
+  it("구간이 통째로 프레임 밖이면 안 나온다 (5프레임에 8~10 구간)", () => {
+    expect(isOverlayUnseen(ov({ scope: "range", from: 8, to: 10 }), 5, 0)).toBe(true);
+    // 한 장이라도 걸치면 나온다.
+    expect(isOverlayUnseen(ov({ scope: "range", from: 5, to: 10 }), 5, 0)).toBe(false);
+    // 거꾸로 적은 구간도 같은 규칙으로 읽는다.
+    expect(isOverlayUnseen(ov({ scope: "range", from: 10, to: 8 }), 5, 0)).toBe(true);
+  });
+
+  it("빈 글자는 세지 않는다 — 그릴 것이 없는 것은 '안 보임'이 아니라 '없음'이다", () => {
+    expect(unseenOverlayCount([ov({ text: "", scope: "selected" })], 10, 0)).toBe(0);
+    expect(unseenOverlayCount([ov({ text: "  ", scope: "range", from: 9, to: 9 })], 5, 0)).toBe(0);
+  });
+
+  it("'전체'는 프레임이 하나라도 있으면 보인다", () => {
+    expect(isOverlayUnseen(ov({ scope: "all" }), 1, 0)).toBe(false);
+    expect(isOverlayUnseen(ov({ scope: "all" }), 0, 0)).toBe(true);
+  });
+
+  it("판정은 isOverlayOnFrame과 같은 답을 낸다 — 두 곳이 갈라지지 않는다", () => {
+    const frames = 5;
+    for (const scope of ["all", "selected", "range"] as const) {
+      for (const [from, to] of [
+        [1, 5],
+        [3, 9],
+        [6, 8],
+      ]) {
+        for (const selectedCount of [0, 2]) {
+          const o = ov({ scope, from, to });
+          // 선택은 앞쪽 selectedCount장에 걸린 것으로 본다.
+          let drawnSomewhere = false;
+          for (let i = 0; i < frames; i++) {
+            if (isOverlayOnFrame(o, i, i < selectedCount)) drawnSomewhere = true;
+          }
+          expect(isOverlayUnseen(o, frames, selectedCount)).toBe(!drawnSomewhere);
+        }
+      }
+    }
+  });
+});
+
 describe("줄 높이와 어센트는 좌표 계산과 같은 상수를 쓴다", () => {
   it("줄 높이 = 글자 크기 × 1.25", () => {
     expect(OVERLAY_LINE_HEIGHT).toBe(1.25);
@@ -507,5 +633,228 @@ describe("줄 높이와 어센트는 좌표 계산과 같은 상수를 쓴다", 
         expect(lastBaseline).toBeLessThanOrEqual(300);
       }
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 인코딩이 시작되는 순간의 상태를 굳히는 것(plan.ts)의 명세.
+// 인코더는 프레임마다 await로 멈춘다(디코딩·convertToBlob·muxer). 그 틈에 사용자가
+// 선택을 토글하거나 딜레이를 고치면, 살아 있는 배열을 넘긴 인코딩은 앞쪽 프레임과 뒤쪽
+// 프레임이 서로 다른 상태를 보고 그려진다 — 결과 파일 하나가 자기 안에서 앞뒤가 다르다.
+// 아래 테스트는 전부 "계획을 뜬 뒤 살아 있는 상태를 마구 고쳐도 계획은 그대로"를 잰다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function source(id: string): FrameSource {
+  return {
+    id,
+    kind: "still",
+    name: `${id}.png`,
+    mime: "image/png",
+    bytes: new Uint8Array([1, 2, 3]) as Uint8Array<ArrayBuffer>,
+    width: 40,
+    height: 30,
+    frameCount: 1,
+  };
+}
+
+function fr(over: Partial<Frame> & Pick<Frame, "id">): Frame {
+  return {
+    sourceId: "s1",
+    frameIndex: 0,
+    delayMs: 100,
+    selected: false,
+    thumb: "data:,",
+    ...over,
+  };
+}
+
+function tf(over: Partial<Transform> = {}): Transform {
+  return { crop: null, rotation: 0, flipH: false, flipV: false, scale: 1, ...over };
+}
+
+/** 이 계획이 실제로 만들 파일 — 프레임마다 얹히는 글자와 딜레이.
+ *  인코더 네 개가 프레임 루프에서 읽는 것이 정확히 이 두 가지다. */
+function script(plan: ReturnType<typeof snapshotPlan>) {
+  return plan.frames.map((f, i) => ({
+    delayMs: f.delayMs,
+    text: overlaysForFrame(plan.overlays, i, f.selected).map((o) => o.text),
+  }));
+}
+
+describe("인코딩 시작 시점의 상태를 굳힌다 (snapshotPlan)", () => {
+  /** 3프레임 + '선택한 프레임만' 자막 하나 — 편집이 결과를 가르는 가장 얇은 무대. */
+  function stage() {
+    const frames = [
+      fr({ id: "f1", delayMs: 100, selected: true }),
+      fr({ id: "f2", delayMs: 100, selected: false }),
+      fr({ id: "f3", delayMs: 100, selected: false }),
+    ];
+    const overlays = [ov({ id: "sel", text: "선택 자막", scope: "selected" })];
+    const sources = new Map([["s1", source("s1")]]);
+    return { frames, overlays, sources };
+  }
+
+  it("인코딩 도중 선택을 토글해도 그 인코딩은 시작 시점 선택을 본다", () => {
+    const live = stage();
+    const plan = snapshotPlan({
+      frames: live.frames,
+      sources: live.sources,
+      transform: tf(),
+      overlays: live.overlays,
+      baseW: 40,
+      baseH: 30,
+    });
+    const before = script(plan);
+
+    // 인코딩이 1번 프레임을 그린 뒤 사용자가 필름스트립 체크를 누른 상황.
+    live.frames[0].selected = false;
+    live.frames[2].selected = true;
+
+    expect(script(plan)).toEqual(before);
+    expect(before.map((s) => s.text.length)).toEqual([1, 0, 0]);
+  });
+
+  it("인코딩 도중 딜레이를 고쳐도 계획의 딜레이는 그대로다 (자막 이전부터 있던 결함)", () => {
+    const live = stage();
+    const plan = snapshotPlan({
+      frames: live.frames,
+      sources: live.sources,
+      transform: tf(),
+      overlays: live.overlays,
+      baseW: 40,
+      baseH: 30,
+    });
+    for (const f of live.frames) f.delayMs = 20;
+    expect(plan.frames.map((f) => f.delayMs)).toEqual([100, 100, 100]);
+  });
+
+  it("인코딩 도중 프레임을 지우거나 더해도 길이·순서가 그대로다", () => {
+    const live = stage();
+    const plan = snapshotPlan({
+      frames: live.frames,
+      sources: live.sources,
+      transform: tf(),
+      overlays: live.overlays,
+      baseW: 40,
+      baseH: 30,
+    });
+    live.frames.splice(1, 1);
+    live.frames.push(fr({ id: "f4" }));
+    live.frames.reverse();
+    expect(plan.frames).toHaveLength(3);
+    expect(plan.frames.map((f) => f.frameIndex)).toEqual([0, 0, 0]);
+  });
+
+  it("인코딩 도중 글자·범위를 고쳐도 계획의 글자는 그대로다", () => {
+    const live = stage();
+    const plan = snapshotPlan({
+      frames: live.frames,
+      sources: live.sources,
+      transform: tf(),
+      overlays: live.overlays,
+      baseW: 40,
+      baseH: 30,
+    });
+    const before = script(plan);
+    live.overlays[0].text = "고친 자막";
+    live.overlays[0].scope = "all";
+    live.overlays.push(ov({ id: "new", text: "새 자막" }));
+    expect(script(plan)).toEqual(before);
+  });
+
+  it("변형은 크롭까지 끊어 뜬다 — 중첩 객체가 살아 있는 상태를 물고 있지 않다", () => {
+    const live = { transform: tf({ crop: { x: 1, y: 2, w: 3, h: 4 }, scale: 0.5 }) };
+    const plan = snapshotPlan({
+      frames: [],
+      sources: new Map(),
+      transform: live.transform,
+      overlays: [],
+      baseW: 40,
+      baseH: 30,
+    });
+    live.transform.crop!.w = 999;
+    live.transform.scale = 2;
+    expect(plan.transform.crop).toEqual({ x: 1, y: 2, w: 3, h: 4 });
+    expect(plan.transform.scale).toBe(0.5);
+  });
+
+  it("소스 표에서 항목이 빠져도 계획은 자기 소스를 계속 본다 (인코딩 중 소스 정리)", () => {
+    const live = stage();
+    const plan = snapshotPlan({
+      frames: live.frames,
+      sources: live.sources,
+      transform: tf(),
+      overlays: live.overlays,
+      baseW: 40,
+      baseH: 30,
+    });
+    live.sources.delete("s1");
+    expect(plan.sources.get("s1")?.id).toBe("s1");
+  });
+
+  it("계획이 지나는 소스만 들고 간다 — 안 쓰는 소스는 안 잡는다", () => {
+    const sources = new Map([
+      ["s1", source("s1")],
+      ["unused", source("unused")],
+    ]);
+    const plan = snapshotPlan({
+      frames: [fr({ id: "f1" })],
+      sources,
+      transform: tf(),
+      overlays: [],
+      baseW: 40,
+      baseH: 30,
+    });
+    expect([...plan.sources.keys()]).toEqual(["s1"]);
+  });
+
+  it("소스 바이트는 복사하지 않는다 — 임포트 뒤 아무도 안 고치는 읽기 전용이고 프레임당 MB다", () => {
+    const s = source("s1");
+    const plan = snapshotPlan({
+      frames: [fr({ id: "f1" })],
+      sources: new Map([["s1", s]]),
+      transform: tf(),
+      overlays: [],
+      baseW: 40,
+      baseH: 30,
+    });
+    expect(plan.sources.get("s1")).toBe(s);
+    expect(plan.sources.get("s1")?.bytes).toBe(s.bytes);
+  });
+
+  it("중단 신호와 베이스 크기는 그대로 실린다 — 취소는 계획을 뜬 뒤에도 닿아야 한다", () => {
+    const ac = new AbortController();
+    const plan = snapshotPlan({
+      frames: [],
+      sources: new Map(),
+      transform: tf(),
+      overlays: [],
+      baseW: 640,
+      baseH: 480,
+      signal: ac.signal,
+    });
+    expect(plan.baseW).toBe(640);
+    expect(plan.baseH).toBe(480);
+    expect(plan.signal).toBe(ac.signal);
+    ac.abort();
+    expect(plan.signal?.aborted).toBe(true);
+  });
+
+  it("계획끼리도 안 섞인다 — 두 번째 계획은 그 사이의 편집을 담는다", () => {
+    const live = stage();
+    const input = {
+      frames: live.frames,
+      sources: live.sources,
+      transform: tf(),
+      overlays: live.overlays,
+      baseW: 40,
+      baseH: 30,
+    };
+    const first = snapshotPlan(input);
+    live.frames[1].selected = true;
+    live.frames[1].delayMs = 33;
+    const second = snapshotPlan(input);
+    expect(script(first)[1]).toEqual({ delayMs: 100, text: [] });
+    expect(script(second)[1]).toEqual({ delayMs: 33, text: ["선택 자막"] });
   });
 });

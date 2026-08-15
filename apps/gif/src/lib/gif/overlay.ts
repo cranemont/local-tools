@@ -69,7 +69,7 @@ export function overlayMargin(fontSize: number): number {
 export function newOverlay(id: string, canvasH: number, frameCount: number): TextOverlay {
   const h = Math.max(1, num(canvasH, 1));
   const fontSize = clampFontSize(Math.round(h * 0.09));
-  const last = Math.max(1, Math.round(num(frameCount, 1)) || 1);
+  const last = clampFrameNo(frameCount, frameCount);
   return {
     id,
     text: "",
@@ -95,6 +95,40 @@ export function clampFontSize(v: number): number {
 export function clampStrokeWidth(v: number): number {
   const n = Math.round(num(v, 0));
   return Math.min(OVERLAY_MAX_STROKE, Math.max(0, n));
+}
+
+/** 1-based 프레임 번호를 1..프레임 수로 가둔다(프레임이 없으면 1). */
+export function clampFrameNo(n: number, frameCount: number): number {
+  const last = Math.max(1, Math.round(num(frameCount, 1)) || 1);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(last, Math.max(1, Math.round(n)));
+}
+
+/** 패널이 칸 하나씩 보내는 편집. id는 못 바꾼다. */
+export type OverlayPatch = Partial<Omit<TextOverlay, "id">>;
+
+/**
+ * 칸 하나 편집을 오버레이에 적용한다 — 새 객체로 돌려주고 원본은 건드리지 않는다.
+ * 화면에서 들어온 수는 비어 있거나 범위 밖일 수 있으므로 캔버스로 나가기 전에 가둔다.
+ *
+ * 구간 번호(from·to)는 **이번에 적은 칸만** 프레임 수 안으로 가둔다. 예전엔 편집할 때마다
+ * 둘 다 다시 가뒀는데, 그러면 프레임이 줄어든 뒤 **글자만 고쳐도 구간 끝이 조용히 줄고**
+ * 프레임을 다시 늘려도 안 돌아왔다. 적어 둔 구간은 사용자가 정한 값이므로 그대로 두고,
+ * 프레임 수를 넘는 번호는 isOverlayOnFrame이 알아서 읽는다.
+ */
+export function applyOverlayPatch(
+  o: TextOverlay,
+  patch: OverlayPatch,
+  frameCount: number,
+): TextOverlay {
+  const next: TextOverlay = { ...o, ...patch, id: o.id };
+  next.fontSize = clampFontSize(next.fontSize);
+  next.strokeWidth = clampStrokeWidth(next.strokeWidth);
+  next.dx = Number.isFinite(next.dx) ? Math.round(next.dx) : 0;
+  next.dy = Number.isFinite(next.dy) ? Math.round(next.dy) : 0;
+  if ("from" in patch) next.from = clampFrameNo(next.from, frameCount);
+  if ("to" in patch) next.to = clampFrameNo(next.to, frameCount);
+  return next;
 }
 
 // ── 프레임 범위 판정 ─────────────────────────────────
@@ -144,6 +178,36 @@ export function overlaysForFrame(
  */
 export function selectionAffectsOverlays(overlays: readonly TextOverlay[]): boolean {
   return overlays.some((o) => o.scope === "selected" && isOverlayDrawable(o));
+}
+
+/**
+ * 적은 글자가 어느 프레임에도 안 그려지는가 — 화면 경고용.
+ * 선택이 비었는데 범위가 "선택"이거나, 구간이 통째로 프레임 밖일 때다.
+ * (판정은 isOverlayOnFrame과 같은 규칙이다: 프레임을 하나씩 훑지 않고 산술로만 답한다.)
+ */
+export function isOverlayUnseen(
+  o: TextOverlay,
+  frameCount: number,
+  selectedCount: number,
+): boolean {
+  if (!isOverlayDrawable(o)) return false; // 빈 글자는 '안 보임'이 아니라 '없음'이다
+  const frames = Math.max(0, Math.round(num(frameCount, 0)));
+  if (frames === 0) return true;
+  if (o.scope === "selected") return Math.max(0, Math.round(num(selectedCount, 0))) === 0;
+  if (o.scope !== "range") return false;
+  const a = Math.round(num(o.from, 1));
+  const b = Math.round(num(o.to, 1));
+  return Math.max(a, b) < 1 || Math.min(a, b) > frames;
+}
+
+/** 지금 어디에도 안 그려지는 글자의 수. **목록 전체**를 센다 —
+ *  편집 중인 것만 보면 다른 오버레이가 같은 상태여도 화면이 조용해진다. */
+export function unseenOverlayCount(
+  overlays: readonly TextOverlay[],
+  frameCount: number,
+  selectedCount: number,
+): number {
+  return overlays.filter((o) => isOverlayUnseen(o, frameCount, selectedCount)).length;
 }
 
 // ── 좌표·줄바꿈 ──────────────────────────────────────

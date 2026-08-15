@@ -12,7 +12,7 @@ import { t } from "../i18n";
 import { getFrameBitmap } from "./decode";
 import { effectiveDelayMs } from "./timing";
 import { outputSize, renderFrame } from "./transform";
-import type { RenderPlan } from "./encode";
+import type { RenderPlan } from "./plan";
 
 /** 화질 프리셋 id와 같은 값 공간 (에디터 상태에 의존하지 않도록 별도 선언). */
 export type Mp4Quality = "small" | "balanced" | "high";

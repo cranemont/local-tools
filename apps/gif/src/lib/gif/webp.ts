@@ -5,7 +5,7 @@ import { t } from "../i18n";
 import { getFrameBitmap } from "./decode";
 import { effectiveDelayMs } from "./timing";
 import { outputSize, renderFrame } from "./transform";
-import type { RenderPlan } from "./encode";
+import type { RenderPlan } from "./plan";
 
 export interface WebpEncodeOptions extends RenderPlan {
   /** 배속 — 프레임 딜레이를 나눈다. */
