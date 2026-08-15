@@ -28,9 +28,12 @@ apps/pdf/            # PDF 도구 (Svelte 5 + TS)
   src/lib/Icon.svelte# 라인 SVG 아이콘 세트(이모지 안 씀)
   src/lib/canvas/    # 탭① 편집·병합 (통합 캔버스)
   src/lib/toimage/   # 탭② 이미지·텍스트 (한 탭이 두 형식 축을 가진다 — 아래 27번)
-  src/lib/password/  # 탭③ 암호
+  src/lib/password/  # 탭③ 압축·암호 — 암호 걸기·풀기
+  src/lib/compress/  # 탭③ 압축·암호 — 용량 줄이기(아래 32번)
   src/lib/pdf/       # 엔진: engine(썸네일)·exporter(병합·분할)·rasterize(PNG/JPG/WebP)·
-                     #        save(다운로드)·qpdfLoader(암호)·pdfjs(워커)·
+                     #        save(다운로드)·qpdfLoader(암호·재압축)·pdfjs(워커)·
+                     #        compress(목표 용량 탐색·조사 순서·글자 판정, 순수)·
+                     #        repack(쪽을 이미지로 다시 그려 새 PDF)·
                      #        range(쪽 범위 "1-5, 8, 12-" 파서 — 세 탭이 공유)·
                      #        unlock.svelte.ts(암호 PDF를 만나면 프롬프트를 띄우고 다시 연다)·
                      #        extract(pdf.js getTextContent 호출부 — 뷰포트 행렬로 쪽 회전을
@@ -45,11 +48,15 @@ apps/gif/            # GIF 에디터 (Svelte 5 + TS) — 단일 에디터 뷰(�
                      #        video(동영상 임포트)·transform·extract(PNG ZIP)·save·
                      #        timing(형식별 딜레이 하한·눈금 — 미리보기와 결과를 일치시킨다)·
                      #        overlay(텍스트 오버레이 — 프레임 범위 판정·프리셋 좌표·줄바꿈 계획)·
-                     #        plan(내보내기 시작 시점의 상태 스냅샷 — 아래 28번)
+                     #        plan(내보내기 시작 시점의 상태 스냅샷 — 아래 28번)·
+                     #        redact(모자이크·블러 영역 — 좌표계 변환·손잡이 끌기, 순수)·
+                     #        diff(프레임 차분 — 바뀐 사각형·투명 인덱스·적용 판정, 아래 34번)
 apps/video/          # 동영상 도구 (Svelte 5 + TS) — 트림·압축·변환·소리, 파일 한 개씩
   src/lib/editor/    # state.svelte.ts·Player(<video>+구간재생)·Timeline(스트립+핸들+kf눈금)·Panel
   src/lib/video/     # 엔진: probe(메타·키프레임)·thumbs(스트립)·transcode(mediabunny
-                     #        Conversion — 정확=재인코딩/무손실=패킷복사·소리추출)·save
+                     #        Conversion — 정확=재인코딩/무손실=패킷복사·소리추출)·save·
+                     #        segments(구간 목록 정규화·진행률 가중치·무손실 판정, 순수)·
+                     #        concat(구간 잇기 — Output에 패킷을 직접 옮긴다, 아래 33번)
 apps/image/          # 이미지 도구 (Svelte 5 + TS) — 변환·압축·리사이즈·크롭·EXIF, 필름스트립 일괄
   src/lib/editor/    # state.svelte.ts(크롭 후보·되돌리기 스택)·Preview(디바운스 재인코딩+
                      #   용량 배지+크롭 오버레이)·Panel
@@ -64,7 +71,9 @@ apps/sheet/          # 시트 (Svelte 5 + TS) — CSV·엑셀 편집기. ★ 이
                      #   model(조작·입력해석·정렬 — 정렬은 표 전체 행을 안정 정렬)·a1(A1↔좌표)·
                      #   csv(인코딩 판별+구분자 추론+RFC4180)·xlsx(ExcelJS 어댑터, 지연 로드)·
                      #   numfmt(엑셀 표시형식 해석)·serial(날짜 일련번호)·convert(JSON/MD/HTML)·save·
-                     #   filter(자동 필터 — 술어·고유값·보이는 행 + OP_SCOPE 표, 아래 29번)
+                     #   filter(자동 필터 — 술어·고유값·보이는 행 + OP_SCOPE 표, 아래 29번)·
+                     #   condformat(조건부 서식 — 규칙 판정·색조 보간·우선순위 합성)·
+                     #   validation(데이터 유효성 — 입력 판정·목록 원본 해석)
   src/lib/formula/   # ★ 수식 엔진(직접 구현): tokenize→parse→evaluate,
                      #   engine(의존성 그래프+위상 재계산+순환 감지)·adjust(참조 보정)·
                      #   functions(@formulajs/formulajs 바인딩)
@@ -479,6 +488,69 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
      탐색이 같은 스테이지를 최대 아홉 번 인코딩하는데 `getImageData`를 되풀이하면 크로미엄이
      매번 GPU에서 되읽으며 `willReadFrequently` 경고를 띄운다. 컨텍스트 옵션으로는 못 고친다
      (`getContext`는 처음 준 옵션만 쓰고, 소프트웨어 캔버스로 떨어지면 pica가 느려진다).
+
+32. **PDF 용량 줄이기는 두 갈래이고 성질이 반대다.**
+   - **다시 압축** — qpdf가 구조를 다시 쓴다. 글자·글꼴·주석·책갈피를 지킨다.
+     인자는 `--object-streams=generate --compression-level=9 --recompress-flate`이고
+     `jpegQuality`를 주면 `--optimize-images --jpeg-quality=N`이 붙는다.
+     `--linearize`는 뺐다 — 같은 문서에서 83.5%로 오히려 커진다.
+     **2번대로 인터넷이 필요하다**(qpdf 최초 1회). 실측치는 `qpdfLoader.ts` 주석에 있고,
+     `apps/pdf/index.html`의 FAQ와 `apps/stack`이 그 값을 인용한다 — 고치면 세 곳을 맞출 것.
+   - **이미지로** — 쪽을 그려 JPEG로 새 PDF에 심는다(`repack.ts`). 오프라인이고 더 줄지만
+     **글자 선택·검색을 영구히 잃는다.** 되돌릴 수 없다.
+   - **그래서 글자 유무 판정이 안전 장치다.** `probePdf`는 앞 N쪽이 아니라 **전 쪽**을 훑는다 —
+     순서는 `probeOrder()`가 정하고(첫 쪽·마지막 쪽 → 남은 구간의 가운데) 1500ms에서 끊는다.
+     앞 5쪽만 보던 예전 방식으로 되돌리지 말 것: 6쪽부터 글자가 시작하는 문서에 "글자 없음"이
+     붙어 되돌릴 수 없는 래스터를 안심하고 누르게 된다.
+   - **배지는 근거의 범위를 넘겨 말하지 않는다.** 전 쪽을 봤을 때만 "글자 없음"이고, 끊겼으면
+     "48/120쪽에 글자 없음"이다. 판정은 `textVerdict()` 한 곳에서 나온다.
+   - **pdf.js가 못 여는 문서라도 qpdf 경로는 연다.** 재압축은 쪽 수도 글자 유무도 안 쓴다.
+     조사 실패로 파일을 버리지 말 것.
+   - 목표 용량은 문서별 값이 아니라 **설정**이다(apps/image와 같은 규약). 그래서 원본이 이미
+     목표보다 작은 경우가 흔하고, 그때도 실행은 파일을 내놓아야 한다.
+
+33. **mediabunny에는 여러 구간을 한 파일로 잇는 API가 없다**(1.52.3 기준 확인).
+   `Conversion`은 입력 하나에 `trim` 한 쌍만 받고, `ConversionOptions.composable`은 같은
+   Output에 트랙을 하나 더 붙이는 옵션이지 이어붙이기가 아니다. `SegmentedInput`은 HLS 전용에
+   export되지 않는다. 그래서 `video/concat.ts`가 `Output` + `EncodedVideoPacketSource`에
+   `EncodedPacketSink`의 패킷을 직접 옮긴다.
+   - **무손실(패킷 복사)은 시작을 자르면 꺼진다.** mediabunny `conversion.js`의 `needsTranscode`에
+     `firstTimestamp < startTimestamp`가 있어서 `trim.start > 0`이면 언제나 재인코딩으로 넘어간다.
+     구간 하나만 자르는 경로가 여기 걸리므로 `trimStartBreaksCopy`가 판정해 배지에 사유를 적는다.
+     25번(WebM 회전)과 같은 부류다 — 무손실 표시가 거짓이 되지 않게 하려는 것이니 지우지 말 것.
+   - **구간 목록의 순서가 곧 이어붙이는 순서다.** 겹치는 구간도, 시작 시각이 뒤바뀐 순서도
+     고치지 않는다 — 뒤 대목을 앞에 놓거나 같은 대목을 두 번 쓰는 것이 정당한 편집이다.
+     `normalizeSegments`가 하는 일은 경계 clamp, 뒤집힌 start/end 교환, 0.1초 미만 제거뿐이고
+     겹침·순서는 배지로 알린다.
+   - `copyConcat`은 회전 메타데이터를 **컨테이너가 받을 때만** 넘긴다. WebM에 0이 아닌 회전을
+     넘기면 mediabunny가 던진다(`output.js`의 `supportsVideoRotationMetadata`).
+   - 알려진 한계: B프레임이 든 파일에서 구간 끝 프레임이 몇 장 어긋날 수 있다(디코드 순서로
+     끊는다). 복사 경로의 오디오는 구간 시작을 걸친 패킷을 버려 앞 20ms 안팎이 빠진다.
+
+34. **GIF 프레임 차분은 색 하나를 판다.** 안 바뀐 픽셀을 투명 인덱스로 두고 바뀐 사각형만 넣으면
+   파일이 크게 주는데, 투명 인덱스가 팔레트 한 칸을 쓰므로 색을 꽉 쓰는 그림에서는 손해다.
+   `diff.ts`가 색 예산·바뀐 넓이 비율·원본 알파 유무를 보고 쓸지 정한다.
+   - **disposal을 틀리면 잔상이나 깜빡임이 남는다.** 투명으로 비워 둔 자리가 앞 프레임을 보이려면
+     "이전 화면 유지"여야 한다.
+   - 차분은 픽셀 네 바이트가 하나라도 다르면 다시 그린다. ±1 노이즈가 섞인 영상 프레임은
+     변경률이 1에 가까워져 차분이 통째로 꺼진다(허용 오차를 두면 화면과 결과가 갈릴 위험이 있다).
+
+35. **가리기(모자이크·블러)는 원본 위에 덧그리지 않는다.** `source-over`로 얹으면 영역 안에
+   투명한 데가 있을 때 가려야 할 그림이 밑에서 비친다 — 가리는 기능에서는 이것이 기능 실패다.
+   - 영역 좌표는 한 좌표계에만 산다. 화면의 크기 표시도 `redact.ts`의 같은 변환 함수를 거쳐야
+     한다(22번과 같은 규약 — 안내용 계산을 따로 만들지 말 것).
+   - 오버레이는 **그려진 그림 위에만** 깔린다(12번). `object-fit:contain` 여백을 빼고
+     `clientLeft/Top`을 보정한다. `inset:0`으로 되돌리면 여백이 이미지처럼 잡힌다.
+   - 알려진 한계: 블러 영역이 캔버스 가장자리에 붙으면 그 줄의 흐림이 약하다(표본을 반경만큼
+     못 뜬다). 필름스트립 썸네일에는 가리기도 자막도 안 나온다(임포트 때 굳는다).
+
+36. **`apps/stack`의 데이터 문자열을 저장소 경로로 시작하지 말 것.**
+   `scripts/check-stack-sources.mjs`의 경로 정규식이 따옴표 바로 뒤의 `apps/`·`packages/`·
+   `scripts/`·`site/`를 잡는다. `note: "apps/pdf가 …"`로 쓰면 그 문장 전체가 파일 경로로 읽혀
+   검사가 깨진다. 경로를 적어야 하면 문장 가운데에 둘 것.
+   - **한 파일을 여러 기능이 나눠 쓰게 되는 순간, 그 파일을 쓰던 기존 단계에도 `feat`을 못 박아야
+     한다.** `route.ts`는 `feat`이 없으면 그 `src`를 가진 기능 중 첫 번째로 떨어뜨리고,
+     검사 ④는 "어딘가에 착지했다"만 보므로 배관이 조용히 다른 유닛으로 옮겨간다.
 
 ## 핵심 설계 결정 (그릴링 합의 요약)
 
