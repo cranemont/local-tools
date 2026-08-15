@@ -1,4 +1,4 @@
-import { degrees, EncryptedPDFError, PDFDocument } from "pdf-lib";
+import { degrees, PDFDocument } from "pdf-lib";
 import { t } from "../i18n";
 import type { PageItem, SourceDoc } from "./types";
 
@@ -70,15 +70,32 @@ export async function buildPdfParts(
   return parts;
 }
 
+/**
+ * 소스 하나를 pdf-lib으로 연다. 암호가 걸려 있으면 우리 문구로 바꿔 던진다.
+ *
+ * pdf.js는 열지만 pdf-lib은 못 여는 문서가 있다(사용자 비밀번호가 빈 채 소유자 권한만
+ * 걸린 경우) — 영어 예외 대신 다음 할 일을 말해 준다.
+ *
+ * 오류의 종류로 가르지 않는다. pdf-lib 1.17.1은 ES5로 내려와 tslib `__extends`를 쓰는데,
+ * 부모 `Error`를 함수로 부르면 새 Error가 돌아와 상속 사슬이 끊긴다 — `EncryptedPDFError`는
+ * 자기 자신의 `instanceof`도 거짓이고 `constructor.name`이 "Error"다. 그래서 예전
+ * `err instanceof EncryptedPDFError` 갈림길은 한 번도 참이 된 적이 없고, 사용자는 영어
+ * 예외를 그대로 봤다. 지금은 오류를 안 보고 문서에 직접 묻는다.
+ *
+ * `ignoreEncryption: true`는 "암호가 걸렸으면 던져라"를 끄고 `isEncrypted`를 읽게 해 준다.
+ * 그렇게 연 문서를 그냥 돌려주면 안 된다 — `copyPages`가 암호문인 내용 스트림을 그대로
+ * 베껴 와 오류 없이 글자가 사라진 PDF가 저장되거나, 문서에 따라 "Expected instance of
+ * PDFDict"로 죽는다. 그래서 돌려주기 전에 여기서 가른다.
+ *
+ * `updateMetadata: false`는 원본의 Info 사전을 고쳐 쓰지 않으려는 것이다. 이 문서는 쪽을
+ * 베껴 갈 원본일 뿐이고(산출물은 `PDFDocument.create()`가 따로 만든다) 분할에서는 캐시에
+ * 남아 여러 번 쓰인다 — 열 때마다 남의 파일에 Producer·ModDate를 써 넣을 이유가 없다.
+ */
 async function loadSource(src: SourceDoc): Promise<PDFDocument> {
-  try {
-    return await PDFDocument.load(src.bytes);
-  } catch (err) {
-    // pdf.js는 열지만 pdf-lib은 못 여는 문서가 있다(사용자 비밀번호가 빈 채
-    // 소유자 권한만 걸린 경우) — 영어 예외 대신 다음 할 일을 말해 준다.
-    if (err instanceof EncryptedPDFError) {
-      throw new Error(t.errors.encryptedSource(src.name));
-    }
-    throw err;
-  }
+  const doc = await PDFDocument.load(src.bytes, {
+    ignoreEncryption: true,
+    updateMetadata: false,
+  });
+  if (doc.isEncrypted) throw new Error(t.errors.encryptedSource(src.name));
+  return doc;
 }

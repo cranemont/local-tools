@@ -26,8 +26,6 @@ interface QpdfModule {
 interface QpdfConfig {
   locateFile: () => string;
   noInitialRun: boolean;
-  print?: (msg: string) => void;
-  printErr?: (msg: string) => void;
 }
 type QpdfFactory = (config: QpdfConfig) => Promise<QpdfModule>;
 
@@ -58,6 +56,42 @@ async function load(): Promise<{ factory: QpdfFactory; wasmUrl: string }> {
 
 export type QpdfArgs = (inPath: string, outPath: string) => string[];
 
+/**
+ * 새 qpdf 인스턴스 하나와 그것이 남길 진단 배열.
+ *
+ * 이 빌드의 글루에는 `print`·`printErr` 옵션이 없다(글루 안에 그 두 이름이 없다). 대신
+ * 모듈을 만드는 순간 `console.error.bind(console)`을 붙들고 그 뒤로는 그것만 쓴다. 그래서
+ * 가로채는 자리는 팩토리 호출 앞이다 — 뒤에서 끼우면 배열이 늘 비어 `classifyError`가
+ * 폴백으로만 떨어지고, 틀린 비밀번호를 다시 묻지 못한다.
+ *
+ * 만드는 일은 한 줄로 세운다. 겹쳐 부르면 되돌리는 순서가 어긋나 전역 `console.error`가
+ * 지나간 수집기에 묶인 채 남는다.
+ */
+let creating: Promise<unknown> = Promise.resolve();
+
+function newInstance(
+  factory: QpdfFactory,
+  wasmUrl: string,
+  stderr: string[],
+): Promise<QpdfModule> {
+  const made = creating.then(async () => {
+    const origConsoleError = console.error;
+    console.error = (...args: unknown[]) => {
+      stderr.push(args.map((a) => String(a)).join(" "));
+    };
+    try {
+      return await factory({ locateFile: () => wasmUrl, noInitialRun: true });
+    } finally {
+      console.error = origConsoleError;
+    }
+  });
+  creating = made.then(
+    () => {},
+    () => {},
+  );
+  return made;
+}
+
 /** 입력 PDF에 qpdf를 실행하고 출력 PDF 바이트를 돌려준다. */
 export async function runQpdf(
   input: Uint8Array,
@@ -71,27 +105,17 @@ export async function runQpdf(
 
   const stderr: string[] = [];
   // qpdf main()은 인스턴스당 한 번만 실행되므로 작업마다 새 인스턴스를 만든다.
-  const mod = await factory({
-    locateFile: () => wasmUrl,
-    noInitialRun: true,
-    print: () => {},
-    printErr: (m: string) => stderr.push(m),
-  });
+  const mod = await newInstance(factory, wasmUrl, stderr);
+  // 인스턴스는 위 수집기를 붙들었고 전역은 이미 되돌아갔다. 만드는 동안 다른 코드가
+  // 남긴 말은 이번 실행의 진단이 아니므로 여기서 버린다.
+  stderr.length = 0;
 
   mod.FS.writeFile("/in.pdf", input);
 
-  // 이 빌드는 qpdf 오류(예: "invalid password")를 printErr가 아니라 console.error로
-  // 내보내므로, 실행 동안 임시로 가로채 사용자 메시지 분류에 쓴다.
-  const origConsoleError = console.error;
-  console.error = (...args: unknown[]) => {
-    stderr.push(args.map((a) => String(a)).join(" "));
-  };
   try {
     mod.callMain(buildArgs("/in.pdf", "/out.pdf"));
   } catch {
     // Emscripten ExitStatus — 아래에서 출력 유무로 성공/실패 판정.
-  } finally {
-    console.error = origConsoleError;
   }
 
   let out: Uint8Array;
@@ -114,14 +138,12 @@ export function isPasswordError(err: unknown): boolean {
   return err instanceof Error && err.name === PASSWORD_ERROR_NAME;
 }
 
+// 문구는 부르는 쪽이 준다(CLAUDE.md 6번 — 사용자 문구는 i18n.ts 한 곳에 모은다).
+// 엔진이 아는 것은 "비밀번호 때문인가"뿐이고, 그 답을 err.name으로 얹어 돌려준다.
 function classifyError(stderr: string[], fallbackMsg: string): Error {
-  const msg = stderr.join("\n");
-  if (/password/i.test(msg)) {
-    const err = new Error("비밀번호가 올바르지 않거나 필요해요.");
-    err.name = PASSWORD_ERROR_NAME;
-    return err;
-  }
-  return new Error(fallbackMsg);
+  const err = new Error(fallbackMsg);
+  if (/password/i.test(stderr.join("\n"))) err.name = PASSWORD_ERROR_NAME;
+  return err;
 }
 
 /** AES-256으로 암호 설정(사용자·소유자 비밀번호 동일). */

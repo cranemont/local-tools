@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { EncryptedPDFError, PDFDocument } from "../apps/pdf/node_modules/pdf-lib";
+import { t } from "../apps/pdf/src/lib/i18n";
 import { buildPdf, buildPdfParts, type LibCache } from "../apps/pdf/src/lib/pdf/exporter";
 import { chunkEvery, resolveRange } from "../apps/pdf/src/lib/pdf/range";
 import {
@@ -554,19 +555,97 @@ describe("qpdf 엔진 — 암호와 재압축", () => {
       expect(await pdfPageSizes(opened)).toEqual(await pdfPageSizes(src));
     }, 60_000);
 
-    it("틀린 암호면 출력이 없어서 던진다", async () => {
+    it("틀린 암호는 '비밀번호 오류'로 분류된다 — 그래야 다시 묻는다", async () => {
       const locked = await runQpdf(await makeTextPdf(1), encryptArgs("맞는 암호"));
 
-      // 여기서 `isPasswordError(err)`가 참인지는 안 본다 — 지금은 거짓이고,
-      // 그 이유는 아래 "qpdf 진단은 모듈을 만드는 순간의 console.error로 나간다" 절에 있다.
-      // 그 자리를 고치면 이 단언에 `isPasswordError`를 한 줄 더할 것.
-      await expect(runQpdf(locked, decryptArgs("틀린 암호"), "폴백 문구")).rejects.toThrow();
+      const err = await runQpdf(locked, decryptArgs("틀린 암호"), t.pw.wrongPw).then(
+        () => null,
+        (e: unknown) => e,
+      );
+
+      // 여기가 거짓이면 `unlock.svelte.ts`의 재시도 루프가 첫 실패에서 끝난다 —
+      // 화면은 다시 묻지 않고 파일을 처음부터 다시 떨어뜨려야 한다.
+      expect(isPasswordError(err)).toBe(true);
+      // 엔진이 정하는 것은 표시(`err.name`)뿐이고 문구는 부르는 쪽이 준다
+      // (CLAUDE.md 6번). 예전에는 이 갈래가 `t.pw.wrongPw`와 같은 말을 엔진 파일에
+      // 한 벌 더 적어 두고 폴백을 버렸다 — 한쪽만 고치면 화면에 두 문구가 돌게 된다.
+      expect((err as Error).message).toBe(t.pw.wrongPw);
     }, 60_000);
 
-    it("암호를 안 주고 열려 하면 던진다", async () => {
+    it("문구는 부르는 쪽이 정한다 — 엔진은 비밀번호 여부만 얹는다", async () => {
+      const locked = await runQpdf(await makeTextPdf(1), encryptArgs("맞는 암호"));
+
+      const err = await runQpdf(locked, decryptArgs("틀린 암호"), "부르는 쪽 문구").then(
+        () => null,
+        (e: unknown) => e,
+      );
+
+      expect(isPasswordError(err)).toBe(true);
+      expect((err as Error).message).toBe("부르는 쪽 문구");
+    }, 60_000);
+
+    it("암호를 안 주고 열려 해도 '비밀번호 오류'다", async () => {
       const locked = await runQpdf(await makeTextPdf(1), encryptArgs("pw"));
 
-      await expect(runQpdf(locked, decryptArgs(""))).rejects.toThrow();
+      const err = await runQpdf(locked, decryptArgs("")).then(
+        () => null,
+        (e: unknown) => e,
+      );
+
+      expect(isPasswordError(err)).toBe(true);
+    }, 60_000);
+
+    it("비밀번호와 무관한 실패는 폴백 문구 그대로다 — 아무 실패나 다시 묻지 않는다", async () => {
+      // 앞머리만 남긴 PDF다. qpdf가 남기는 말에 "password"가 없다.
+      const broken = truncatePdf(await makeTextPdf(2), 0.2);
+
+      const err = await runQpdf(broken, recompressArgs(null), "폴백 문구").then(
+        () => null,
+        (e: unknown) => e,
+      );
+
+      expect(isPasswordError(err)).toBe(false);
+      expect((err as Error).message).toBe("폴백 문구");
+    }, 60_000);
+
+    it("겹쳐 불러도 전역 console.error가 제자리로 돌아오고 진단이 안 섞인다", async () => {
+      // 가로채기는 인스턴스를 만드는 동안만이다. 그 사이에 다른 호출이 끼어들면 되돌리는
+      // 순서가 어긋나 전역이 지나간 수집기에 묶인 채 남는다 — 그래서 만드는 일을 한 줄로
+      // 세운다. 묶인 채 남으면 앱의 다른 오류 로그가 조용히 사라진다.
+      const original = console.error;
+      const locked = await runQpdf(await makeTextPdf(1), encryptArgs("pw"));
+      const broken = truncatePdf(await makeTextPdf(2), 0.2);
+
+      const [byPassword, byBrokenFile] = await Promise.all([
+        runQpdf(locked, decryptArgs("아님"), "폴백 A").then(
+          () => null,
+          (e: unknown) => e,
+        ),
+        runQpdf(broken, recompressArgs(null), "폴백 B").then(
+          () => null,
+          (e: unknown) => e,
+        ),
+      ]);
+
+      expect(console.error).toBe(original);
+      expect(isPasswordError(byPassword)).toBe(true);
+      expect(isPasswordError(byBrokenFile)).toBe(false);
+      expect((byBrokenFile as Error).message).toBe("폴백 B");
+    }, 60_000);
+
+    it("성공한 실행이 남긴 말은 다음 실행의 분류에 안 섞인다", async () => {
+      // 진단 배열은 인스턴스마다 새로 만든다. 한 번이라도 공유되면 앞 실행의 경고가
+      // 다음 실패를 비밀번호 오류로 둔갑시킨다.
+      const locked = await runQpdf(await makeTextPdf(1), encryptArgs("pw"));
+      await runQpdf(locked, decryptArgs("틀린 암호"), "폴백").catch(() => {});
+
+      const broken = truncatePdf(await makeTextPdf(2), 0.2);
+      const err = await runQpdf(broken, recompressArgs(null), "폴백 문구").then(
+        () => null,
+        (e: unknown) => e,
+      );
+
+      expect(isPasswordError(err)).toBe(false);
     }, 60_000);
 
     it("`isPasswordError`는 이름으로 가른다 — 메시지는 안 본다", () => {
@@ -634,9 +713,10 @@ describe("qpdf 엔진 — 암호와 재압축", () => {
   });
 
   describe("소유자 암호만 걸린 문서", () => {
-    it("pdf.js는 열지만 pdf-lib은 못 여는 문서에서 내보내기가 던진다", async () => {
+    it("pdf.js는 열지만 pdf-lib은 못 여는 문서에서 내보내기가 우리 문구로 막는다", async () => {
       // 사용자 암호가 빈 문서다. 편집 탭은 pdf.js로 열어 두었으므로 화면에는 쪽이 보이고,
       // 내보내기에서 pdf-lib이 처음으로 막는다 — `exporter.ts`의 loadSource가 그 자리다.
+      // 예전에는 여기서 pdf-lib의 영어 예외가 그대로 화면에 나갔다(instanceof가 늘 거짓).
       const owned = await runQpdf(await makeTextPdf(2), () => [
         "--encrypt",
         "",
@@ -648,7 +728,45 @@ describe("qpdf 엔진 — 암호와 재압축", () => {
       ]);
       const src = pdfSource("o", owned, 2);
 
-      await expect(buildPdf([page("o", 0)], sourceMap(src))).rejects.toThrow();
+      await expect(buildPdf([page("o", 0)], sourceMap(src))).rejects.toThrow(
+        t.errors.encryptedSource("o.pdf"),
+      );
+    }, 60_000);
+
+    it("사용자 암호가 걸린 문서도 같은 문구로 막는다", async () => {
+      const locked = await runQpdf(await makeTextPdf(2), encryptArgs("pw"));
+      const src = pdfSource("u", locked, 2);
+
+      await expect(buildPdf([page("u", 0)], sourceMap(src))).rejects.toThrow(
+        t.errors.encryptedSource("u.pdf"),
+      );
+    }, 60_000);
+
+    it("암호가 아닌 이유로 못 여는 문서는 그 문구를 쓰지 않는다", async () => {
+      // 잘린 PDF다. "암호 탭에서 풀어 주세요"는 여기서 틀린 안내다.
+      const src = pdfSource("t", truncatePdf(await makeTextPdf(3), 0.3), 3);
+
+      const err = await buildPdf([page("t", 0)], sourceMap(src)).then(
+        () => null,
+        (e: unknown) => e,
+      );
+
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).not.toContain("암호가 걸려 있어");
+    }, 60_000);
+
+    it("암호가 없는 문서는 예전처럼 쪽·회전·크기 그대로 나온다", async () => {
+      // loadSource가 `ignoreEncryption`·`updateMetadata`를 켜고 끄지만 산출물은 안 바뀐다.
+      const src = pdfSource("r", await makeRotatedPdf(), 4);
+
+      const out = await buildPdf(
+        [page("r", 0), page("r", 1), page("r", 2), page("r", 3)],
+        sourceMap(src),
+      );
+
+      expect(await pdfPageCount(out)).toBe(4);
+      expect(await pdfRotations(out)).toEqual([0, 90, 180, 270]);
+      expect(await pdfPageSizes(out)).toEqual(await pdfPageSizes(src.bytes));
     }, 60_000);
   });
 });
@@ -658,6 +776,9 @@ describe("qpdf 엔진 — 암호와 재압축", () => {
 // `qpdfLoader.ts`의 `classifyError`는 qpdf가 남긴 말에 "password"가 있는지로 갈린다.
 // 그 말이 어디로 나오는지는 이 wasm 빌드가 정하므로, 여기서 그 통로를 잰다.
 // (`classifyError` 자체는 module private이라 직접 못 부른다.)
+//
+// 아래 셋이 `runQpdf`가 팩토리 호출 앞에서 가로채는 근거다. 통로가 바뀌면
+// (새 판 글루가 `printErr`를 받거나 바인딩 시점이 옮겨지면) 여기가 먼저 빨개진다.
 
 interface QpdfModule {
   callMain: (args: string[]) => number;
@@ -698,8 +819,7 @@ describe("qpdf 진단은 모듈을 만드는 순간의 console.error로 나간�
 
   it("모듈을 만든 뒤에 바꿔 끼우면 하나도 안 잡힌다", async () => {
     // 글루가 `console.error.bind(console)`을 모듈 생성 시점에 붙들기 때문이다.
-    // `qpdfLoader.ts`의 runQpdf가 바꿔 끼우는 자리가 여기라, 분류가 못 걸린다.
-    // 자세한 것은 이 작업의 결함 보고를 볼 것.
+    // 예전 `runQpdf`가 바꿔 끼우던 자리가 여기라 분류가 늘 폴백으로 떨어졌다.
     const src = await makeTextPdf(1);
     const enc = await newQpdf();
     enc.FS.writeFile("/in.pdf", src);
@@ -731,12 +851,16 @@ describe("qpdf 진단은 모듈을 만드는 순간의 console.error로 나간�
 });
 
 // ── pdf-lib 오류를 종류로 가를 수 있는가 ─────────────────────────────────────
+//
+// 못 가른다. 그래서 `exporter.ts`의 loadSource는 오류를 안 보고 문서의 `isEncrypted`를
+// 읽는다. 이 절은 그 선택의 두 근거를 잰다 — 오류 종류가 못 쓰는 신호라는 것과,
+// 대신 고른 신호가 암호 걸린 문서에서만 켜진다는 것.
 
 describe("pdf-lib이 던지는 오류는 instanceof로 못 가른다", () => {
   it("EncryptedPDFError는 자기 자신의 instanceof도 거짓이다", () => {
     // pdf-lib 1.17.1은 ES5로 내려 컴파일돼 있고, tslib의 __extends가 Error를 상속할 때
     // `_super.call(this, msg)`가 돌려주는 평범한 Error를 그대로 쓴다. 그래서 던져지는
-    // 것도 새로 만든 것도 `Error`다 — `exporter.ts:79`의 갈림길이 여기 걸린다.
+    // 것도 새로 만든 것도 `Error`다.
     expect(new EncryptedPDFError() instanceof EncryptedPDFError).toBe(false);
     expect(new EncryptedPDFError().constructor.name).toBe("Error");
   });
@@ -752,5 +876,41 @@ describe("pdf-lib이 던지는 오류는 instanceof로 못 가른다", () => {
     expect(err).toBeInstanceOf(Error);
     expect(err instanceof EncryptedPDFError).toBe(false);
     expect((err as Error).message).toContain("encrypted");
+  }, 60_000);
+
+  it("암호 검사를 미루고 열면 `isEncrypted`가 켜져 있다 — loadSource가 읽는 값이다", async () => {
+    const locked = await encryptPdf(await makeTextPdf(1), "pw");
+
+    const doc = await PDFDocument.load(locked, {
+      ignoreEncryption: true,
+      updateMetadata: false,
+    });
+
+    expect(doc.isEncrypted).toBe(true);
+  }, 60_000);
+
+  it("검사를 미룬 암호 문서에서 쪽을 베끼면 내용이 깨진 채로 나온다 — 그래서 먼저 가른다", async () => {
+    // loadSource가 `isEncrypted`를 보고 곧바로 던지는 이유다. 안 막으면 `copyPages`가
+    // 암호화된 내용 스트림을 그대로 베껴 와, 오류 없이 글자가 사라진 PDF가 저장된다.
+    const plain = await makeTextPdf(2);
+    const doc = await PDFDocument.load(await encryptPdf(plain, "pw"), {
+      ignoreEncryption: true,
+      updateMetadata: false,
+    });
+    const out = await PDFDocument.create();
+    const [copied] = await out.copyPages(doc, [0]);
+    out.addPage(copied);
+
+    expect(await pdfDrawnText(plain)).toEqual(["Page 1", "Page 2"]);
+    expect(await pdfDrawnText(await out.save())).not.toEqual(["Page 1"]);
+  }, 60_000);
+
+  it("암호가 없는 문서에서는 그 신호가 꺼져 있다", async () => {
+    const doc = await PDFDocument.load(await makeTextPdf(2), {
+      ignoreEncryption: true,
+      updateMetadata: false,
+    });
+
+    expect(doc.isEncrypted).toBe(false);
   }, 60_000);
 });
