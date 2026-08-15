@@ -5,7 +5,7 @@
  */
 
 import { cellKey } from "./a1";
-import { parseInput } from "./model";
+import { hasContent, parseInput } from "./model";
 import { emptySheet, isError, type Cell, type Scalar, type SheetDoc } from "./types";
 
 export type ExportFormat = "json" | "json-rows" | "markdown" | "html";
@@ -23,6 +23,10 @@ interface Grid {
 /**
  * 시트를 사각 격자로 굳힌다 — render는 표시 형식이 적용된 화면 문자열을 준다.
  * `rows`를 주면 그 줄만 그 차례대로 담는다(자동 필터의 "보이는 행만").
+ *
+ * 범위는 **내용이 든 칸**이 정한다(model.ts의 hasContent) — writeCsv와 같은 판정이다.
+ * 예전엔 칸이 있기만 하면 셌더니, 빈 줄까지 골라 굵게 한 번에 마크다운 표에 빈 줄이,
+ * JSON에 빈 객체가 늘었다. 서식은 이 세 형식 중 어디에도 안 실린다.
  */
 function toGrid(
   sheet: SheetDoc,
@@ -31,7 +35,8 @@ function toGrid(
 ): Grid {
   let bottom = -1;
   let right = -1;
-  for (const key of sheet.cells.keys()) {
+  for (const [key, cell] of sheet.cells) {
+    if (!hasContent(cell)) continue;
     const r = Math.floor(key / 16_384);
     const c = key % 16_384;
     if (r > bottom) bottom = r;

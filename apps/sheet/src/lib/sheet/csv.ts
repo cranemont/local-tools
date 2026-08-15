@@ -6,7 +6,7 @@
  */
 
 import { cellKey } from "./a1";
-import { parseInput } from "./model";
+import { hasContent, parseInput } from "./model";
 import { formatValue } from "./numfmt";
 import { emptySheet, type Cell, type SheetDoc } from "./types";
 
@@ -269,16 +269,18 @@ function quoteField(text: string, delimiter: Delimiter): string {
 }
 
 /**
- * 시트 → CSV 바이트. 화면에 보이는 문자열(표시 형식 적용 후)로 내보낸다.
- * 파일에서 온 뒤로 손대지 않은 칸은 원문(`raw`)을 그대로 다시 쓴다 — 한 칸만
- * 고치고 저장했는데 건드리지 않은 열이 통째로 달라져 있는 일을 막는다.
+ * 시트 → CSV 바이트. 칸에 적히는 글자는 `render`가 준다 — 앱도 테스트도 model.ts의
+ * `cellText`를 넘기므로, 파일에서 온 뒤로 손대지 않은 칸이 원문(`raw`)으로 다시
+ * 나가는 것은 그 함수 하나가 지킨다(CLAUDE.md 23번). 여기서 `raw`를 한 번 더 보던
+ * 가지가 있었는데 `cellText`가 이미 하는 일이라 지웠다 — 규약이 두 자리에 적히면
+ * 한쪽만 고쳐 놓고 고쳤다고 여기게 된다.
  *
- * **표는 네모로 나간다.** 열 수는 값이 든 칸의 오른쪽 끝과 원문에서 본 열 수
+ * **표는 네모로 나간다.** 열 수는 글자가 나가는 칸의 오른쪽 끝과 원문에서 본 열 수
  * (`srcCols`) 중 넓은 쪽이고, 모든 줄을 그 폭에 맞춘다. 예전엔 줄마다 오른쪽 끝의
  * 빈 칸을 떨어냈는데, 그러면 마지막 열이 빈 줄이 왕복만으로 한 칸 좁아져
  * ("이름,메모\r\n김,\r\n" → "…\r\n김\r\n") 받는 쪽에서 열이 밀렸다.
- * 예외는 **칸이 하나도 없는 줄** 하나뿐이다 — 원문의 빈 줄에 없던 구분자를
- * 지어내지 않는다.
+ * 예외는 **글자가 나가는 칸이 하나도 없는 줄** 하나뿐이다 — 원문의 빈 줄에 없던
+ * 구분자를 지어내지 않는다.
  *
  * `rows`를 주면 그 줄만, 준 차례대로 쓴다(자동 필터의 "보이는 행만 내보내기").
  * 안 주면 표 전체가 나간다 — 화면에서 걸러 놓은 것이 저장에서 조용히 사라지지
@@ -293,7 +295,9 @@ export function writeCsv(
   let bottom = -1;
   let right = -1;
   const filled = new Set<number>();
-  for (const key of sheet.cells.keys()) {
+  for (const [key, cell] of sheet.cells) {
+    // 서식만 든 칸은 표를 넓히지도 줄을 채우지도 않는다(model.ts의 hasContent).
+    if (!hasContent(cell)) continue;
     const r = Math.floor(key / 16_384);
     const c = key % 16_384;
     if (r > bottom) bottom = r;
@@ -313,7 +317,7 @@ export function writeCsv(
 
   const lines: string[] = [];
   for (const r of order) {
-    // 칸이 하나도 없는 줄은 빈 줄 그대로 — 원문에 없던 구분자를 만들지 않는다.
+    // 글자가 나가는 칸이 하나도 없는 줄은 빈 줄 그대로 — 원문에 없던 구분자를 만들지 않는다.
     if (!filled.has(r)) {
       lines.push("");
       continue;
@@ -321,8 +325,8 @@ export function writeCsv(
     const fields: string[] = [];
     for (let c = 0; c < width; c++) {
       const cell = sheet.cells.get(cellKey(r, c));
-      const text =
-        options.formulas && cell?.f ? `=${cell.f}` : (cell?.raw ?? render(r, c));
+      // 원문 보존은 render(=model.ts의 cellText)가 맡는다. 위 머리말 참고.
+      const text = options.formulas && cell?.f ? `=${cell.f}` : render(r, c);
       fields.push(quoteField(text, options.delimiter));
     }
     lines.push(fields.join(options.delimiter));

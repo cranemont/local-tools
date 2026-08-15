@@ -24,7 +24,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { editor } from "../apps/sheet/src/lib/editor/state.svelte";
-import type { ColumnFilter } from "../apps/sheet/src/lib/sheet/filter";
+import { scopeOf, type ColumnFilter } from "../apps/sheet/src/lib/sheet/filter";
 
 /**
  * 표본 표. A열은 수, B열은 글자다.
@@ -434,7 +434,12 @@ describe("요약과 찾기도 보이는 줄만 센다", () => {
     expect(editor.findMatches("사과", false)).toEqual([{ row: 0, col: 1 }]);
   });
 
-  it("모두 바꾸기는 찾기가 센 자리만 바꾼다", () => {
+  it("모두 바꾸기가 닿는 줄은 OP_SCOPE.replace가 정한다", () => {
+    // 표와 코드를 한 줄로 잇는 자리다. 예전에는 `replaceAll`이 찾기 목록을 그대로
+    // 써서, 표를 "all"로 고쳐도 동작이 그대로였다(표가 아무것도 정하지 않았다).
+    // 지금은 `scopeOf("replace")`를 지나므로 표를 뒤집으면 아래 단언이 빨개진다.
+    expect(scopeOf("replace")).toBe("visible");
+
     // 같은 글자를 숨을 줄(1행)과 보이는 줄(2행)에 하나씩 둔다.
     editor.setCellText(1, 2, "표시");
     editor.setCellText(2, 2, "표시");
@@ -442,5 +447,21 @@ describe("요약과 찾기도 보이는 줄만 센다", () => {
     expect(editor.replaceAll("표시", "바뀜", false)).toBe(1);
     expect(editor.displayAt(2, 2)).toBe("바뀜");
     expect(editor.displayAt(1, 2)).toBe("표시");
+  });
+
+  it("필터가 없으면 숨은 줄이 없으니 같은 글자가 둘 다 바뀐다", () => {
+    // 경계의 반대쪽 — "보이는 행만"이 "적게 바꾼다"는 뜻이 되지 않게 못 박는다.
+    editor.setCellText(1, 2, "표시");
+    editor.setCellText(2, 2, "표시");
+    expect(editor.replaceAll("표시", "바뀜", false)).toBe(2);
+    expect(editor.displayAt(1, 2)).toBe("바뀜");
+    expect(editor.displayAt(2, 2)).toBe("바뀜");
+  });
+
+  it("찾기는 갈래를 묻지 않는다 — 커서를 옮기는 기능이라 언제나 보이는 줄만이다", () => {
+    editor.setCellText(1, 2, "표시");
+    editor.setCellText(2, 2, "표시");
+    keepOddRows();
+    expect(editor.findMatches("표시", false)).toEqual([{ row: 2, col: 2 }]);
   });
 });

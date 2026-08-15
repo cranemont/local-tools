@@ -18,7 +18,7 @@
 import { adjustCols, adjustRows } from "../formula/adjust";
 import { areaContains, cellKey, colName, keyCol, keyRow, MAX_COLS, parseArea, type Area } from "./a1";
 import { parseInput } from "./model";
-import { fromSerial } from "./serial";
+import { fromSerial, serialFromExcelJsDate } from "./serial";
 import { isError, type Scalar } from "./types";
 
 export const VALIDATION_KINDS = [
@@ -618,10 +618,15 @@ function serialToIso(serial: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** UTC 자정으로 온 Date → "yyyy-mm-dd". ExcelJS가 일련번호를 UTC 기준으로 푼다. */
+/**
+ * ExcelJS가 준 Date → "yyyy-mm-dd".
+ *
+ * "ExcelJS는 일련번호를 UTC 기준으로 푼다"는 사실은 `serial.ts`의
+ * `serialFromExcelJsDate` 한 곳에 있다 — 예전에는 이 함수가 UTC 필드를 직접 읽고
+ * `xlsx.ts`는 로컬 시각을 읽어, 같은 파일의 같은 날짜가 두 자리에서 다르게 나왔다.
+ */
 function utcToIso(d: Date): string {
-  const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  return serialToIso(serialFromExcelJsDate(d));
 }
 
 /** 규칙 → ExcelJS가 받는 모양. 적을 것이 없으면 null. */

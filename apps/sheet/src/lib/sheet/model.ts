@@ -45,6 +45,23 @@ export function cellText(cell: Cell | undefined): string {
   return formatValue(cell.v, cell.s?.numFmt);
 }
 
+/**
+ * 이 칸이 내보낼 내용을 갖고 있나 — 값도 수식도 원문도 없이 **서식만 든 칸**은 아니다.
+ *
+ * 서식은 빈 칸에도 걸린다(아래 applyStyle이 칸을 만든다). 그런 칸을 표의 일부로 세면
+ * 원문의 빈 줄이 ";;;;;;;"가 되고 표 오른쪽에 빈 열이 붙는다 — CSV·마크다운·JSON은
+ * 서식을 담지 못하므로 사용자가 얻는 것 없이 파일만 달라진다(CLAUDE.md 23번).
+ * 그래서 **내보내기가 표의 범위를 잴 때 이 판정을 쓴다**(csv.ts의 writeCsv,
+ * convert.ts의 toGrid). 서식만 든 칸을 지우지는 않는다 — xlsx에서는 그 칸이
+ * `<c r="B2" s="1"/>`로 파일에 나가기 때문이다.
+ *
+ * 위 cellText와 짝이다: 여기서 참인 칸만 글자를 내놓는다. `raw`를 빼면 값이 아직
+ * null인데 원문만 든 칸의 글자가 파일에서 사라진다.
+ */
+export function hasContent(cell: Cell | undefined): boolean {
+  return cell !== undefined && (cell.v !== null || cell.f !== undefined || cell.raw !== undefined);
+}
+
 /** 셀을 고친다. 값·수식·서식 중 준 것만 바뀐다. 빈 셀이 되면 Map에서 지운다. */
 export function putCell(sheet: SheetDoc, row: number, col: number, patch: Partial<Cell>): void {
   const key = cellKey(row, col);

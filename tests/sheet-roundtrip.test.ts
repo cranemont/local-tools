@@ -266,14 +266,38 @@ describe("한 칸을 고쳐 저장하면 그 칸만 달라진다", () => {
     expect(out).toBe(original);
   });
 
-  it("[알려진 결함] 빈 줄까지 골라 서식을 걸면 그 줄이 구분자 줄로 바뀐다", () => {
-    // 서식은 빈 칸에도 걸리고(칸이 생긴다), CSV 쓰기는 "칸이 하나도 없는 줄"만 빈 줄로
-    // 내보낸다. 그래서 빈 줄까지 골라 굵게 한 번이면 원문의 빈 줄이 ";;;;;;;"가 된다 —
-    // CSV는 서식을 담지도 못하므로 사용자가 얻는 것 없이 파일만 달라진다.
+  it("빈 줄까지 골라 서식을 걸어도 빈 줄로 남는다 — CSV는 서식을 담지 않는다", () => {
+    // 서식은 빈 칸에도 걸린다(칸이 생긴다). 예전에는 CSV 쓰기가 "칸이 하나도 없는 줄"만
+    // 빈 줄로 봐서, 빈 줄까지 골라 굵게 한 번이면 원문의 빈 줄이 ";;;;;;;"가 됐다.
+    // 지금은 값·수식·원문 중 하나라도 있는 칸만 줄을 채운 것으로 센다(csv.ts의 writesText).
+    // 서식만 든 칸을 지우지는 않았다 — xlsx에서는 그 칸이 파일에 나가기 때문이다(아래 참고).
     const out = editedText((sheet) => {
       applyStyle(sheet, area(0, 0, 4, 7), { bold: true });
     });
-    expect(out).toBe(original.replace("\r\n\r\n합계", "\r\n;;;;;;;\r\n합계"));
+    expect(out).toBe(original);
+  });
+
+  it("표 오른쪽 빈 열에 서식을 걸어도 열이 늘지 않는다", () => {
+    // 원문은 8열이다. 열 스무 개를 골라 굵게 해도 줄 끝에 구분자가 붙으면 안 된다.
+    const out = editedText((sheet) => {
+      applyStyle(sheet, area(0, 0, 4, 19), { bold: true });
+    });
+    expect(out).toBe(original);
+  });
+
+  it("표 아래 빈 줄에 서식을 걸어도 줄이 늘지 않는다", () => {
+    const out = editedText((sheet) => {
+      applyStyle(sheet, area(5, 0, 40, 7), { fill: "#ffee00" });
+    });
+    expect(out).toBe(original);
+  });
+
+  it("값이 든 칸의 서식은 그 칸을 건드리지 않는다 — 빈 칸만 세지 않는 것이다", () => {
+    // 경계의 반대쪽: 굵게가 값 있는 칸에서도 줄을 지우면 표가 빈 줄만 남는다.
+    const out = editedText((sheet) => {
+      applyStyle(sheet, area(1, 0, 1, 7), { bold: true });
+    });
+    expect(out).toBe(original);
   });
 
   it("표시 형식을 지웠다 다시 걸어도 원문은 돌아오지 않는다 — 한 번 놓으면 끝이다", () => {
@@ -902,6 +926,21 @@ describe("xlsx가 못 싣는 것 — 없어진다는 사실을 못 박는다", (
     expect(cellAt(sheet, 1, 0)?.s).toEqual({ color: "#000001", fontSize: 12 });
   });
 
+  it("값 없이 서식만 든 칸도 파일에는 나간다 — CSV와 갈리는 자리다", async () => {
+    // CSV 쪽은 이런 칸을 세지 않는다(위 "빈 줄까지 골라 서식을 걸어도" 참고). 서식을
+    // 거는 model.ts가 아니라 csv.ts를 고친 이유가 이것이다 — 여기서는 서식이 뜻을 갖는다.
+    const sheet = emptySheet("서식");
+    applyStyle(sheet, area(1, 1, 1, 1), { bold: true, fill: "#ffee00" });
+    const book: WorkbookDoc = { sheets: [sheet], active: 0, filename: "a.xlsx", origin: "xlsx" };
+    const { out, book: back } = await tripXlsx(book);
+    expect(sheetXml(out)).toContain('<c r="B2" s=');
+    expect(xlsxPart(out, "xl/styles.xml")).toContain('<fgColor rgb="FFFFEE00"/>');
+    // [알려진 한계] 되읽을 때는 사라진다 — ExcelJS의 eachCell이 값 없는 칸을 건너뛴다
+    // (`includeEmpty: false`). 서식만 든 칸을 되살리려면 그 옵션을 켜고 빈 칸을
+    // 빈 칸까지 훑어야 하는데, 백만 칸짜리 시트에서 그 비용을 아직 치르지 않기로 했다.
+    expect(back.sheets[0].cells.size).toBe(0);
+  });
+
   it("표에서 본 열 수(srcCols)는 xlsx에 적을 자리가 없다 — CSV에서만 지킨다", async () => {
     const csv = readCsv(bomBytes("이름,메모\r\n김,\r\n"));
     expect(csv.sheet.srcCols).toBe(2);
@@ -912,14 +951,20 @@ describe("xlsx가 못 싣는 것 — 없어진다는 사실을 못 박는다", (
 });
 
 // ────────────────────────────────────────────────────────────────
-// 날짜. 아래는 지금 동작을 그대로 못 박은 것이고, **고쳐야 할 결함**이다.
+// 날짜. ExcelJS는 파일에 적힌 일련번호를 **UTC 기준** Date로 푼다(45296 →
+// 2024-01-05T00:00:00Z). 예전에는 xlsx.ts가 그 Date를 serial.ts의 `toSerial`로
+// 되돌렸는데 그쪽은 **로컬 시각**을 읽는다 — UTC+9에서 열면 45296.375가 되고,
+// 저장하면 밀린 값이 파일에 적혀 왕복마다 쌓였다(세 번이면 화면 글자가 2024-01-06).
+// 지금은 `serialFromExcelJsDate` 하나가 그 대응의 역을 맡고 `getTime()`만 보므로
+// 실행 시간대와 무관하다.
 //
-// ExcelJS는 파일에 적힌 일련번호를 UTC 기준으로 Date로 푼다(validation.ts의
-// utcToIso가 그 사실을 이미 알고 있다). 그런데 xlsx.ts의 readValue는 그 Date를
-// serial.ts의 toSerial로 되돌리는데, toSerial은 **로컬 시각**을 읽는다. 그래서
-// 파일을 열 때마다 값이 시간대 오프셋만큼 밀리고, 저장할 때는 밀린 값이 그대로
-// 적혀 왕복마다 쌓인다.
-describe("[알려진 결함] 날짜 칸이 xlsx 왕복마다 시간대 오프셋만큼 밀린다", () => {
+// **시간대를 바꿔 가며 잰다.** UTC에서는 오프셋이 0이라 밀려도 티가 안 나고,
+// ubuntu 러너가 UTC다 — TZ=UTC만 보면 이런 결함은 CI에서 영영 안 보인다.
+// 바꾸는 방법은 `process.env.TZ` 대입이다: node는 그 값이 바뀌면 시간대 캐시를 버려
+// 그다음 Date부터 새 시간대로 센다(vitest 설정이나 파일별 환경을 따로 두지 않아도
+// 된다). 표본 파일은 수 45296을 그대로 적으므로 지을 때의 시간대와 무관하다.
+// describe가 끝나면 원래 값으로 되돌린다.
+describe("날짜 칸은 어느 시간대에서 열어도 파일에 적힌 값 그대로다", () => {
   const saved = process.env.TZ;
 
   afterAll(() => {
@@ -927,42 +972,63 @@ describe("[알려진 결함] 날짜 칸이 xlsx 왕복마다 시간대 오프셋
     else process.env.TZ = saved;
   });
 
+  /** 오프셋의 양 끝(+14·−11)과 한 시간이 아닌 오프셋(+5:45)까지 넣는다. */
+  const ZONES = [
+    "UTC",
+    "Asia/Seoul", // +9
+    "America/New_York", // −5
+    "Pacific/Kiritimati", // +14
+    "Pacific/Niue", // −11
+    "Asia/Kathmandu", // +5:45
+  ];
+
   /** 45296 = 2024-01-05. 이 값을 든 파일 하나. */
-  async function dateFile(): Promise<Uint8Array> {
-    return makeXlsx([{ cells: { A1: { value: 45296, numFmt: "yyyy-mm-dd" } } } as XlsxSheetSpec]);
+  async function dateFile(value = 45296, numFmt = "yyyy-mm-dd"): Promise<Uint8Array> {
+    return makeXlsx([{ cells: { A1: { value, numFmt } } } as XlsxSheetSpec]);
   }
 
-  it("UTC+9에서는 열자마자 아홉 시간이 붙는다", async () => {
+  async function openA1(bytes: Uint8Array): Promise<Cell | undefined> {
+    const sheet = (await readXlsx(asArrayBuffer(bytes), "날짜.xlsx")).book.sheets[0];
+    return cellAt(sheet, 0, 0);
+  }
+
+  for (const tz of ZONES) {
+    it(`${tz}에서 열면 45296 그대로다 — 오프셋이 붙지 않는다`, async () => {
+      process.env.TZ = tz;
+      const cell = await openA1(await dateFile());
+      expect(cell?.v).toBe(45296);
+      expect(cellText(cell)).toBe("2024-01-05");
+    });
+
+    it(`${tz}에서 세 번 왕복해도 45296이다 — 밀림이 쌓이지 않는다`, async () => {
+      process.env.TZ = tz;
+      let book = (await readXlsx(asArrayBuffer(await dateFile()), "날짜.xlsx")).book;
+      for (let i = 0; i < 2; i++) book = (await tripXlsx(book)).book;
+      expect(cellAt(book.sheets[0], 0, 0)?.v).toBe(45296);
+      expect(cellText(cellAt(book.sheets[0], 0, 0))).toBe("2024-01-05");
+    });
+  }
+
+  it("하루 안의 시각도 그대로다 — 소수부가 오프셋만큼 돌지 않는다", async () => {
     process.env.TZ = "Asia/Seoul";
-    const sheet = (await readXlsx(asArrayBuffer(await dateFile()), "날짜.xlsx")).book.sheets[0];
-    expect(cellAt(sheet, 0, 0)?.v).toBeCloseTo(45296 + 9 / 24, 6);
-    // 아직은 같은 날로 보인다 — 그래서 여기서 안 잡히고 아래까지 간다.
-    expect(cellText(cellAt(sheet, 0, 0))).toBe("2024-01-05");
+    const cell = await openA1(await dateFile(45296.5, "yyyy-mm-dd hh:mm"));
+    expect(cell?.v).toBe(45296.5);
+    expect(cellText(cell)).toBe("2024-01-05 12:00");
   });
 
-  it("UTC+9에서 세 번 왕복하면 하루가 넘어가 2024-01-06이 된다", async () => {
+  it("1900-03-01(61) 앞뒤도 파일에 적힌 수 그대로다 — 윤년 보정을 여기서 하지 않는다", async () => {
+    // ExcelJS는 1900년 윤년 버그를 흉내 내지 않는다(1 → 1899-12-31Z). 읽는 쪽이
+    // serial.ts의 보정(61 미만은 하루 빼기)을 얹으면 파일의 1이 0으로 저장된다.
     process.env.TZ = "Asia/Seoul";
-    let book = (await readXlsx(asArrayBuffer(await dateFile()), "날짜.xlsx")).book;
-    for (let i = 0; i < 2; i++) book = (await tripXlsx(book)).book;
-    expect(cellAt(book.sheets[0], 0, 0)?.v).toBeCloseTo(45296 + 27 / 24, 6);
-    expect(cellText(cellAt(book.sheets[0], 0, 0))).toBe("2024-01-06");
+    for (const serial of [61, 60, 59, 1]) {
+      const cell = await openA1(await dateFile(serial));
+      expect([serial, cell?.v]).toEqual([serial, serial]);
+    }
+    // 화면 글자는 엑셀 규약(일련번호 1 = 1900-01-01)을 따른다.
+    expect(cellText(await openA1(await dateFile(1)))).toBe("1900-01-01");
   });
 
-  it("UTC−5에서는 한 번만 열어도 전날로 보인다", async () => {
-    process.env.TZ = "America/New_York";
-    const sheet = (await readXlsx(asArrayBuffer(await dateFile()), "날짜.xlsx")).book.sheets[0];
-    expect(cellAt(sheet, 0, 0)?.v).toBeCloseTo(45296 - 5 / 24, 6);
-    expect(cellText(cellAt(sheet, 0, 0))).toBe("2024-01-04");
-  });
-
-  it("UTC에서는 안 밀린다 — 그래서 CI만 보면 이 결함이 안 보인다", async () => {
-    process.env.TZ = "UTC";
-    const sheet = (await readXlsx(asArrayBuffer(await dateFile()), "날짜.xlsx")).book.sheets[0];
-    expect(cellAt(sheet, 0, 0)?.v).toBe(45296);
-    expect(cellText(cellAt(sheet, 0, 0))).toBe("2024-01-05");
-  });
-
-  it("입력 규칙의 날짜 경계는 안 밀린다 — 그쪽은 UTC로 되돌린다(validation.ts의 utcToIso)", async () => {
+  it("입력 규칙의 날짜 경계도 같은 함수를 거친다(validation.ts의 utcToIso)", async () => {
     process.env.TZ = "America/New_York";
     const sheet = emptySheet("규칙");
     sheet.validations = [
@@ -1016,6 +1082,8 @@ function zipStampOf(bytes: Uint8Array): { year: number; month: number; day: numb
   return { year: 1980 + (date >> 9), month: (date >> 5) & 0xf, day: date & 0x1f };
 }
 
+/** zip 시각과 견줄 오늘 날짜. **UTC로 읽는다** — archiver가 DOS 날짜를 UTC로 적는다.
+ *  로컬 필드로 읽으면 UTC와 날짜가 갈리는 시간대에서만 빨개진다(KST 00:00~09:00). */
 function ymdOf(d: Date): { year: number; month: number; day: number } {
-  return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
 }

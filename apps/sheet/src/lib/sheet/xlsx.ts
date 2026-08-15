@@ -19,7 +19,7 @@ import {
   type ScaleStop,
 } from "./condformat";
 import { operandOf } from "./filter";
-import { isDateFormat, toSerial } from "./serial";
+import { isDateFormat, serialFromExcelJsDate } from "./serial";
 import {
   fromXlsxValidation,
   packAreas,
@@ -141,7 +141,12 @@ function readValue(raw: unknown, numFmt: string | undefined): { v: Scalar; f?: s
   }
 
   if (raw instanceof Date) {
-    return { v: toSerial(raw), numFmt: numFmt && isDateFormat(numFmt) ? undefined : "yyyy-mm-dd" };
+    // ExcelJS는 일련번호를 UTC 기준 Date로 푼다 — 로컬 시각으로 되읽으면(예전에는
+    // serial.ts의 toSerial을 불렀다) 열 때마다 시간대 오프셋만큼 밀렸다.
+    return {
+      v: serialFromExcelJsDate(raw),
+      numFmt: numFmt && isDateFormat(numFmt) ? undefined : "yyyy-mm-dd",
+    };
   }
 
   const obj = raw as Record<string, unknown>;

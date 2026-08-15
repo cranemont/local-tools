@@ -19,9 +19,11 @@ import {
   type Delimiter,
 } from "../apps/sheet/src/lib/sheet/csv";
 import { cellKey } from "../apps/sheet/src/lib/sheet/a1";
+import { exportText } from "../apps/sheet/src/lib/sheet/convert";
 import {
   applyStyle,
   cellText,
+  clearContents,
   clearStyles,
   deleteCols,
   forceText,
@@ -567,5 +569,160 @@ describe("쓰기 규칙 (writeCsv)", () => {
   it("빈 시트는 개행 한 줄이다(빈 바이트가 아니다)", () => {
     const sheet = readCsv(bytes("")).sheet;
     expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("\n");
+  });
+
+  it("원문을 되살리는 자리는 하나다 — 파일에는 렌더러가 준 글자가 그대로 나간다", () => {
+    // writeCsv 안에 `cell.raw ?? render(...)`가 한 줄 더 있었다. cellText가 첫 줄에서
+    // 하는 일이라 동작은 같았지만, 규약이 두 자리에 적히면 한쪽만 고쳐 놓고 고쳤다고
+    // 여기게 된다. 렌더러를 다른 것으로 바꿔 통로가 하나인지 확인한다.
+    const sheet = readCsv(bytes("1.50\n")).sheet;
+    expect(sheet.cells.get(cellKey(0, 0))?.raw).toBe("1.50");
+    expect(textOf(writeCsv(sheet, () => "다른 글자", opts()))).toBe("다른 글자\n");
+    // 앱이 넘기는 렌더러(cellText)로는 원문이 그대로 나간다.
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("1.50\n");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// 서식만 든 칸(값·수식·원문이 없고 `s`만 있는 칸)은 CSV에서 아무 글자도 아니다.
+// 빈 줄·빈 열까지 골라 굵게 한 번이면 생기는 칸인데, 표의 일부로 세면 원문의 빈 줄이
+// ";;;;"가 되고 오른쪽에 빈 열이 붙었다. CSV는 서식을 담지 못하므로 사용자가 얻는 것
+// 없이 파일만 달라진다(CLAUDE.md 23번).
+//
+// 고친 자리는 내보내기 쪽이다(model.ts의 `hasContent` 하나를 csv.ts의 writeCsv와
+// convert.ts의 toGrid가 함께 쓴다) — 서식을 거는 applyStyle은 그대로 칸을 만든다.
+// xlsx에서는 그 칸이 파일에 나가기 때문이고, 그 사실은 tests/sheet-roundtrip.test.ts가
+// 못 박는다. 마크다운·JSON 쪽 명세는 아래 describe에 있다.
+describe("서식만 든 칸은 CSV의 표를 넓히지 않는다", () => {
+  const opts = (over: Partial<CsvWriteOptions> = {}): CsvWriteOptions => ({
+    ...DEFAULT_CSV_WRITE,
+    bom: false,
+    newline: "\n",
+    ...over,
+  });
+
+  const SRC = "a,b\n\nc,d\n";
+
+  function styledTrip(area: { top: number; left: number; bottom: number; right: number }): string {
+    const sheet = readCsv(bytes(SRC)).sheet;
+    applyStyle(sheet, area, { bold: true });
+    return textOf(writeCsv(sheet, renderer(sheet), opts()));
+  }
+
+  it("빈 줄에 서식을 걸어도 빈 줄이다", () => {
+    expect(styledTrip({ top: 1, left: 0, bottom: 1, right: 1 })).toBe(SRC);
+  });
+
+  it("표 오른쪽 빈 열에 서식을 걸어도 열이 안 는다", () => {
+    expect(styledTrip({ top: 0, left: 0, bottom: 2, right: 9 })).toBe(SRC);
+  });
+
+  it("표 아래 빈 줄에 서식을 걸어도 줄이 안 는다", () => {
+    expect(styledTrip({ top: 3, left: 0, bottom: 40, right: 1 })).toBe(SRC);
+  });
+
+  it("값이 든 칸의 서식은 줄을 지우지 않는다 — 빈 칸만 안 세는 것이다", () => {
+    expect(styledTrip({ top: 0, left: 0, bottom: 2, right: 1 })).toBe(SRC);
+  });
+
+  it("서식만 든 칸이라도 값을 넣으면 그 줄이 다시 표에 든다", () => {
+    // 경계의 반대쪽. `hasContent`가 값을 못 보면 이 줄이 빈 줄로 나간다.
+    const sheet = readCsv(bytes(SRC)).sheet;
+    applyStyle(sheet, { top: 1, left: 0, bottom: 1, right: 1 }, { bold: true });
+    putCell(sheet, 1, 1, { v: "x" });
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("a,b\n,x\nc,d\n");
+  });
+
+  it("수식만 든 칸도 표에 든다 — 값이 아직 null이어도 글자가 나간다", () => {
+    const sheet = emptySheet("Sheet1");
+    putCell(sheet, 0, 0, { v: "a" });
+    putCell(sheet, 1, 0, { v: null, f: "SUM(A1:A1)" });
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts({ formulas: true })))).toBe(
+      "a\n=SUM(A1:A1)\n",
+    );
+  });
+
+  it("서식만 든 칸으로 이뤄진 시트는 개행 한 줄이다 — 빈 시트와 같다", () => {
+    const sheet = emptySheet("Sheet1");
+    applyStyle(sheet, { top: 0, left: 0, bottom: 3, right: 3 }, { bold: true });
+    expect(sheet.cells.size).toBe(16); // 칸은 생겼다(xlsx가 쓴다)
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("\n");
+  });
+
+  it("서식이 남은 줄의 내용을 지우면 그 줄은 빈 줄로 나간다", () => {
+    // 서식만 든 칸은 applyStyle 말고 Delete로도 생긴다 — clearContents가 서식을 남긴다.
+    // 머리글(읽을 때 굵게가 걸린다)을 지우면 그 줄에 칸은 남지만 글자가 없다.
+    // 예전에는 여기가 ",\n김,1\n"이었다. 판정을 값에 걸었으니 이쪽도 같이 움직인다.
+    const sheet = readCsv(bytes("이름,값\n김,1\n")).sheet;
+    clearContents(sheet, { top: 0, left: 0, bottom: 0, right: 1 });
+    expect(sheet.cells.get(cellKey(0, 0))?.s?.bold).toBe(true); // 칸은 남아 있다
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("\n김,1\n");
+  });
+
+  it("값이 아직 null이어도 원문이 있으면 그 글자가 나간다", () => {
+    // `hasContent`의 세 갈래 중 원문(raw)만 남은 경계다. 값·수식만 보게 줄이면
+    // cellText는 "0100"을 그리는데 그 줄이 빈 줄이 되어 글자가 사라진다.
+    const sheet = emptySheet("Sheet1");
+    putCell(sheet, 0, 0, { v: "a" });
+    sheet.cells.set(cellKey(1, 0), { v: null, raw: "0100" });
+    expect(cellText(sheet.cells.get(cellKey(1, 0)))).toBe("0100");
+    expect(textOf(writeCsv(sheet, renderer(sheet), opts()))).toBe("a\n0100\n");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// 같은 판정을 마크다운·JSON·HTML 내보내기(convert.ts의 toGrid)도 쓴다. 예전엔 여기만
+// 옛 방식이라, 빈 줄에 굵게를 걸면 마크다운 표에 빈 줄이 하나 늘고 JSON에 빈 객체가
+// 하나 늘었다(CSV만 고친 뒤 남아 있던 자리다). 서식은 세 형식 어디에도 안 실린다.
+describe("서식만 든 칸은 마크다운·JSON 표도 넓히지 않는다", () => {
+  const SRC = "이름,값\n\n김,1\n";
+
+  /** 같은 시트를 서식 없이 / 빈 줄·빈 열까지 골라 굵게 한 뒤 내보낸다. */
+  function bothWays(format: "markdown" | "json" | "html"): { plain: string; styled: string } {
+    const a = readCsv(bytes(SRC)).sheet;
+    const b = readCsv(bytes(SRC)).sheet;
+    applyStyle(b, { top: 0, left: 0, bottom: 4, right: 3 }, { bold: true });
+    return {
+      plain: exportText(a, renderer(a), format),
+      styled: exportText(b, renderer(b), format),
+    };
+  }
+
+  it("마크다운 표는 굵게를 걸기 전과 같다", () => {
+    const { plain, styled } = bothWays("markdown");
+    expect(styled).toBe(plain);
+    // 원문의 빈 줄은 그대로 한 줄이다 — 서식이 만든 줄이 뒤에 붙지 않는다.
+    expect(styled.split("\n")).toHaveLength(4); // 머리글·구분선·빈 줄·김
+    expect(styled).not.toContain("| 열3 |");
+  });
+
+  it("JSON은 빈 객체가 늘지 않는다", () => {
+    const { plain, styled } = bothWays("json");
+    expect(styled).toBe(plain);
+    expect(JSON.parse(styled)).toEqual([
+      { 이름: null, 값: null },
+      { 이름: "김", 값: 1 },
+    ]);
+  });
+
+  it("HTML 표도 같다", () => {
+    const { plain, styled } = bothWays("html");
+    expect(styled).toBe(plain);
+  });
+
+  it("서식만 든 칸으로 이뤄진 시트는 내보낼 것이 없다", () => {
+    const sheet = emptySheet("Sheet1");
+    applyStyle(sheet, { top: 0, left: 0, bottom: 3, right: 3 }, { bold: true });
+    expect(exportText(sheet, renderer(sheet), "json")).toBe("[]");
+    expect(exportText(sheet, renderer(sheet), "markdown")).toBe("");
+  });
+
+  it("값을 넣으면 그 줄과 열이 다시 표에 든다 — 경계의 반대쪽", () => {
+    const sheet = readCsv(bytes(SRC)).sheet;
+    applyStyle(sheet, { top: 0, left: 0, bottom: 4, right: 3 }, { bold: true });
+    putCell(sheet, 3, 2, { v: "끝" });
+    const json = JSON.parse(exportText(sheet, renderer(sheet), "json"));
+    expect(json).toHaveLength(3);
+    expect(json[2]).toEqual({ 이름: null, 값: null, 열3: "끝" });
   });
 });

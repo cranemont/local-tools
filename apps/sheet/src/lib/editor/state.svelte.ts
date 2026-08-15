@@ -53,6 +53,7 @@ import {
   type ColumnFilter,
   type FilterColumn,
   type FilterOp,
+  type FilterScope,
   type SheetFilter,
   type UniqueValue,
 } from "../sheet/filter";
@@ -2002,15 +2003,16 @@ export class EditorState {
   // ── 찾기·바꾸기 ──────────────────────────────────────────────
 
   /**
-   * 찾기. 걸러진 행은 결과에서 뺀다 — 갈 수 없는 자리를 세어 주면 개수만 거짓말이 된다.
-   * 모두 바꾸기도 이 목록만 고치므로 갈래가 "보이는 행만"이다(`OP_SCOPE.replace`).
+   * 찾은 자리들. `scope`가 "visible"이면 걸러진 행을 뺀다.
+   *
+   * 갈래를 여기서 정하지 않는다 — 부르는 쪽이 `OP_SCOPE`에 물어본 답을 넘긴다.
    */
-  findMatches(query: string, matchCase: boolean): Pos[] {
+  private matchesIn(query: string, matchCase: boolean, scope: FilterScope): Pos[] {
     void this.revision;
     if (!query) return [];
     const sheet = this.doc.sheets[this.doc.active];
     const needle = matchCase ? query : query.toLowerCase();
-    const hidden = this.visibleRows !== null;
+    const hidden = scope === "visible" && this.visibleRows !== null;
     const found: Pos[] = [];
     for (const [key, cell] of sheet.cells) {
       const text = cellText(cell);
@@ -2024,9 +2026,21 @@ export class EditorState {
     return found;
   }
 
+  /**
+   * 찾기. 걸러진 행은 결과에서 뺀다 — 갈 수 없는 자리를 세어 주면 개수만 거짓말이 된다
+   * (찾기는 커서를 그리로 옮기는 기능이다).
+   */
+  findMatches(query: string, matchCase: boolean): Pos[] {
+    return this.matchesIn(query, matchCase, "visible");
+  }
+
+  /**
+   * 모두 바꾸기. 어디까지 닿는지는 `OP_SCOPE.replace`가 정한다 — 예전에는 찾기 목록을
+   * 그대로 써서, 표를 "all"로 고쳐도 동작이 그대로였다(표와 코드가 끊겨 있었다).
+   */
   replaceAll(query: string, replacement: string, matchCase: boolean): number {
     if (!query) return 0;
-    const matches = this.findMatches(query, matchCase);
+    const matches = this.matchesIn(query, matchCase, scopeOf("replace"));
     if (matches.length === 0) {
       this.error = t.find.none;
       return 0;

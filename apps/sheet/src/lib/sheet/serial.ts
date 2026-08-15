@@ -27,6 +27,24 @@ export function toSerial(date: Date): number {
   return days < 61 ? days - 1 : days;
 }
 
+/**
+ * ExcelJS가 푼 Date → 파일에 적혀 있던 일련번호. **ExcelJS 어댑터 두 곳만 쓴다**
+ * (`xlsx.ts`의 readValue, `validation.ts`의 utcToIso).
+ *
+ * ExcelJS는 일련번호를 `1899-12-30 UTC + serial일`로 푼다 — 실측: 45296 →
+ * 2024-01-05T00:00:00Z, 61 → 1900-03-01Z, 1 → 1899-12-31Z. **1900년 윤년 버그를
+ * 흉내 내지 않는다**(그래서 61 미만에서 위 toSerial과 하루 어긋난다). 이 함수는 그
+ * 대응의 역이라 파일에 적힌 값이 그대로 돌아온다 — 윤년 가지를 여기 넣으면 1900년
+ * 초의 날짜가 왕복마다 하루씩 밀린다.
+ *
+ * 로컬 시각을 읽는 `toSerial`을 쓰면 여는 순간 시간대 오프셋만큼 값이 밀리고(UTC+9면
+ * +0.375) 저장할 때 그 값이 파일에 적혀 왕복마다 쌓인다. 여기서는 `getTime()`만
+ * 보므로 실행 시간대와 무관하다.
+ */
+export function serialFromExcelJsDate(date: Date): number {
+  return (date.getTime() - EPOCH) / MS_PER_DAY;
+}
+
 /** 엑셀 일련번호 → JS Date(로컬).
  *  60번(가짜 1900-02-29)은 실재하지 않으므로 1900-02-28에 겹쳐 그린다. */
 export function fromSerial(serial: number): Date {

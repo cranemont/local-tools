@@ -278,7 +278,8 @@ export const OP_SCOPE: Record<FilterOp, FilterScope> = {
   deleteRows: "visible",
   /** 복사 — 화면에 보이는 것이 복사된다. 숨은 줄이 딸려 가면 붙인 쪽에서 알 수 없다. */
   copy: "visible",
-  /** 모두 바꾸기 — 찾기가 못 세는 자리는 바꾸지도 않는다. */
+  /** 모두 바꾸기 — 숨은 줄까지 바뀌면 무엇이 바뀌었는지 볼 방법이 없다.
+   *  `state.svelte.ts`의 replaceAll이 이 값을 보고 목록을 고른다. */
   replace: "visible",
   /** 붙여넣기 — 숨은 줄도 덮는다(위 설명). 엑셀과 같다. */
   paste: "all",

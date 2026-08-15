@@ -22,7 +22,13 @@ import {
   keyRow,
   keyCol,
 } from "../apps/sheet/src/lib/sheet/a1";
-import { toSerial, fromSerial, isDateFormat, parseDateInput } from "../apps/sheet/src/lib/sheet/serial";
+import {
+  toSerial,
+  fromSerial,
+  isDateFormat,
+  parseDateInput,
+  serialFromExcelJsDate,
+} from "../apps/sheet/src/lib/sheet/serial";
 import { formatValue, FORMAT_PRESETS } from "../apps/sheet/src/lib/sheet/numfmt";
 import { ERR } from "../apps/sheet/src/lib/sheet/types";
 
@@ -289,6 +295,41 @@ describe("serial — 1900년 윤년 버그를 흉내 내는 방향", () => {
     expect(formatValue(1, "yyyy-mm-dd")).toBe("1900-01-01");
     expect(formatValue(59, "yyyy-mm-dd")).toBe("1900-02-28");
     expect(formatValue(61, "yyyy-mm-dd")).toBe("1900-03-01");
+  });
+});
+
+describe("serial — ExcelJS가 준 Date 되읽기(serialFromExcelJsDate)", () => {
+  // xlsx 어댑터 둘(xlsx.ts의 readValue·validation.ts의 utcToIso)이 쓰는 함수다.
+  // ExcelJS는 일련번호를 `1899-12-30 UTC + serial일`로 풀고 **1900년 윤년 버그를
+  // 흉내 내지 않는다** — 그래서 위 toSerial과 달리 61 미만에서도 보정이 없다.
+  // 실물 파일로 재는 것은 tests/sheet-roundtrip.test.ts의 시간대 표다.
+
+  const utc = (iso: string): Date => new Date(iso);
+
+  it("ExcelJS의 대응을 그대로 뒤집는다 — 파일에 적힌 수가 그대로 돌아온다", () => {
+    // 오른쪽 Date는 ExcelJS가 돌려준 값이다 — 같은 파일을 열어 찍어 봤다.
+    expect(serialFromExcelJsDate(utc("2024-01-05T00:00:00Z"))).toBe(45296);
+    expect(serialFromExcelJsDate(utc("2024-01-05T12:00:00Z"))).toBe(45296.5);
+    expect(serialFromExcelJsDate(utc("1900-03-01T00:00:00Z"))).toBe(61);
+    expect(serialFromExcelJsDate(utc("1900-02-28T00:00:00Z"))).toBe(60);
+    expect(serialFromExcelJsDate(utc("1899-12-31T00:00:00Z"))).toBe(1);
+    expect(serialFromExcelJsDate(utc("1899-12-30T12:00:00Z"))).toBe(0.5);
+  });
+
+  it("61 미만에서 윤년 보정을 하지 않는다 — 얹으면 파일의 1이 0으로 저장된다", () => {
+    // toSerial은 같은 날짜에 보정을 얹는다. 두 함수가 갈리는 자리가 여기다.
+    expect(serialFromExcelJsDate(utc("1899-12-31T00:00:00Z"))).toBe(1);
+    expect(toSerial(new Date(1899, 11, 31))).toBe(0);
+  });
+
+  it("시간대를 읽지 않는다 — 같은 순간이면 어느 시간대에서 돌려도 같은 값이다", () => {
+    // getTime()만 쓰므로 로컬 성분을 볼 자리가 없다. 같은 순간을 로컬 문자열로
+    // 적어 넣어도(오프셋이 붙은 ISO) 값이 하나다.
+    const moment = utc("2024-01-05T00:00:00Z");
+    expect(serialFromExcelJsDate(new Date("2024-01-05T09:00:00+09:00"))).toBe(
+      serialFromExcelJsDate(moment),
+    );
+    expect(serialFromExcelJsDate(new Date("2024-01-04T19:00:00-05:00"))).toBe(45296);
   });
 });
 
