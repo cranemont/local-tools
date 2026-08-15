@@ -36,6 +36,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CROP_RATIO_ORIGINAL,
   EditorState,
+  HEIGHT_DEFAULT,
+  LONGEST_DEFAULT,
   MIN_CROP,
   WIDTH_DEFAULT,
 } from "../apps/image/src/lib/editor/state.svelte";
@@ -755,11 +757,101 @@ describe("출력 설정 한 덩어리", () => {
     expect(ed.resizeLongest).toBe(800);
   });
 
-  it("기본값과 같은 값을 직접 넣어 두면 모드를 옮길 때 덮인다 — 손댔는지를 값으로만 잰다", async () => {
+  // 예전에는 "손댔는가"를 값이 기본값과 같은지로 쟀다. 그래서 가로 칸에 1280을 직접 넣어 둔
+  // 사람만 값이 덮이고 1279·1281을 넣은 사람은 안 덮였다. 지금은 넣었다는 사실을 따로 남긴다.
+  it("기본값과 같은 값을 직접 넣어 둬도 모드를 옮길 때 안 덮인다", async () => {
     const ed = await withOneItem();
     ed.setResizeWidth(WIDTH_DEFAULT);
     ed.setResizeMode("width", { w: 800, h: 600 });
+    expect(ed.resizeWidth).toBe(WIDTH_DEFAULT);
+  });
+
+  it("기본값 ±1을 넣은 칸과 기본값을 넣은 칸이 같게 움직인다", async () => {
+    for (const px of [WIDTH_DEFAULT - 1, WIDTH_DEFAULT, WIDTH_DEFAULT + 1]) {
+      const ed = await withOneItem();
+      ed.setResizeWidth(px);
+      ed.setResizeMode("width", { w: 800, h: 600 });
+      ed.setResizeMode("none", { w: 800, h: 600 });
+      ed.setResizeMode("width", { w: 800, h: 600 });
+      expect(ed.resizeWidth).toBe(px);
+    }
+  });
+
+  it("세로 1080·긴 변 1280을 직접 넣어 둬도 안 덮인다 — 세 칸이 같은 규칙이다", async () => {
+    const ed = await withOneItem();
+    ed.setResizeHeight(HEIGHT_DEFAULT);
+    ed.setResizeLongest(LONGEST_DEFAULT);
+    ed.setResizeMode("height", { w: 800, h: 600 });
+    expect(ed.resizeHeight).toBe(HEIGHT_DEFAULT);
+    ed.setResizeMode("longest", { w: 800, h: 600 });
+    expect(ed.resizeLongest).toBe(LONGEST_DEFAULT);
+  });
+
+  it("정확한 크기 모드도 직접 넣은 기본값을 지킨다", async () => {
+    const ed = await withOneItem();
+    ed.setResizeWidth(WIDTH_DEFAULT);
+    ed.setResizeHeight(HEIGHT_DEFAULT);
+    ed.setResizeMode("exact", { w: 800, h: 600 });
+    expect([ed.resizeWidth, ed.resizeHeight]).toEqual([WIDTH_DEFAULT, HEIGHT_DEFAULT]);
+  });
+
+  it("한 칸만 넣어 두면 나머지 칸은 현재 장 크기로 채워진다", async () => {
+    const ed = await withOneItem();
+    ed.setResizeWidth(WIDTH_DEFAULT);
+    ed.setResizeMode("exact", { w: 800, h: 600 });
+    expect([ed.resizeWidth, ed.resizeHeight]).toEqual([WIDTH_DEFAULT, 600]);
+  });
+
+  it("체인이 따라 쓴 세로도 넣은 것으로 친다 — 모드를 옮겨도 그 값이 남는다", async () => {
+    const ed = await withOneItem();
+    ed.setResizeWidth(1000, 2); // 체인이 꺼져 있어 세로는 안 따라온다
+    ed.setLockRatio(true, 2); // 켜는 순간 세로가 500이 된다
+    expect(ed.resizeHeight).toBe(500);
+    ed.setResizeMode("exact", { w: 800, h: 600 });
+    expect([ed.resizeWidth, ed.resizeHeight]).toEqual([1000, 500]);
+  });
+
+  it("모드 전환이 한 번 채운 칸은 다시 채우지 않는다 — 장을 바꿔도 그 값이 남는다", async () => {
+    const ed = await withOneItem();
+    ed.setResizeMode("width", { w: 800, h: 600 });
     expect(ed.resizeWidth).toBe(800);
+    ed.setResizeMode("none", { w: 800, h: 600 });
+    ed.setResizeMode("width", { w: 4000, h: 3000 });
+    expect(ed.resizeWidth).toBe(800);
+  });
+
+  // 아래 셋은 "넣었다"를 새기는 자리의 경계다 — 값이 안 선 입력까지 새기면
+  // 칸이 기본값 그대로인데 모드 전환이 채워 주지 않는다.
+  it("NaN은 값도 안 세우고 넣은 것으로도 안 친다", async () => {
+    const ed = await withOneItem();
+    ed.setResizeWidth(Number.NaN);
+    expect(ed.resizeWidth).toBe(WIDTH_DEFAULT);
+    ed.setResizeMode("width", { w: 800, h: 600 });
+    expect(ed.resizeWidth).toBe(800);
+  });
+
+  it("칸을 비워 0이 들어오면 1로 붙잡고 그 1이 남는다", async () => {
+    const ed = await withOneItem();
+    ed.setResizeWidth(0);
+    ed.setResizeMode("width", { w: 800, h: 600 });
+    expect(ed.resizeWidth).toBe(1);
+  });
+
+  it("장이 없으면 아무 칸도 안 채우고 넣은 것으로도 안 친다", async () => {
+    const ed = new EditorState();
+    ed.setResizeMode("width", null);
+    expect(ed.resizeWidth).toBe(WIDTH_DEFAULT);
+    ed.setResizeMode("width", { w: 800, h: 600 });
+    expect(ed.resizeWidth).toBe(800);
+  });
+
+  it("되돌리기는 치수 칸을 안 되돌린다 — 스냅샷에 없다", async () => {
+    const ed = await withOneItem();
+    ed.setResizeWidth(WIDTH_DEFAULT);
+    ed.rotate();
+    ed.undo();
+    ed.setResizeMode("width", { w: 800, h: 600 });
+    expect(ed.resizeWidth).toBe(WIDTH_DEFAULT);
   });
 
   it("치수는 1..20000으로 붙잡힌다", async () => {

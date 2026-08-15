@@ -148,8 +148,11 @@ export class EditorState {
   #future: Snapshot[] = [];
   /** 상자를 끌기 시작할 때 떠 둔 지점. 첫 이동에서 한 번만 확정한다(끌기 하나 = 되돌리기 하나). */
   #dragMark: Snapshot | null = null;
-  /** 범위 선택의 기준점 — Shift+클릭이 여기서부터 칠한다. */
-  #anchor = 0;
+  /** 범위 선택의 기준점 — Shift+클릭이 여기서부터 칠한다.
+   *  인덱스가 아니라 **프레임 id**다. 인덱스로 두면 순서를 바꾸거나(move·reverse)
+   *  장을 끼워 넣는(duplicate) 자리마다 되돌려 놓아야 하고, 한 곳이라도 빠지면
+   *  기준점이 엉뚱한 장을 가리킨다. id는 목록이 어떻게 바뀌어도 같은 장을 가리킨다. */
+  #anchorId: string | null = null;
   /** 편집 리비전 — 인코딩 결과가 낡았는지 판단하는 데 쓴다. */
   revision = $state(0);
   banner = $state<{ w: number; h: number } | null>(null);
@@ -273,7 +276,7 @@ export class EditorState {
       : null;
     this.cropMode = false;
     this.redactMode = false;
-    this.#anchor = 0;
+    this.#anchorId = null;
     // 끌던 도중에 되돌리기가 들어오면 떠 둔 지점은 버린다 — 되돌린 상태 위에 다시 쌓지 않는다.
     this.#dragMark = null;
   }
@@ -437,6 +440,7 @@ export class EditorState {
     this.overlays = [];
     this.activeOverlayId = null;
     this.activeRegionId = null;
+    this.#anchorId = null;
     this.cropMode = false;
     this.redactMode = false;
     this.playing = false;
@@ -474,16 +478,28 @@ export class EditorState {
     }
   }
 
+  /** 기준점이 지금 몇 번째인가. 가리키던 장이 목록에 없으면(지웠거나 아직 안 골랐으면) 0이다. */
+  #anchorIndex(): number {
+    if (this.#anchorId === null) return 0;
+    const i = this.frames.findIndex((f) => f.id === this.#anchorId);
+    return i >= 0 ? i : 0;
+  }
+
+  /** 기준점을 인덱스로 놓는다 — 그 자리의 id를 기억한다(빈 목록이면 놓지 않는다). */
+  #setAnchorAt(index: number): void {
+    this.#anchorId = this.frames[index]?.id ?? null;
+  }
+
   /** 한 장 토글. range면 기준점부터 이 프레임까지 한 번에 칠한다(Shift+클릭). */
   toggleSelect(id: string, range = false): void {
     const i = this.frames.findIndex((x) => x.id === id);
     if (i < 0) return;
     if (range) {
-      this.selectRange(this.#anchor, i, true);
+      this.selectRange(this.#anchorIndex(), i, true);
       return;
     }
     this.frames[i].selected = !this.frames[i].selected;
-    this.#anchor = i;
+    this.#anchorId = id;
     this.#touchIfSelectionDraws();
   }
 
@@ -494,7 +510,7 @@ export class EditorState {
     const lo = Math.max(0, Math.min(a, b));
     const hi = Math.min(last, Math.max(a, b));
     for (let i = lo; i <= hi; i++) this.frames[i].selected = value;
-    this.#anchor = Math.max(0, Math.min(b, last));
+    this.#setAnchorAt(Math.max(0, Math.min(b, last)));
     this.#touchIfSelectionDraws();
   }
 
@@ -506,7 +522,7 @@ export class EditorState {
 
   selectAll(): void {
     for (const f of this.frames) f.selected = true;
-    this.#anchor = 0;
+    this.#setAnchorAt(0);
     this.#touchIfSelectionDraws();
   }
 
@@ -527,7 +543,8 @@ export class EditorState {
       : -1;
     this.current =
       idx >= 0 ? idx : Math.min(this.current, Math.max(0, this.frames.length - 1));
-    this.#anchor = 0;
+    // 기준점은 여기서 되돌리지 않는다 — id라서 남은 장을 계속 가리키고,
+    // 가리키던 장이 지워졌으면 #anchorIndex()가 0으로 읽는다.
     this.touch();
   }
 
@@ -633,13 +650,17 @@ export class EditorState {
   setDelay(value: number, onlySelected: boolean, mode: DelayMode = "set"): void {
     if (!this.frames.length) return;
     if (!Number.isFinite(value)) return;
-    this.#mark();
-    for (const f of this.frames) {
-      if (onlySelected && !f.selected) continue;
-      f.delayMs = clampDelay(
+    const targets = onlySelected ? this.frames.filter((f) => f.selected) : this.frames;
+    const next = targets.map((f) =>
+      clampDelay(
         mode === "set" ? value : mode === "add" ? f.delayMs + value : (f.delayMs * value) / 100,
-      );
-    }
+      ),
+    );
+    // 바뀌는 프레임이 하나도 없으면(선택이 비었거나 이미 그 값이면) 지점도 리비전도 안 남긴다
+    // — setScale·setCrop·setFrameDelay와 같은 규약이다.
+    if (targets.every((f, i) => f.delayMs === next[i])) return;
+    this.#mark();
+    targets.forEach((f, i) => (f.delayMs = next[i]));
     this.touch();
   }
 
@@ -801,9 +822,11 @@ export class EditorState {
   }
 
   /**
-   * 미리보기에서 끈 사각형으로 영역을 만든다. 인자는 **출력 캔버스 좌표**다 —
+   * 미리보기에서 끈 사각형으로 영역을 만든다. 인자는 **미리보기가 그리는 출력 좌표**다 —
    * 미리보기는 변형이 걸린 그림을 보여 주므로, 저장은 베이스 좌표로 되돌려서 한다
    * (그래야 나중에 크롭·회전을 바꿔도 같은 자리를 덮는다).
+   * 되돌리는 기준은 `previewOutput`/`previewTransform`이다 — 끌기(dragRegionTo)와 같은
+   * 좌표계여야 만든 자리와 잡아 옮긴 자리가 갈라지지 않는다(CLAUDE.md 35번).
    * 너무 작으면 아무 일도 없다 — 잘못 찍은 클릭으로 영역이 생기지 않게.
    */
   addRegionFromOutput(rect: RedactRect, mode: RedactMode = "mosaic"): void {
@@ -811,8 +834,8 @@ export class EditorState {
       rect,
       this.base.w,
       this.base.h,
-      this.output,
-      this.transform,
+      this.previewOutput,
+      this.previewTransform,
     );
     if (!box) return;
     const region = newRegion(uid(), box, this.base.w, this.base.h, this.frames.length, mode);

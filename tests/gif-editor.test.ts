@@ -286,6 +286,73 @@ describe("되돌리기 스택에 드는 것과 안 드는 것", () => {
     expect(ed.canUndo).toBe(false);
   });
 
+  // 딜레이도 같은 규약을 지킨다 — 바뀌는 프레임이 없으면 지점도 리비전도 안 남는다.
+  // 예전에는 선택이 비어도 지점과 리비전을 남겨서 되돌리기가 한 번 헛돌았다.
+  it("선택이 비었는데 '선택한 장만' 딜레이를 걸면 지점도 리비전도 안 남는다", () => {
+    seed(3);
+    const revision = ed.revision;
+    ed.setDelay(500, true);
+    expect(ed.frames.map((f) => f.delayMs)).toEqual([100, 100, 100]);
+    expect(ed.canUndo).toBe(false);
+    expect(ed.revision).toBe(revision);
+  });
+
+  it("이미 그 값이면 딜레이를 다시 걸어도 지점을 안 남긴다", () => {
+    seed(2, "s1", 120);
+    const revision = ed.revision;
+    ed.setDelay(120, false);
+    expect(ed.canUndo).toBe(false);
+    expect(ed.revision).toBe(revision);
+  });
+
+  it("가둔 결과가 지금 값과 같아도 안 남긴다 — 하한 20ms에 붙은 장에 더 작은 값을 넣을 때다", () => {
+    seed(2, "s1", 20);
+    ed.setDelay(5, false);
+    expect(ed.frames.map((f) => f.delayMs)).toEqual([20, 20]);
+    expect(ed.canUndo).toBe(false);
+  });
+
+  it("고른 장 하나만 바뀌어도 지점을 남긴다", () => {
+    seed(3, "s1", 120);
+    ed.toggleSelect("s1f2");
+    ed.setDelay(300, true);
+    expect(ed.frames.map((f) => f.delayMs)).toEqual([120, 300, 120]);
+    ed.undo();
+    expect(ed.frames.map((f) => f.delayMs)).toEqual([120, 120, 120]);
+  });
+
+  // 덮어쓰기 말고 나머지 두 방식도 같은 규약을 탄다 — 항등원이 서로 다르다.
+  it("보태기 0ms와 비율 100%도 지점을 안 남긴다", () => {
+    seed(3, "s1", 100);
+    ed.setDelay(0, false, "add");
+    ed.setDelay(100, false, "scale");
+    expect(ed.frames.map((f) => f.delayMs)).toEqual([100, 100, 100]);
+    expect(ed.canUndo).toBe(false);
+  });
+
+  it("가둬서 값이 바뀌면 지점을 남긴다 — 비율 0%는 하한 20ms로 내려앉는다", () => {
+    seed(2, "s1", 100);
+    ed.setDelay(0, false, "scale");
+    expect(ed.frames.map((f) => f.delayMs)).toEqual([20, 20]);
+    expect(ed.canUndo).toBe(true);
+  });
+
+  it("한 장만 하한에 붙어 있고 나머지가 움직이면 지점을 남긴다", () => {
+    seed(2, "s1", 20);
+    ed.frames[1].delayMs = 100;
+    ed.setDelay(-50, false, "add");
+    expect(ed.frames.map((f) => f.delayMs)).toEqual([20, 50]);
+    expect(ed.canUndo).toBe(true);
+  });
+
+  it("딜레이에 NaN·무한대를 넣으면 값도 지점도 안 움직인다", () => {
+    seed(2);
+    ed.setDelay(Number.NaN, false);
+    ed.setDelay(Number.POSITIVE_INFINITY, false);
+    expect(ed.frames.map((f) => f.delayMs)).toEqual([100, 100]);
+    expect(ed.canUndo).toBe(false);
+  });
+
   it("되돌리면 크롭 모드와 가리기 모드가 꺼진다", () => {
     seed(2);
     ed.rotate90();
@@ -660,6 +727,105 @@ describe("프레임 지우기·구간 남기기·순서 뒤집기", () => {
     ed.toggleSelect("s1f2", true);
     expect(selected()).toEqual(["s1f2", "s1f3", "s1f4"]);
   });
+
+  // 기준점은 인덱스가 아니라 프레임 id다. 인덱스로 두면 순서를 바꾸거나 장을 끼워 넣는
+  // 자리마다 되돌려 놓아야 하는데 move·duplicate가 그러지 않아 옛 자리에 남아 있었다.
+  it("맨 뒤 장을 맨 앞으로 옮긴 뒤 그 장을 Shift 클릭하면 한 장만 칠해진다", () => {
+    seed(5);
+    ed.toggleSelect("s1f5"); // 기준점 = s1f5(자리 4)
+    ed.selectNone();
+    ed.move(4, 0);
+    expect(ids()).toEqual(["s1f5", "s1f1", "s1f2", "s1f3", "s1f4"]);
+
+    // 기준점이 자리 4에 남아 있으면 여기서 다섯 장이 칠해진다.
+    ed.toggleSelect("s1f5", true);
+    expect(selected()).toEqual(["s1f5"]);
+  });
+
+  // 위 :664가 기준점 자신이 지워진 경우를 잰다면 이쪽은 남은 경우다. 둘을 같이 세워 두면
+  // `#removeWhere`에 `#anchor = 0`을 되살려 :664만 통과시키는 수를 막는다.
+  it("기준점이 아닌 장을 지워도 기준점은 남은 그 장을 계속 가리킨다", () => {
+    seed(5);
+    ed.toggleSelect("s1f5"); // 기준점 = s1f5(자리 4)
+    ed.selectNone();
+    ed.deleteOne("s1f1"); // [f2, f3, f4, f5] — 기준점은 자리 3으로 밀린다
+    expect(ids()).toEqual(["s1f2", "s1f3", "s1f4", "s1f5"]);
+
+    ed.toggleSelect("s1f4", true);
+    expect(selected()).toEqual(["s1f4", "s1f5"]);
+  });
+
+  it("옮긴 뒤 Shift 클릭은 기준점이 옮겨 간 자리에서부터 칠한다", () => {
+    seed(5);
+    ed.toggleSelect("s1f1"); // 기준점 = s1f1(자리 0)
+    ed.selectNone();
+    ed.move(0, 4);
+    expect(ids()).toEqual(["s1f2", "s1f3", "s1f4", "s1f5", "s1f1"]);
+
+    ed.toggleSelect("s1f4", true); // s1f4(2) .. s1f1(4)
+    expect(selected()).toEqual(["s1f4", "s1f5", "s1f1"]);
+  });
+
+  it("한 장 복제로 앞자리가 밀려도 기준점은 같은 장을 가리킨다", () => {
+    seed(4);
+    ed.toggleSelect("s1f3"); // 기준점 = s1f3(자리 2)
+    ed.selectNone();
+    ed.duplicateOne("s1f1"); // 사본이 자리 1에 끼어 s1f3이 자리 3으로 밀린다
+    expect(ed.frames).toHaveLength(5);
+
+    ed.toggleSelect("s1f4", true);
+    expect(selected()).toEqual(["s1f3", "s1f4"]);
+  });
+
+  it("고른 것 복제로 자리가 밀려도 기준점은 같은 장을 가리킨다", () => {
+    seed(4);
+    ed.selectNumbers(1, 2); // 기준점 = s1f2(자리 1)
+    ed.duplicateSelected(); // [s1f1, 사본, s1f2, 사본, s1f3, s1f4]
+    ed.selectNone();
+
+    ed.toggleSelect("s1f3", true); // s1f2(2) .. s1f3(4)
+    expect(ed.frames.map((f) => f.selected)).toEqual([
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+    ]);
+  });
+
+  it("뒤집어도 기준점은 같은 장을 가리킨다", () => {
+    seed(4);
+    ed.toggleSelect("s1f1"); // 기준점 = s1f1(자리 0)
+    ed.selectNone();
+    ed.reverse();
+    expect(ids()).toEqual(["s1f4", "s1f3", "s1f2", "s1f1"]);
+
+    ed.toggleSelect("s1f2", true); // s1f2(2) .. s1f1(3)
+    expect(selected()).toEqual(["s1f2", "s1f1"]);
+  });
+
+  it("모두 비우고 새로 붙이면 기준점이 맨 앞에서 다시 시작한다", () => {
+    seed(3);
+    ed.toggleSelect("s1f3"); // 기준점 = s1f3
+    ed.clearAll();
+    seed(3, "s2");
+
+    ed.toggleSelect("s2f2", true);
+    expect(selected()).toEqual(["s2f1", "s2f2"]);
+  });
+
+  it("되돌리기로 목록이 돌아와도 기준점은 맨 앞이다 — 스냅샷에 기준점은 안 담긴다", () => {
+    seed(4);
+    ed.toggleSelect("s1f4"); // 기준점 = s1f4
+    ed.move(0, 3);
+    ed.undo();
+    expect(ids()).toEqual(["s1f1", "s1f2", "s1f3", "s1f4"]);
+
+    ed.selectNone();
+    ed.toggleSelect("s1f2", true);
+    expect(selected()).toEqual(["s1f1", "s1f2"]);
+  });
 });
 
 describe("모두 비우기", () => {
@@ -836,6 +1002,48 @@ describe("크롭 모드와 가리기 모드는 함께 켜지지 않는다", () =
     expect(ed.previewTransform.crop).toBeNull();
     expect(ed.previewTransform.scale).toBe(1);
     expect(ed.previewTransform.redact).toHaveLength(1);
+  });
+
+  // 영역 좌표는 한 좌표계에만 산다(CLAUDE.md 35번). 만들기는 `output`/`transform`으로,
+  // 끌기는 `previewOutput`/`previewTransform`으로 되돌리고 있었다 — 크롭 모드에서는
+  // 둘이 갈라진다. 지금 화면에서는 크롭 모드와 가리기 모드가 배타라 도달하지 않지만
+  // (Panel.svelte:313·toggleRedactMode), 두 자리가 다른 것 자체가 결함이다.
+  it("크롭 모드에서 만든 영역은 미리보기가 그리는 좌표계로 앉는다", () => {
+    seed(2);
+    ed.setCrop({ x: 8, y: 8, w: 32, h: 24 });
+    ed.setScale(0.5);
+    ed.cropMode = true; // 미리보기는 변형 없는 64×48을 그린다
+
+    ed.addRegionFromOutput({ x: 10, y: 10, w: 20, h: 16 });
+    expect(ed.regions[0]).toMatchObject({ x: 10, y: 10, w: 20, h: 16 });
+  });
+
+  it("만든 자리를 그대로 다시 끌면 값이 안 바뀐다 — 두 자리가 같은 좌표계를 쓴다", () => {
+    seed(2);
+    ed.setCrop({ x: 8, y: 8, w: 32, h: 24 });
+    ed.setScale(0.5);
+    ed.cropMode = true;
+    ed.addRegionFromOutput({ x: 10, y: 10, w: 20, h: 16 });
+    const id = ed.regions[0].id;
+
+    const revision = ed.revision;
+    ed.beginRegionDrag(id);
+    ed.dragRegionTo(id, { x: 10, y: 10, w: 20, h: 16 });
+    ed.endRegionDrag();
+    expect(ed.revision).toBe(revision);
+    expect(ed.regions[0]).toMatchObject({ x: 10, y: 10, w: 20, h: 16 });
+  });
+
+  it("가리기 모드에서는 크롭·배율이 걸린 출력 좌표를 베이스로 되돌린다", () => {
+    seed(2);
+    ed.setCrop({ x: 8, y: 8, w: 32, h: 24 });
+    ed.setScale(0.5); // 출력은 16×12
+    ed.toggleRedactMode();
+    expect(ed.cropMode).toBe(false);
+
+    // 출력 (2,2)-(12,10)은 베이스로는 크롭 왼쪽 위(8,8)에서 (4,4)만큼 들어간 자리다.
+    ed.addRegionFromOutput({ x: 2, y: 2, w: 10, h: 8 });
+    expect(ed.regions[0]).toMatchObject({ x: 12, y: 12, w: 20, h: 16 });
   });
 });
 

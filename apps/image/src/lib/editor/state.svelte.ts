@@ -163,6 +163,13 @@ export class EditorState {
   private past: Snapshot[] = [];
   private future: Snapshot[] = [];
 
+  /** 치수 칸에 값이 놓였는가 — 사용자가 넣었거나 모드 전환이 한 번 채운 것.
+   *  값이 기본값과 같은지로 재면 가로 칸에 1280(=WIDTH_DEFAULT)을 직접 넣어 둔 사람의 값이
+   *  모드를 옮겼다 돌아올 때 덮인다(1279·1281은 안 덮인다). 그래서 값이 아니라 사실로 남긴다. */
+  private widthFilled = false;
+  private heightFilled = false;
+  private longestFilled = false;
+
   readonly currentItem = $derived.by(() =>
     this.items.length
       ? this.items[Math.min(this.current, this.items.length - 1)]
@@ -506,15 +513,24 @@ export class EditorState {
   setResizeMode(mode: ResizeMode, base: { w: number; h: number } | null): void {
     this.resizeMode = mode;
     if (base) {
-      if (mode === "width" && this.resizeWidth === WIDTH_DEFAULT) {
+      if (mode === "width" && !this.widthFilled) {
         this.resizeWidth = clampSize(base.w);
-      } else if (mode === "height" && this.resizeHeight === HEIGHT_DEFAULT) {
+        this.widthFilled = true;
+      } else if (mode === "height" && !this.heightFilled) {
         this.resizeHeight = clampSize(base.h);
-      } else if (mode === "longest" && this.resizeLongest === LONGEST_DEFAULT) {
+        this.heightFilled = true;
+      } else if (mode === "longest" && !this.longestFilled) {
         this.resizeLongest = clampSize(Math.max(base.w, base.h));
+        this.longestFilled = true;
       } else if (mode === "exact") {
-        if (this.resizeWidth === WIDTH_DEFAULT) this.resizeWidth = clampSize(base.w);
-        if (this.resizeHeight === HEIGHT_DEFAULT) this.resizeHeight = clampSize(base.h);
+        if (!this.widthFilled) {
+          this.resizeWidth = clampSize(base.w);
+          this.widthFilled = true;
+        }
+        if (!this.heightFilled) {
+          this.resizeHeight = clampSize(base.h);
+          this.heightFilled = true;
+        }
       }
     }
     this.touch();
@@ -527,11 +543,16 @@ export class EditorState {
     this.touch();
   }
 
-  /** ratio(가로/세로)를 넘기면 체인이 켜져 있을 때 나머지 변이 따라온다. */
+  /** ratio(가로/세로)를 넘기면 체인이 켜져 있을 때 나머지 변이 따라온다.
+   *  체인이 따라 쓴 칸도 값이 놓인 것으로 친다 — 안 그러면 모드를 옮길 때 그 칸만 덮인다. */
   setResizeWidth(px: number, ratio: number | null = null): void {
     if (Number.isFinite(px)) {
       this.resizeWidth = clampSize(px);
-      if (ratio && this.lockRatio) this.resizeHeight = clampSize(this.resizeWidth / ratio);
+      this.widthFilled = true;
+      if (ratio && this.lockRatio) {
+        this.resizeHeight = clampSize(this.resizeWidth / ratio);
+        this.heightFilled = true;
+      }
     }
     this.touch();
   }
@@ -539,13 +560,20 @@ export class EditorState {
   setResizeHeight(px: number, ratio: number | null = null): void {
     if (Number.isFinite(px)) {
       this.resizeHeight = clampSize(px);
-      if (ratio && this.lockRatio) this.resizeWidth = clampSize(this.resizeHeight * ratio);
+      this.heightFilled = true;
+      if (ratio && this.lockRatio) {
+        this.resizeWidth = clampSize(this.resizeHeight * ratio);
+        this.widthFilled = true;
+      }
     }
     this.touch();
   }
 
   setResizeLongest(px: number): void {
-    if (Number.isFinite(px)) this.resizeLongest = clampSize(px);
+    if (Number.isFinite(px)) {
+      this.resizeLongest = clampSize(px);
+      this.longestFilled = true;
+    }
     this.touch();
   }
 
@@ -567,7 +595,10 @@ export class EditorState {
   /** 체인을 켜는 순간 지금 세로를 현재 비율로 맞춰 둔다 — 켜기만 하고 값이 어긋나 있으면 헷갈린다. */
   setLockRatio(v: boolean, ratio: number | null = null): void {
     this.lockRatio = v;
-    if (v && ratio) this.resizeHeight = clampSize(this.resizeWidth / ratio);
+    if (v && ratio) {
+      this.resizeHeight = clampSize(this.resizeWidth / ratio);
+      this.heightFilled = true;
+    }
     this.touch();
   }
 
