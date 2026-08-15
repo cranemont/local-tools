@@ -98,6 +98,23 @@
     for (const p of pages) URL.revokeObjectURL(p.url);
   }
 
+  /**
+   * 브라우저가 한 프레임을 실제로 그릴 때까지 기다린다. rAF 한 번은 그리기
+   * **직전**에 돌아오므로, 두 번 걸어야 방금 켠 것이 화면에 나간 뒤가 된다.
+   */
+  const nextPaint = () =>
+    new Promise<void>((resolve) => {
+      // 탭이 뒤에 있으면 rAF가 아예 돌지 않는다 — 그리기를 기다리다 저장이
+      // 통째로 멈추면 안 되니 여기서 끊는다.
+      const timer = setTimeout(resolve, 200);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          clearTimeout(timer);
+          resolve();
+        }),
+      );
+    });
+
   async function convertAll() {
     revokeAll();
     pages = [];
@@ -264,7 +281,7 @@
     status = "";
     const base = zipName.replace(/[\\/:*?"<>|]/g, "").trim() || defaultName;
     if (isText) {
-      saveTexts(base);
+      await saveTexts(base);
       return;
     }
 
@@ -296,7 +313,7 @@
   }
 
   /** 텍스트는 문서마다 .txt 한 장이다 — 쪽마다 한 장이면 200쪽짜리가 200개가 된다. */
-  function saveTexts(base: string) {
+  async function saveTexts(base: string) {
     if (texts.length === 1) {
       const doc = texts[0];
       const blob = new Blob([doc.text], { type: "text/plain;charset=utf-8" });
@@ -306,6 +323,10 @@
     }
     busy = true;
     busyMsg = t.toImg.zipping;
+    // 아래는 통째로 동기다(TextEncoder + zipSync). 한 프레임을 양보하지 않으면
+    // busy가 켜졌다 꺼지는 사이에 그림이 한 번도 안 나가 오버레이가 뜰 틈이 없다 —
+    // 200쪽짜리 여러 개면 그동안 화면이 이유 없이 굳는다.
+    await nextPaint();
     try {
       const encoder = new TextEncoder();
       // 문서마다 파일 한 개라 이름이 곧 원본 이름이다 — 같은 이름이 둘이면 그대로

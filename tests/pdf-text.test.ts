@@ -4,6 +4,7 @@ import {
   layoutText,
   PAGE_BREAK,
   pieceFromMatrix,
+  uprightCorrection,
   type LayoutOptions,
   type TextPiece,
 } from "../apps/pdf/src/lib/pdf/text";
@@ -450,6 +451,158 @@ describe("★ 회전을 걷어내고 나면 0°든 90°든 같은 글이 나온�
   it("90° 돌린 쪽이 글자 그대로 같다", () => {
     expect(rotated).toEqual(upright);
     expect(layoutText(rotated).text).toBe(layoutText(upright).text);
+  });
+});
+
+describe("★ 회전이 나중에 얹힌 쪽(uprightCorrection) — 기준은 쪽이 아니라 글이다", () => {
+  /**
+   * 위 묶음이 다루는 것은 **글을 회전에 맞춰 그린** 문서다. 회전 도구는 그렇게 하지
+   * 않는다 — 내용 스트림은 놔둔 채 /Rotate만 바꾼다(우리 편집 탭의 회전이 바로
+   * 그것이다: exporter.ts의 `setRotation`). 그런 쪽에서는 뷰포트 변환이 회전을
+   * 걷어내는 게 아니라 **거꾸로 글을 눕힌다**.
+   *
+   * 아래 행렬은 지어낸 값이 아니라 실제 PDF에서 뜬 값이다. 612×792 쪽에 표처럼
+   * 흩어 놓은 조각 여섯 개(AAA·BBB / DDD·EEE, 사이의 " "는 pdf.js가 끼워 주는
+   * 조각)를 만들고, 편집 탭과 똑같이 /Rotate만 얹어 다시 열어서 pdf.js가 준
+   * 합성 행렬(뷰포트 × 아이템)과 치수를 그대로 적었다.
+   */
+
+  /** [글, 합성 행렬, 폭, 높이, 줄 끝 표시] */
+  type Item = [string, number[], number, number, boolean];
+  interface Page {
+    /** 뷰포트(화면 상자) 크기 — 90·270°에서는 가로세로가 바뀐다. */
+    vw: number;
+    vh: number;
+    items: Item[];
+  }
+
+  const ROT_0: Page = {
+    vw: 612,
+    vh: 792,
+    items: [
+      ["AAA", [12, 0, 0, -12, 72, 72], 24.012, 12, false],
+      [" ", [12, 0, 0, -12, 96.012, 72], 203.988, 0, false],
+      ["BBB", [12, 0, 0, -12, 300, 72], 24.012, 12, true],
+      ["DDD", [12, 0, 0, -12, 72, 92], 25.992, 12, false],
+      [" ", [12, 0, 0, -12, 97.992, 92], 202.008, 0, false],
+      ["EEE", [12, 0, 0, -12, 300, 92], 24.012, 12, false],
+    ],
+  };
+  const ROT_90: Page = {
+    vw: 792,
+    vh: 612,
+    items: [
+      ["AAA", [0, 12, 12, 0, 720, 72], 24.012, 12, false],
+      [" ", [0, 12, 12, 0, 720, 96.012], 203.988, 0, false],
+      ["BBB", [0, 12, 12, 0, 720, 300], 24.012, 12, true],
+      ["DDD", [0, 12, 12, 0, 700, 72], 25.992, 12, false],
+      [" ", [0, 12, 12, 0, 700, 97.992], 202.008, 0, false],
+      ["EEE", [0, 12, 12, 0, 700, 300], 24.012, 12, false],
+    ],
+  };
+  const ROT_180: Page = {
+    vw: 612,
+    vh: 792,
+    items: [
+      ["AAA", [-12, 0, 0, 12, 540, 720], 24.012, 12, false],
+      [" ", [-12, 0, 0, 12, 515.988, 720], 203.988, 0, false],
+      ["BBB", [-12, 0, 0, 12, 312, 720], 24.012, 12, true],
+      ["DDD", [-12, 0, 0, 12, 540, 700], 25.992, 12, false],
+      [" ", [-12, 0, 0, 12, 514.008, 700], 202.008, 0, false],
+      ["EEE", [-12, 0, 0, 12, 312, 700], 24.012, 12, false],
+    ],
+  };
+  const ROT_270: Page = {
+    vw: 792,
+    vh: 612,
+    items: [
+      ["AAA", [0, -12, -12, 0, 72, 540], 24.012, 12, false],
+      [" ", [0, -12, -12, 0, 72, 515.988], 203.988, 0, false],
+      ["BBB", [0, -12, -12, 0, 72, 312], 24.012, 12, true],
+      ["DDD", [0, -12, -12, 0, 92, 540], 25.992, 12, false],
+      [" ", [0, -12, -12, 0, 92, 514.008], 202.008, 0, false],
+      ["EEE", [0, -12, -12, 0, 92, 312], 24.012, 12, false],
+    ],
+  };
+
+  const fixOf = (p: Page) =>
+    uprightCorrection(
+      p.items.map(([, m]) => m),
+      p.vw,
+      p.vh,
+    );
+
+  /** extract.ts가 하는 것과 같은 순서 — 보정을 구해 곱하고, 조각으로 읽는다. */
+  const read = (p: Page): string => {
+    const fix = fixOf(p);
+    return layoutText(
+      p.items.map(([str, m, w, h, eol]) =>
+        pieceFromMatrix(str, fix ? mul(fix, m) : m, w, h, eol),
+      ),
+    ).text;
+  };
+
+  /** 보정을 끄고 읽으면 무엇이 나오는지 — 이 자리가 왜 있는지 눈에 보이게 둔다. */
+  const readUnfixed = (p: Page): string =>
+    layoutText(
+      p.items.map(([str, m, w, h, eol]) => pieceFromMatrix(str, m, w, h, eol)),
+    ).text;
+
+  it("똑바로 선 쪽은 손대지 않는다 — 보정이 없다(null)", () => {
+    expect(fixOf(ROT_0)).toBeNull();
+    expect(read(ROT_0)).toBe("AAA BBB\nDDD EEE");
+  });
+
+  it("★ 180°만 얹힌 쪽은 보정 없이는 줄도 조각도 통째로 뒤집힌다", () => {
+    expect(readUnfixed(ROT_180)).toBe("EEE DDD\nBBB AAA");
+  });
+
+  it("★ 90°·270°만 얹힌 쪽은 보정 없이는 줄이 세로로 흩어진다", () => {
+    expect(readUnfixed(ROT_90)).toBe("DDDAAA\nBBB\nEEE");
+    expect(readUnfixed(ROT_270)).toBe("BBB\nEEE\nAAADDD");
+  });
+
+  it("★ 회전을 얹어도 읽는 글은 같다 — 세 각도 모두", () => {
+    for (const p of [ROT_90, ROT_180, ROT_270]) {
+      expect(read(p)).toBe("AAA BBB\nDDD EEE");
+    }
+  });
+
+  it("보정 행렬은 90° 눈금의 회전뿐이다 — 좌표를 뷰포트 상자 안에 남긴다", () => {
+    expect(fixOf(ROT_90)).toEqual([0, -1, 1, 0, 0, 792]);
+    expect(fixOf(ROT_180)).toEqual([-1, 0, 0, -1, 612, 792]);
+    expect(fixOf(ROT_270)).toEqual([0, 1, -1, 0, 612, 0]);
+  });
+
+  it("★ 방향이 섞이면 손대지 않는다 — 눕힌 도장 하나에 본문을 눕힐 수는 없다", () => {
+    const stamp: number[] = [0, 24, -24, 0, 560, 300]; // 90°로 찍힌 "DRAFT"
+    expect(
+      uprightCorrection([...ROT_0.items.map(([, m]) => m), stamp], 612, 792),
+    ).toBeNull();
+  });
+
+  it("방향이 없는 조각(글꼴 크기 0)은 투표하지 않는다", () => {
+    const dead = [0, 0, 0, 0, 100, 100];
+    const fix = uprightCorrection(
+      [dead, ...ROT_180.items.map(([, m]) => m)],
+      612,
+      792,
+    );
+    expect(fix).toEqual([-1, 0, 0, -1, 612, 792]);
+  });
+
+  it("잴 조각이 하나도 없으면 보정도 없다", () => {
+    expect(uprightCorrection([], 612, 792)).toBeNull();
+    expect(uprightCorrection([[0, 0, 0, 0, 0, 0]], 612, 792)).toBeNull();
+  });
+
+  it("★ 알려진 한계: 눕힌 쪽에 똑바른 조각이 하나만 섞여도 되돌리지 않는다", () => {
+    // 쪽 번호만 똑바로 찍힌 눕힌 쪽이 여기 걸린다. 본문 쪽으로 다수결을 하면
+    // 반대 실수(도장 하나에 본문이 눕는 것)가 열리므로 만장일치로 두었다.
+    const pageNo: number[] = [12, 0, 0, -12, 300, 780];
+    expect(
+      uprightCorrection([...ROT_180.items.map(([, m]) => m), pageNo], 612, 792),
+    ).toBeNull();
   });
 });
 

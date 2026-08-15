@@ -64,20 +64,25 @@ export async function loadPdf(name: string, bytes: Uint8Array): Promise<LoadResu
   };
 
   const pages: PageItem[] = [];
-  for (let i = 0; i < doc.numPages; i++) {
-    const thumb = await renderThumb(doc, i);
-    pages.push({
-      id: uid(),
-      sourceId,
-      pageIndex: i,
-      rotation: 0,
-      selected: false,
-      thumb,
-      label: `${name} · ${i + 1}p`,
-    });
+  // 문서를 연 뒤로는 어떻게 끝나든 반드시 닫는다 — 썸네일 한 장에 걸려 던지면
+  // 워커 쪽 문서가 남고, 다시 떨어뜨릴 때마다 한 벌씩 쌓인다.
+  try {
+    for (let i = 0; i < doc.numPages; i++) {
+      const thumb = await renderThumb(doc, i);
+      pages.push({
+        id: uid(),
+        sourceId,
+        pageIndex: i,
+        rotation: 0,
+        selected: false,
+        thumb,
+        label: `${name} · ${i + 1}p`,
+      });
+    }
+  } finally {
+    await loadingTask.destroy();
   }
 
-  await loadingTask.destroy();
   return { source, pages };
 }
 

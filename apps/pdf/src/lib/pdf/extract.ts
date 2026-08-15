@@ -6,6 +6,7 @@ import {
   joinPages,
   layoutText,
   pieceFromMatrix,
+  uprightCorrection,
   type TextPiece,
 } from "./text";
 
@@ -80,14 +81,31 @@ export async function extractPdfText(
       onProgress?.(n + 1, targets.length);
       const page = await doc.getPage(i + 1);
       const content = await page.getTextContent();
-      // 쪽 회전(/Rotate)은 여기서 걷어낸다 — 뷰포트 변환을 태우면 어느 회전이든
-      // "가로로 눕고 위에서 아래로 읽는" 좌표가 된다. text.ts는 그 한 가지만 안다.
+      // 회전은 여기서 걷어낸다 — text.ts는 "가로로 눕고 위에서 아래로 읽는" 한 가지만 안다.
+      // 뷰포트 변환이 첫 번째다. 그런데 그것은 글이 /Rotate에 맞춰 그려졌을 때만
+      // 걷어내는 것이고, 회전이 나중에 얹힌 문서에서는 오히려 글을 눕힌다.
+      // 그래서 두 번째로 글 자신의 방향을 재서 되돌린다(uprightCorrection).
       const viewport = page.getViewport({ scale: 1 });
-      const pieces: TextPiece[] = [];
+      const items: TextItemLike[] = [];
       for (const item of content.items) {
         if (!("str" in item)) continue; // 표시 구간(TextMarkedContent)은 글자가 아니다
-        pieces.push(toPiece(item, viewport.transform));
+        items.push(item);
       }
+      const matrices = items.map(
+        (it) =>
+          pdfjsLib.Util.transform(viewport.transform, it.transform) as number[],
+      );
+      const upright = uprightCorrection(
+        matrices,
+        viewport.width,
+        viewport.height,
+      );
+      const pieces: TextPiece[] = items.map((it, k) => {
+        const m = upright
+          ? (pdfjsLib.Util.transform(upright, matrices[k]) as number[])
+          : matrices[k];
+        return pieceFromMatrix(it.str, m, it.width, it.height, it.hasEOL);
+      });
       page.cleanup();
 
       const laid = layoutText(pieces);
@@ -109,27 +127,20 @@ export async function extractPdfText(
 }
 
 /**
- * pdf.js의 TextItem 한 개를 화면 좌표의 조각으로.
+ * pdf.js의 TextItem 중 우리가 읽는 부분.
  *
- * 아이템 행렬은 PDF 사용자 좌표(y가 위로)에 있고 쪽 회전이 안 반영돼 있다.
- * 뷰포트 행렬을 왼쪽에서 곱하면 둘 다 한 번에 걷힌다. 배율 1의 뷰포트 변환은
- * 회전·뒤집기뿐이라 길이가 보존되므로 폭·높이는 pdf.js가 잰 값을 그대로 쓴다.
+ * 아이템 행렬은 PDF 사용자 좌표(y가 위로)에 있고 쪽 회전이 안 반영돼 있다 — 화면
+ * 좌표로 옮기는 것은 위에서 곱하는 행렬들의 몫이다. 배율 1의 변환은 회전·뒤집기뿐이라
+ * 길이가 보존되므로 폭·높이는 pdf.js가 잰 값을 그대로 쓴다.
+ *
+ * (`TextItem`을 pdfjs-dist 루트에서 내보내지 않아 구조로 적는다.)
  */
-function toPiece(
-  item: {
-    str: string;
-    transform: unknown[];
-    width: number;
-    height: number;
-    hasEOL: boolean;
-  },
-  viewportTransform: number[],
-): TextPiece {
-  const m = pdfjsLib.Util.transform(
-    viewportTransform,
-    item.transform,
-  ) as number[];
-  return pieceFromMatrix(item.str, m, item.width, item.height, item.hasEOL);
+interface TextItemLike {
+  str: string;
+  transform: number[];
+  width: number;
+  height: number;
+  hasEOL: boolean;
 }
 
 function stripExt(name: string): string {

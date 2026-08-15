@@ -4,9 +4,10 @@
  * **pdf.js를 부르지 않는다.** 좌표와 글자만 받는 순수 계산이라 브라우저 없이 잰다
  * (명세는 tests/pdf-text.test.ts). pdf.js 호출부는 extract.ts에 있다.
  *
- * 좌표계는 **화면 좌표**다 — x는 오른쪽, y는 **아래로** 갈수록 크다. 쪽 회전(/Rotate)은
- * 부르는 쪽이 뷰포트 변환으로 이미 걷어낸 뒤 넘긴다. 그래서 여기서는 언제나
- * "글줄이 가로로 눕고 위에서 아래로 읽는" 한 가지 경우만 다룬다.
+ * 좌표계는 **화면 좌표**다 — x는 오른쪽, y는 **아래로** 갈수록 크다. 회전은 부르는 쪽이
+ * 이미 걷어낸 뒤 넘긴다(뷰포트 변환으로 한 번, 그러고도 글이 누워 있으면
+ * `uprightCorrection`으로 한 번 더). 그래서 layoutText는 언제나 "글줄이 가로로 눕고
+ * 위에서 아래로 읽는" 한 가지 경우만 다룬다.
  */
 
 /** 화면 좌표로 옮겨 놓은 텍스트 조각 하나(pdf.js의 TextItem 한 개에 해당). */
@@ -79,6 +80,56 @@ export function pieceFromMatrix(
     height: height > 0 ? height : Math.hypot(c, d),
     hasEOL,
   };
+}
+
+/**
+ * 조각들을 가로로 눕히는 보정 행렬. 되돌릴 것이 없으면 null이다.
+ *
+ * 뷰포트 변환이 쪽 회전(/Rotate)을 걷어내는 것은 **글이 그 회전에 맞춰 그려졌을
+ * 때뿐**이다. 회전 도구는 내용 스트림은 놔둔 채 /Rotate만 바꾸므로(우리 편집 탭이
+ * 바로 그렇다) 그렇게 나온 문서에서는 뷰포트 변환이 오히려 글을 눕힌다 — 90·270°는
+ * 줄이 세로로 흩어지고 180°는 줄과 조각 순서가 통째로 뒤집힌다.
+ *
+ * 그래서 기준을 쪽이 아니라 **글 자신**에 둔다: 조각의 기준선이 전부 같은 쪽을
+ * 가리키면 그쪽을 가로로 되돌린다. 방향이 섞여 있으면(똑바른 본문 위에 눕힌 도장
+ * 하나) 되돌릴 '한 방향'이 없으므로 손대지 않는다 — 고르면 본문이 눕는다.
+ *
+ * width·height는 뷰포트(화면 상자)의 크기다. 좌표를 상자 안에 남겨 두는 데만 쓰고,
+ * 줄 묶기는 상대 위치만 보므로 이 값이 어긋나도 재구성 결과는 같다.
+ */
+export function uprightCorrection(
+  matrices: readonly (readonly number[])[],
+  width: number,
+  height: number,
+): number[] | null {
+  let spin: QuarterTurn | null = null;
+  for (const m of matrices) {
+    const q = quarterTurn(m[0], m[1]);
+    if (q === null) continue; // 방향이 없는 조각(글꼴 크기 0)은 투표하지 않는다
+    if (spin === null) spin = q;
+    else if (spin !== q) return null; // 방향이 섞였다
+  }
+
+  switch (spin) {
+    case 90:
+      return [0, -1, 1, 0, 0, width];
+    case 180:
+      return [-1, 0, 0, -1, width, height];
+    case 270:
+      return [0, 1, -1, 0, height, 0];
+    default:
+      return null; // 이미 가로이거나, 잴 조각이 하나도 없다
+  }
+}
+
+type QuarterTurn = 0 | 90 | 180 | 270;
+
+/** 기준선 방향(a, b)을 90° 눈금으로 스냅한다. 길이가 0이면 방향이 없다 → null. */
+function quarterTurn(a: number, b: number): QuarterTurn | null {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  if (a === 0 && b === 0) return null;
+  const deg = (Math.atan2(b, a) * 180) / Math.PI;
+  return ((((Math.round(deg / 90) * 90) % 360) + 360) % 360) as QuarterTurn;
 }
 
 const DEFAULT_LINE_TOLERANCE = 0.5;

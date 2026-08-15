@@ -68,54 +68,61 @@ export async function rasterizePdf(
   // 알파가 없는 형식은 빈 자리가 검게 나온다 — 흰 종이를 먼저 깔아 둔다.
   const opaque = options.format === "jpeg";
 
-  const spec = options.pageSpec?.trim();
-  let targets: number[];
-  if (spec) {
-    // 편집 탭과 같은 규칙(resolveRange) — 조각 하나라도 문서 밖이면 전체를 거부한다.
-    // 예전엔 invalid를 버리고 indices만 읽어서, 9쪽 문서의 "12-"가 말없이 0장이 됐다.
-    const { indices, problem } = resolveRange(spec, doc.numPages);
-    if (problem) {
-      await loadingTask.destroy();
-      throw new RangeSpecError(problem, name);
-    }
-    targets = indices;
-  } else {
-    targets = Array.from({ length: doc.numPages }, (_, i) => i);
-  }
-
   const out: RasterPage[] = [];
 
-  for (let n = 0; n < targets.length; n++) {
-    const i = targets[n];
-    onProgress?.(n + 1, targets.length);
-    const page = await doc.getPage(i + 1);
-    const viewport = page.getViewport({ scale });
-
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.ceil(viewport.width));
-    canvas.height = Math.max(1, Math.ceil(viewport.height));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("canvas 2d 컨텍스트를 만들 수 없어요.");
-    if (opaque) {
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  try {
+    const spec = options.pageSpec?.trim();
+    let targets: number[];
+    if (spec) {
+      // 편집 탭과 같은 규칙(resolveRange) — 조각 하나라도 문서 밖이면 전체를 거부한다.
+      // 예전엔 invalid를 버리고 indices만 읽어서, 9쪽 문서의 "12-"가 말없이 0장이 됐다.
+      const { indices, problem } = resolveRange(spec, doc.numPages);
+      if (problem) throw new RangeSpecError(problem, name);
+      targets = indices;
+    } else {
+      targets = Array.from({ length: doc.numPages }, (_, i) => i);
     }
 
-    await page.render({ canvasContext: ctx, canvas, viewport }).promise;
-    const blob = await canvasToBlob(canvas, mime, options.quality);
-    out.push({
-      id: uid(),
-      name: `${base}-${String(i + 1).padStart(pad, "0")}.${EXT[options.format]}`,
-      pageIndex: i,
-      width: canvas.width,
-      height: canvas.height,
-      blob,
-      url: URL.createObjectURL(blob),
-    });
-    page.cleanup();
+    for (let n = 0; n < targets.length; n++) {
+      const i = targets[n];
+      onProgress?.(n + 1, targets.length);
+      const page = await doc.getPage(i + 1);
+      const viewport = page.getViewport({ scale });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.ceil(viewport.width));
+      canvas.height = Math.max(1, Math.ceil(viewport.height));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas 2d 컨텍스트를 만들 수 없어요.");
+      if (opaque) {
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      await page.render({ canvasContext: ctx, canvas, viewport }).promise;
+      const blob = await canvasToBlob(canvas, mime, options.quality);
+      out.push({
+        id: uid(),
+        name: `${base}-${String(i + 1).padStart(pad, "0")}.${EXT[options.format]}`,
+        pageIndex: i,
+        width: canvas.width,
+        height: canvas.height,
+        blob,
+        url: URL.createObjectURL(blob),
+      });
+      page.cleanup();
+    }
+  } catch (err) {
+    // 던지면 이 배열은 아무에게도 안 간다 — 여기서 거두지 않으면 만들다 만
+    // 미리보기 URL이 주인 없이 남는다(부르는 쪽은 받은 것만 거둘 수 있다).
+    for (const p of out) URL.revokeObjectURL(p.url);
+    throw err;
+  } finally {
+    // 문서를 연 뒤로는 어떻게 끝나든 반드시 닫는다 — 깨진 쪽 하나에 걸려 던지면
+    // 워커 쪽 문서가 남고, 다시 시도할 때마다 한 벌씩 쌓인다.
+    await loadingTask.destroy();
   }
 
-  await loadingTask.destroy();
   return out;
 }
 
