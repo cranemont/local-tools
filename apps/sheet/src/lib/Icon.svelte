@@ -36,6 +36,7 @@
     | "chevron-down"
     | "hash"
     | "check"
+    | "bars"
     | "refresh";
 </script>
 
@@ -141,6 +142,8 @@
     <path d="M10 3 8 21M16 3l-2 18M3.5 8.5h17M3 15.5h17" />
   {:else if name === "check"}
     <path d="m5 13 4 4 10-10" />
+  {:else if name === "bars"}
+    <path d="M4 6h15M4 12h9M4 18h12" stroke-width="2.5" />
   {:else if name === "refresh"}
     <path d="M20 11a8 8 0 0 0-13.7-5.3L4 8" />
     <path d="M4 4v4h4" />

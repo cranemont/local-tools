@@ -5,7 +5,9 @@
  * (엑셀 자신이 그렇게 한다. 변환은 serial.ts.)
  */
 
+import type { CondRule } from "./condformat";
 import type { SheetFilter } from "./filter";
+import type { ValidationRange } from "./validation";
 
 /** 엑셀과 같은 오류값. 문자열이 아니라 이 객체로 다뤄 값과 구분한다. */
 export class CellError {
@@ -123,6 +125,20 @@ export interface SheetDoc {
    * (걸러진 행도 파일에는 그대로 나간다). 걸린 열이 없으면 아예 없다.
    */
   filter?: SheetFilter;
+  /**
+   * 조건부 서식 규칙 — **문서 내용이다**(필터와 달리 뷰 상태가 아니다).
+   * 편집으로 세고, 되돌리기에 남고, xlsx로 나간다.
+   *
+   * 앞에 적힌 것이 1순위다. 규칙 객체는 갈아 끼우기만 하고 제자리에서 고치지 않는다 —
+   * 되돌리기 스냅샷이 배열 얕은 복사 한 줄로 끝나야 하기 때문이다(셀과 같은 규약).
+   */
+  condFormats?: CondRule[];
+  /**
+   * 입력 규칙 — 범위마다 하나. 셀이 아니라 **범위**에 붙는 이유는 빈 칸에도 걸려야
+   * 하기 때문이다(셀은 희소 Map이라 빈 칸에는 객체가 없다). 검사는 새 입력에만
+   * 걸고 이미 들어 있는 값은 고치지 않는다(CLAUDE.md 23번). 없으면 아예 없다.
+   */
+  validations?: ValidationRange[];
 }
 
 export interface WorkbookDoc {

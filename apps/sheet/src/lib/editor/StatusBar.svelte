@@ -36,6 +36,11 @@
       {t.filter.hidden(editor.hiddenRowCount)}
     </span>
   {/if}
+  <!-- 커서 칸의 색이 직접 지정한 서식이 아니라 규칙에서 왔다는 표시 —
+       채우기색을 골랐는데 다른 색이 보이는 이유가 여기 말고는 없다. -->
+  {#if editor.cursorCond}
+    <span class="item muted" title={t.cond.winsHint}>{t.cond.wins}</span>
+  {/if}
   {#if editor.dirty}
     <span class="item muted">{t.status.unsaved}</span>
   {/if}

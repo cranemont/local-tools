@@ -7,8 +7,11 @@
  */
 
 import { adjustCols, adjustRows, translateFormula } from "../formula/adjust";
-import { formulaError, recalculate } from "../formula/engine";
+import { astOf, formulaError, recalculate } from "../formula/engine";
+import { evaluate, type EvalContext } from "../formula/evaluate";
+import { FormulaSyntaxError } from "../formula/tokenize";
 import {
+  areaContains,
   areaHeight,
   areaOf,
   areaWidth,
@@ -28,10 +31,22 @@ import {
   type CsvWriteOptions,
   type Delimiter,
 } from "../sheet/csv";
+import {
+  collectStats,
+  compileRules,
+  paintCell,
+  shiftRules,
+  type CondCell,
+  type CondJudge,
+  type CondPaint,
+  type CondRule,
+  type CondStats,
+} from "../sheet/condformat";
 import { exportText, readJson, type ExportFormat } from "../sheet/convert";
 import {
   hiddenCovered,
   rowsForOp,
+  scopeOf,
   spanRows,
   uniqueValues,
   visibleRows as filterRows,
@@ -72,9 +87,25 @@ import { formatValue } from "../sheet/numfmt";
 import { isDateFormat } from "../sheet/serial";
 import { downloadBlob, withExtension } from "../sheet/save";
 import {
+  checkValue,
+  entryAt,
+  listRange,
+  reasonKey,
+  ruleItems,
+  setValidationOver,
+  shiftValidationCols,
+  shiftValidationRows,
+  type ReasonKey,
+  type ValidationContext,
+  type ValidationRange,
+  type ValidationRule,
+  type ViolationAction,
+} from "../sheet/validation";
+import {
   DEFAULT_COL_WIDTH,
   emptySheet,
   emptyWorkbook,
+  ERR,
   isError,
   type Cell,
   type CellStyle,
@@ -131,6 +162,9 @@ function cloneSheet(sheet: SheetDoc): SheetDoc {
     ...(sheet.filter
       ? { filter: { headerRows: sheet.filter.headerRows, cols: new Map(sheet.filter.cols) } }
       : {}),
+    // 규칙 객체는 갈아 끼우기만 하므로(제자리에서 안 고친다) 목록만 복사하면 된다.
+    ...(sheet.validations ? { validations: sheet.validations.slice() } : {}),
+    ...(sheet.condFormats ? { condFormats: sheet.condFormats.slice() } : {}),
   };
 }
 
@@ -490,6 +524,439 @@ export class EditorState {
     this.touch();
   }
 
+  // ── 데이터 유효성 검사 ────────────────────────────────────────
+  //
+  // 규칙은 셀이 아니라 **범위**에 붙는다(`SheetDoc.validations`) — 셀은 희소 Map이라
+  // 빈 칸에는 객체가 없고, 목록 드롭다운이 필요한 자리가 바로 그 빈 칸이다.
+  //
+  // 검사는 **새 입력에만** 건다. 파일에서 읽은 값은 손대지 않는다(CLAUDE.md 23번) —
+  // 위반한 채 들어 있는 값은 그리드가 표시만 한다. 붙여넣기·채우기도 검사를 건너뛴다
+  // (엑셀과 같다). 대신 어긋난 칸 수를 상태줄에 알린다.
+
+  /** 이 시트에 걸린 규칙 범위 수 — 도구줄이 "규칙 지우기"를 켜는 데 쓴다. */
+  readonly validationCount = $derived.by(() => {
+    void this.revision;
+    return this.doc.sheets[this.doc.active].validations?.length ?? 0;
+  });
+
+  /** 이 칸에 걸린 규칙. 없으면 undefined. */
+  validationAt(row: number, col: number): ValidationRule | undefined {
+    void this.revision;
+    return entryAt(this.doc.sheets[this.doc.active].validations, row, col)?.rule;
+  }
+
+  /**
+   * 이 칸에서 고를 수 있는 목록. 목록 규칙이 아니거나 원본을 못 풀면 null.
+   * 원본이 범위면 그 범위의 **보이는 글자**를 모은다(빈 칸·중복은 뺀다).
+   */
+  listItemsAt(row: number, col: number): string[] | null {
+    void this.revision;
+    const rule = entryAt(this.doc.sheets[this.doc.active].validations, row, col)?.rule;
+    if (!rule) return null;
+    return this.listItemsFor(rule);
+  }
+
+  /** 드롭다운에 그리는 최대 항목 수 — 범위 원본이 만 줄일 수 있다. */
+  private static readonly LIST_MAX = 500;
+
+  /**
+   * 범위 원본을 푼 결과. **리비전마다 한 번만 훑는다** — 그리드는 그리는 칸마다
+   * 위반 여부를 묻고, 붙여넣기는 붙인 칸 수만큼 묻는다. 캐시가 없으면 원본이
+   * 500줄일 때 화면 한 번 그리는 데 그 500줄을 수백 번 다시 읽는다.
+   */
+  private listRev = -1;
+  private listCache = new Map<string, string[] | null>();
+
+  private listItemsFor(rule: ValidationRule): string[] | null {
+    const range = listRange(rule.source);
+    if (!range) return ruleItems(rule);
+
+    if (this.listRev !== this.revision) {
+      this.listRev = this.revision;
+      this.listCache.clear();
+    }
+    const key = `${this.doc.active} ${rule.source ?? ""}`;
+    const hit = this.listCache.get(key);
+    if (hit !== undefined) return hit;
+    const items = this.readListRange(range);
+    this.listCache.set(key, items);
+    return items;
+  }
+
+  private readListRange(range: Area): string[] | null {
+    const sheet = this.doc.sheets[this.doc.active];
+    const items: string[] = [];
+    const seen = new Set<string>();
+    for (let r = range.top; r <= range.bottom; r++) {
+      for (let c = range.left; c <= range.right; c++) {
+        const text = cellText(sheet.cells.get(cellKey(r, c))).trim();
+        if (text === "" || seen.has(text)) continue;
+        seen.add(text);
+        items.push(text);
+        if (items.length >= EditorState.LIST_MAX) return items;
+      }
+    }
+    return items.length > 0 ? items : null;
+  }
+
+  /**
+   * 규칙이 문서를 읽어야 푸는 것들 — 범위 목록과 사용자 지정 수식.
+   * `candidate`는 아직 셀에 안 들어간 값이다(입력을 받기 전에 검사할 때 쓴다).
+   */
+  private validationContext(
+    entry: ValidationRange,
+    at: Pos,
+    candidate?: Scalar,
+  ): ValidationContext {
+    if (entry.rule.kind === "list") return { items: this.listItemsFor(entry.rule) };
+    if (entry.rule.kind === "custom") {
+      return { custom: this.evalRuleFormula(entry, at, candidate) };
+    }
+    return {};
+  }
+
+  /**
+   * 사용자 지정 수식을 이 칸에서 계산한다. 수식은 **범위의 왼쪽 위 칸 기준**으로
+   * 적고, 칸마다 그 차이만큼 참조를 옮긴다(엑셀과 같다).
+   *
+   * 문서를 고치지 않는다 — 아직 안 들어간 값은 읽기 함수가 그 자리에서만 바꿔 준다.
+   * 읽을 수 없는 수식은 undefined를 준다(=검사를 건너뛴다). 우리 쪽 실패로 입력을
+   * 되돌리면 그 칸에는 아무것도 넣지 못한다.
+   */
+  private evalRuleFormula(entry: ValidationRange, at: Pos, candidate?: Scalar): Scalar | undefined {
+    const source = entry.rule.formula?.trim();
+    if (!source) return undefined;
+    const ast = astOf(translateFormula(source, at.row - entry.area.top, at.col - entry.area.left));
+    if (ast instanceof FormulaSyntaxError) return undefined;
+
+    const own = this.doc.sheets[this.doc.active];
+    const sheetOf = (name: string | undefined): SheetDoc | undefined =>
+      name === undefined
+        ? own
+        : this.doc.sheets.find((s) => s.name.toLowerCase() === name.toLowerCase());
+    const read = (name: string | undefined, row: number, col: number): Scalar => {
+      const sheet = sheetOf(name);
+      if (!sheet) return ERR.ref;
+      if (sheet === own && candidate !== undefined && row === at.row && col === at.col) {
+        return candidate;
+      }
+      return sheet.cells.get(cellKey(row, col))?.v ?? null;
+    };
+
+    const ctx: EvalContext = {
+      cell: read,
+      range: (name, area) => {
+        const out: Scalar[][] = [];
+        for (let r = area.top; r <= area.bottom; r++) {
+          const line: Scalar[] = [];
+          for (let c = area.left; c <= area.right; c++) line.push(read(name, r, c));
+          out.push(line);
+        }
+        return out;
+      },
+    };
+    return evaluate(ast, ctx).value;
+  }
+
+  /**
+   * 이미 들어 있는 값이 규칙을 어기는가 — 어기면 문구 키, 아니면 null.
+   *
+   * **빈 칸은 세지 않는다.** 아직 아무것도 넣은 적이 없는 칸이라, 빈 칸을 막는
+   * 규칙이라도 표시를 달면 규칙을 거는 순간 표가 경고로 뒤덮인다(빈 칸 금지는
+   * 새 입력에만 건다).
+   */
+  violationAt(row: number, col: number): ReasonKey | null {
+    void this.revision;
+    const sheet = this.doc.sheets[this.doc.active];
+    if (!sheet.validations || sheet.validations.length === 0) return null;
+    const entry = entryAt(sheet.validations, row, col);
+    if (!entry) return null;
+
+    const cell = sheet.cells.get(cellKey(row, col));
+    const value = cell?.v ?? null;
+    if (value === null || (typeof value === "string" && value.trim() === "")) return null;
+
+    const verdict = checkValue(
+      entry.rule,
+      { text: cellText(cell), value },
+      this.validationContext(entry, { row, col }),
+    );
+    return verdict.ok || !verdict.reason ? null : reasonKey(verdict.reason);
+  }
+
+  /**
+   * 새로 친 글자가 규칙을 어기는가. 어기면 이유와 그때의 동작을 준다.
+   * 수식을 넣는 칸은 검사하지 않는다 — 결과는 재계산 뒤에야 나온다.
+   */
+  private judgeInput(
+    row: number,
+    col: number,
+    text: string,
+  ): { reason: ReasonKey; action: ViolationAction } | null {
+    const sheet = this.doc.sheets[this.doc.active];
+    if (!sheet.validations || sheet.validations.length === 0) return null;
+    const entry = entryAt(sheet.validations, row, col);
+    if (!entry) return null;
+
+    const parsed = this.parseFor(row, col, text);
+    if (parsed.formula !== undefined) return null;
+
+    const verdict = checkValue(
+      entry.rule,
+      { text, value: parsed.value },
+      this.validationContext(entry, { row, col }, parsed.value),
+    );
+    if (verdict.ok || !verdict.reason) return null;
+    return { reason: reasonKey(verdict.reason), action: entry.rule.action };
+  }
+
+  /**
+   * 붙여넣기·채우기로 들어온 칸 중 규칙에 어긋나는 것 수.
+   * 그 조작들은 검사를 건너뛰므로(엑셀과 같다) 몇 칸인지만 세어 알린다.
+   */
+  private countViolations(area: Area): number {
+    const sheet = this.doc.sheets[this.doc.active];
+    if (!sheet.validations || sheet.validations.length === 0) return 0;
+    let n = 0;
+    const bottom = Math.min(area.bottom, MAX_ROWS - 1);
+    const right = Math.min(area.right, MAX_COLS - 1);
+    for (let r = area.top; r <= bottom; r++) {
+      for (let c = area.left; c <= right; c++) {
+        if (this.violationAt(r, c)) n++;
+        if (n >= 999) return n;
+      }
+    }
+    return n;
+  }
+
+  /** 고른 범위에 규칙을 걸거나(null이면) 지운다. */
+  setValidation(rule: ValidationRule | null): void {
+    const area = this.selection;
+    this.mutate(() => {
+      const sheet = this.doc.sheets[this.doc.active];
+      // 걸린 규칙도 없고 걸 규칙도 없으면 아무 일도 없었던 것이다 —
+      // 여기서 멈추지 않으면 되돌리기 자리 하나와 "저장 안 됨" 표시가 그냥 생긴다.
+      if (!rule && !sheet.validations) return false;
+      const next = setValidationOver(sheet.validations, area, rule);
+      sheet.validations = next.length > 0 ? next : undefined;
+    }, { recalc: false });
+  }
+
+  /** 이 시트의 규칙을 모두 지운다. */
+  clearValidations(): void {
+    if (this.validationCount === 0) return;
+    this.mutate(() => {
+      this.doc.sheets[this.doc.active].validations = undefined;
+    }, { recalc: false });
+  }
+
+  /** 목록에서 고른 값을 넣는다 — 그리드의 드롭다운이 부른다. */
+  pickListValue(row: number, col: number, item: string): void {
+    this.setCellText(row, col, item);
+  }
+
+  /** 행을 끼우거나 지운 만큼 규칙 범위를 민다. count가 음수면 삭제. */
+  private shiftValidations(rows: { at: number; count: number } | null, cols: { at: number; count: number } | null): void {
+    const sheet = this.doc.sheets[this.doc.active];
+    if (!sheet.validations || sheet.validations.length === 0) return;
+    let list = sheet.validations;
+    if (rows) list = shiftValidationRows(list, rows.at, rows.count);
+    if (cols) list = shiftValidationCols(list, cols.at, cols.count);
+    sheet.validations = list.length > 0 ? list : undefined;
+  }
+
+  /** 흩어진 여러 줄을 지웠을 때 — 아래쪽 덩어리부터 밀어야 위쪽 번호가 안 어긋난다. */
+  private shiftValidationsForRowSet(rows: number[]): void {
+    const sheet = this.doc.sheets[this.doc.active];
+    if (!sheet.validations || sheet.validations.length === 0) return;
+    const doomed = [...new Set(rows)].sort((a, b) => a - b);
+    let list = sheet.validations;
+    for (let i = doomed.length - 1; i >= 0; ) {
+      let j = i;
+      while (j > 0 && doomed[j - 1] === doomed[j] - 1) j--;
+      list = shiftValidationRows(list, doomed[j], -(i - j + 1));
+      i = j - 1;
+    }
+    sheet.validations = list.length > 0 ? list : undefined;
+  }
+
+  // ── 조건부 서식 ───────────────────────────────────────────────
+  //
+  // 규칙은 **문서 내용**이다(`SheetDoc.condFormats`) — 필터와 달리 되돌리기에 남고
+  // 저장에도 나간다. 목록 순서가 곧 순위이고 맨 앞이 1순위다.
+  //
+  // ★ **보이는 칸만 계산한다.** 그리드는 그리는 칸마다 `condAt`을 부르고, 여기서는
+  //   그 칸을 덮는 규칙만 본다. 범위 전체를 봐야 답이 나오는 규칙(중복·상위/하위·
+  //   색조·막대)의 집계는 리비전마다 한 번만 세어 캐시에 둔다 — 5만 행짜리 규칙이
+  //   걸려 있어도 화면 밖은 세지 않고, 화면 안의 칸들이 같은 집계를 나눠 쓴다.
+
+  readonly condRules = $derived.by((): CondRule[] => {
+    void this.revision;
+    return this.doc.sheets[this.doc.active].condFormats ?? [];
+  });
+
+  readonly condCount = $derived(this.condRules.length);
+
+  /** 커서 칸에 걸린 조건부 서식. 상태줄이 배지를 띄우는 데 쓴다. */
+  readonly cursorCond = $derived.by(() => this.condAt(this.cursor.row, this.cursor.col));
+
+  private condRev = -1;
+  private condJudges: CondJudge[] = [];
+  private condCache = new Map<string, CondStats>();
+
+  /** 리비전이 바뀌었으면 굳힌 판정과 집계를 버린다. */
+  private condFresh(): CondJudge[] {
+    if (this.condRev !== this.revision) {
+      this.condRev = this.revision;
+      this.condCache.clear();
+      this.condJudges = compileRules(this.doc.sheets[this.doc.active].condFormats ?? []);
+    }
+    return this.condJudges;
+  }
+
+  /** 규칙 하나의 집계. 같은 리비전 안에서는 한 번만 센다. */
+  private condStats(rule: CondRule): CondStats {
+    const hit = this.condCache.get(rule.id);
+    if (hit) return hit;
+    const stats = collectStats(this.condCells(rule.range));
+    this.condCache.set(rule.id, stats);
+    return stats;
+  }
+
+  /**
+   * 집계에 넣을 칸들. **모수는 `OP_SCOPE`가 정한다** — 지금은 "전부"라 걸러진 행도
+   * 센다(필터를 걸고 풀 때 같은 칸의 색이 바뀌지 않게 하려는 것이고, 엑셀도 그렇다).
+   * 범위가 시트에 든 칸 수보다 넓으면 값이 있는 칸만 훑는다 — 빈 칸은 어차피
+   * 집계에 안 들어간다. 두 수를 견줘서 고르는 것이 중요하다: 20열 10만 행짜리
+   * 시트에서 한 열에만 걸린 규칙을 값 훑기로 돌리면 10만 번이 아니라 200만 번이 된다.
+   */
+  private condCells(area: Area): CondCell[] {
+    const sheet = this.doc.sheets[this.doc.active];
+    const bottom = Math.min(area.bottom, Math.max(sheet.rows - 1, 0));
+    const right = Math.min(area.right, Math.max(sheet.cols - 1, 0));
+    const out: CondCell[] = [];
+    if (bottom < area.top || right < area.left) return out;
+    const skipHidden = scopeOf("condFormat") === "visible" && this.visibleRows !== null;
+
+    const span = (bottom - area.top + 1) * (right - area.left + 1);
+    if (span > 50_000 && span > sheet.cells.size) {
+      for (const [key, cell] of sheet.cells) {
+        const r = Math.floor(key / MAX_COLS);
+        const c = key % MAX_COLS;
+        if (r < area.top || r > bottom || c < area.left || c > right) continue;
+        if (skipHidden && !this.isRowVisible(r)) continue;
+        out.push({ v: cell.v, text: cellText(cell) });
+      }
+      return out;
+    }
+
+    for (let r = area.top; r <= bottom; r++) {
+      if (skipHidden && !this.isRowVisible(r)) continue;
+      for (let c = area.left; c <= right; c++) out.push(filterCellAt(sheet, r, c));
+    }
+    return out;
+  }
+
+  /** 이 칸의 조건부 서식. 걸린 규칙이 없으면 null. */
+  condAt(row: number, col: number): CondPaint | null {
+    void this.revision;
+    const sheet = this.doc.sheets[this.doc.active];
+    if (!sheet.condFormats || sheet.condFormats.length === 0) return null;
+
+    const judges = this.condFresh();
+    let covered = false;
+    for (const judge of judges) {
+      if (areaContains(judge.rule.range, row, col)) {
+        covered = true;
+        break;
+      }
+    }
+    if (!covered) return null;
+
+    return paintCell(
+      judges.filter((judge) => areaContains(judge.rule.range, row, col)),
+      filterCellAt(sheet, row, col),
+      (rule) => this.condStats(rule),
+    );
+  }
+
+  /** 규칙을 새로 건다. **새 규칙이 맨 위(1순위)다** — 엑셀과 같다. */
+  addCondRule(rule: CondRule): void {
+    this.mutate(() => {
+      const sheet = this.doc.sheets[this.doc.active];
+      sheet.condFormats = [rule, ...(sheet.condFormats ?? [])];
+    }, { recalc: false });
+  }
+
+  /** 같은 id의 규칙을 갈아 끼운다. 순위는 그대로다. */
+  replaceCondRule(rule: CondRule): void {
+    this.mutate(() => {
+      const sheet = this.doc.sheets[this.doc.active];
+      const list = sheet.condFormats;
+      if (!list?.some((r) => r.id === rule.id)) return false;
+      sheet.condFormats = list.map((r) => (r.id === rule.id ? rule : r));
+    }, { recalc: false });
+  }
+
+  removeCondRule(id: string): void {
+    this.mutate(() => {
+      const sheet = this.doc.sheets[this.doc.active];
+      const list = sheet.condFormats ?? [];
+      const next = list.filter((r) => r.id !== id);
+      if (next.length === list.length) return false;
+      sheet.condFormats = next.length > 0 ? next : undefined;
+    }, { recalc: false });
+  }
+
+  /** 순위를 한 칸 올리거나(-1) 내린다(+1). */
+  moveCondRule(id: string, delta: number): void {
+    this.mutate(() => {
+      const sheet = this.doc.sheets[this.doc.active];
+      const list = (sheet.condFormats ?? []).slice();
+      const from = list.findIndex((r) => r.id === id);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= list.length) return false;
+      [list[from], list[to]] = [list[to], list[from]];
+      sheet.condFormats = list;
+    }, { recalc: false });
+  }
+
+  clearCondRules(): void {
+    this.mutate(() => {
+      const sheet = this.doc.sheets[this.doc.active];
+      if (!sheet.condFormats) return false;
+      sheet.condFormats = undefined;
+    }, { recalc: false });
+  }
+
+  /** 행·열이 밀린 만큼 규칙 범위도 민다. count가 음수면 삭제. */
+  private shiftCondRules(
+    rows: { at: number; count: number } | null,
+    cols: { at: number; count: number } | null,
+  ): void {
+    const sheet = this.doc.sheets[this.doc.active];
+    if (!sheet.condFormats || sheet.condFormats.length === 0) return;
+    let list = sheet.condFormats;
+    if (rows) list = shiftRules(list, "row", rows.at, rows.count);
+    if (cols) list = shiftRules(list, "col", cols.at, cols.count);
+    sheet.condFormats = list.length > 0 ? list : undefined;
+  }
+
+  /** 흩어진 여러 줄을 지웠을 때 — 아래쪽 덩어리부터 밀어야 위쪽 번호가 안 어긋난다. */
+  private shiftCondRulesForRowSet(rows: number[]): void {
+    const sheet = this.doc.sheets[this.doc.active];
+    if (!sheet.condFormats || sheet.condFormats.length === 0) return;
+    const doomed = [...new Set(rows)].sort((a, b) => a - b);
+    let list = sheet.condFormats;
+    for (let i = doomed.length - 1; i >= 0; ) {
+      let j = i;
+      while (j > 0 && doomed[j - 1] === doomed[j] - 1) j--;
+      list = shiftRules(list, "row", doomed[j], -(i - j + 1));
+      i = j - 1;
+    }
+    sheet.condFormats = list.length > 0 ? list : undefined;
+  }
+
   /** 선택 영역 요약(합계·평균 등). 필터가 걸려 있으면 **보이는 칸만** 센다. */
   readonly summary = $derived.by(() => {
     void this.revision;
@@ -738,16 +1205,32 @@ export class EditorState {
     this.move(move.row, move.col);
   }
 
-  /** 셀 하나에 사람이 친 문자열을 넣는다. */
+  /**
+   * 사람이 친 글자를 이 칸의 규약까지 반영해 해석한다.
+   *
+   * 표시 형식이 "텍스트"(@)인 칸은 해석하지 않는다 — 전화번호 열에 010-…을
+   * 다시 쳐 넣었을 때 또 수가 되면 열을 텍스트로 바꾼 뜻이 없다.
+   * 유효성 검사도 같은 해석을 봐야 한다(그래서 갈라 두었다).
+   */
+  private parseFor(row: number, col: number, text: string): ParsedInput {
+    const numFmt = getCell(this.doc.sheets[this.doc.active], row, col)?.s?.numFmt;
+    const asText = numFmt === "@" && !text.trim().startsWith("=");
+    return asText ? { value: text === "" ? null : text } : parseInput(text);
+  }
+
+  /** 셀 하나에 사람이 친 문자열을 넣는다. 규칙이 걸린 칸이면 먼저 검사한다. */
   setCellText(row: number, col: number, text: string): void {
+    const bad = this.judgeInput(row, col, text);
+    if (bad?.action === "reject") {
+      this.flash(t.validation.rejected(t.validation.reason[bad.reason]));
+      return;
+    }
+
     this.mutate(() => {
       const sheet = this.doc.sheets[this.doc.active];
       const existing = getCell(sheet, row, col);
       const style = { ...existing?.s };
-      // 표시 형식이 "텍스트"(@)인 칸은 해석하지 않는다 — 전화번호 열에 010-…을
-      // 다시 쳐 넣었을 때 또 수가 되면 열을 텍스트로 바꾼 뜻이 없다.
-      const asText = style.numFmt === "@" && !text.trim().startsWith("=");
-      const parsed: ParsedInput = asText ? { value: text === "" ? null : text } : parseInput(text);
+      const parsed: ParsedInput = this.parseFor(row, col, text);
 
       if (parsed.numFmt && !style.numFmt) style.numFmt = parsed.numFmt;
       // 텍스트로 되돌아가면 남아 있던 날짜 형식을 떼어 준다(1이 1900-01-01로 보이는 사고 방지).
@@ -761,6 +1244,8 @@ export class EditorState {
       if (parsed.formula) this.error = formulaError(parsed.formula) ?? "";
       else this.error = "";
     });
+    // 경고 규칙은 넣되 그 자리에서 한 번 말해 준다(칸의 표시는 계속 남는다).
+    if (bad) this.flash(t.validation.warned(t.validation.reason[bad.reason]));
   }
 
   /** Delete — 필터가 걸려 있으면 보이는 칸만 지운다(엑셀과 같다). */
@@ -805,6 +1290,8 @@ export class EditorState {
     const at = this.selection.top;
     this.mutate(() => {
       insertRows(this.doc.sheets[this.doc.active], at, count, (f) => adjustRows(f, at, count));
+      this.shiftValidations({ at, count }, null);
+      this.shiftCondRules({ at, count }, null);
     });
   }
 
@@ -821,6 +1308,8 @@ export class EditorState {
         deleteRowSet(this.doc.sheets[this.doc.active], visible, (f, at, count) =>
           adjustRows(f, at, -count),
         );
+        this.shiftValidationsForRowSet(visible);
+        this.shiftCondRulesForRowSet(visible);
       });
       return;
     }
@@ -829,6 +1318,8 @@ export class EditorState {
       deleteRows(this.doc.sheets[this.doc.active], area.top, count, (f) =>
         adjustRows(f, area.top, -count),
       );
+      this.shiftValidations({ at: area.top, count: -count }, null);
+      this.shiftCondRules({ at: area.top, count: -count }, null);
     });
   }
 
@@ -836,6 +1327,8 @@ export class EditorState {
     const at = this.selection.left;
     this.mutate(() => {
       insertCols(this.doc.sheets[this.doc.active], at, count, (f) => adjustCols(f, at, count));
+      this.shiftValidations(null, { at, count });
+      this.shiftCondRules(null, { at, count });
     });
   }
 
@@ -846,6 +1339,8 @@ export class EditorState {
       deleteCols(this.doc.sheets[this.doc.active], area.left, count, (f) =>
         adjustCols(f, area.left, -count),
       );
+      this.shiftValidations(null, { at: area.left, count: -count });
+      this.shiftCondRules(null, { at: area.left, count: -count });
     });
   }
 
@@ -1141,7 +1636,28 @@ export class EditorState {
         col: clamp(target.col + (clip.cells[0]?.length ?? 1) - 1, 0, MAX_COLS - 1),
       };
     });
-    if (hidden > 0) this.flash(t.filter.pasteHidden(hidden));
+    this.flashFilled(hidden, {
+      top: target.row,
+      left: target.col,
+      bottom: target.row + clip.cells.length - 1,
+      right: target.col + (clip.cells[0]?.length ?? 1) - 1,
+    });
+  }
+
+  /**
+   * 붙여넣기·채우기 뒤의 알림.
+   *
+   * 두 조작은 유효성 검사를 **건너뛴다**(엑셀과 같다) — 붙일 블록은 이어진
+   * 직사각형이라 규칙에 걸린 칸만 빼면 원본과 모양이 달라진다. 대신 어긋난 칸이
+   * 몇 개인지 알린다. 숨은 줄을 덮은 경우가 겹치면 그쪽을 먼저 알린다.
+   */
+  private flashFilled(hidden: number, area: Area): void {
+    if (hidden > 0) {
+      this.flash(t.filter.pasteHidden(hidden));
+      return;
+    }
+    const bad = this.countViolations(area);
+    if (bad > 0) this.flash(t.validation.pasted(bad));
   }
 
   private pastePlain(text: string): void {
@@ -1174,7 +1690,12 @@ export class EditorState {
         col: clamp(target.col + Math.max(...rows.map((r) => r.length), 1) - 1, 0, MAX_COLS - 1),
       };
     });
-    if (hidden > 0) this.flash(t.filter.pasteHidden(hidden));
+    this.flashFilled(hidden, {
+      top: target.row,
+      left: target.col,
+      bottom: target.row + rows.length - 1,
+      right: target.col + Math.max(...rows.map((r) => r.length), 1) - 1,
+    });
   }
 
   /** 붙여넣기·채우기가 시트 밖으로 나가면 시트를 넓힌다. */
@@ -1197,6 +1718,8 @@ export class EditorState {
         translateFormula(f, dRow, 0),
       );
     });
+    // 원본 줄(rows[0])은 채운 칸이 아니다 — 세면 화면의 숫자가 채운 칸 수와 어긋난다.
+    this.flashFilled(0, { ...area, top: rows[1] });
   }
 
   // ── 파일 ─────────────────────────────────────────────────────
@@ -1251,9 +1774,13 @@ export class EditorState {
       const lower = file.name.toLowerCase();
       if (lower.endsWith(".xlsx") || lower.endsWith(".xlsm")) {
         const { readXlsx } = await import("../sheet/xlsx");
-        this.doc = await readXlsx(await file.arrayBuffer(), file.name);
+        const read = await readXlsx(await file.arrayBuffer(), file.name);
+        this.doc = read.book;
         this.encoding = "XLSX";
         this.delimiter = ",";
+        // 우리에게 없는 종류의 조건부 서식은 못 읽는다 — 저장하면 파일에서도 사라지므로
+        // 조용히 넘기지 않는다.
+        if (read.condSkipped > 0) this.flash(t.cond.readSkipped(read.condSkipped));
       } else if (lower.endsWith(".json")) {
         const text = new TextDecoder().decode(await file.arrayBuffer());
         this.doc = {

@@ -90,9 +90,12 @@ export function valueKey(cell: FilterCell): string {
   return isBlank(cell) ? "" : cell.text;
 }
 
-function fold(text: string): string {
+/** 대소문자 접기. 필터·조건부 서식이 같은 것을 써야 "abc"와 "ABC"가 두 화면에서 같다. */
+export function foldText(text: string): string {
   return text.toLowerCase();
 }
+
+const fold = foldText;
 
 /**
  * 사용자가 친 비교값 → 스칼라.
@@ -100,8 +103,11 @@ function fold(text: string): string {
  * 셀을 읽을 때와 **같은 규칙**(parseInput)을 쓴다. 그래야 "2024-01-05"가 날짜
  * 일련번호로, "1,200"이 수로, "010"이 글자로 똑같이 해석된다. 다만 "="로 시작해도
  * 수식으로 보지 않는다 — 필터 값은 계산하는 것이 아니다.
+ *
+ * 조건부 서식(condformat.ts)도 이 함수를 쓴다 — 필터에서 100에 걸리던 칸이
+ * 조건부 서식에서는 안 걸리면 같은 표를 두 번 배우게 된다.
  */
-function operandOf(text: string): Scalar {
+export function operandOf(text: string): Scalar {
   const s = text.trim();
   if (s === "") return null;
   const parsed = parseInput(s);
@@ -115,7 +121,7 @@ function operandOf(text: string): Scalar {
  * 그래서 수 100과 글자 "100"은 **둘 다** `100`에 걸린다. 화면에 똑같이 보이는
  * 두 칸이 필터에서 갈리면 "왜 하나만 남았나"를 설명할 길이 없다.
  */
-function equals(cell: FilterCell, operand: Scalar, operandText: string): boolean {
+export function cellEquals(cell: FilterCell, operand: Scalar, operandText: string): boolean {
   if (operand === null) return isBlank(cell);
   if (typeof cell.v === "number" && typeof operand === "number") return cell.v === operand;
   if (typeof cell.v === "boolean" && typeof operand === "boolean") return cell.v === operand;
@@ -123,7 +129,7 @@ function equals(cell: FilterCell, operand: Scalar, operandText: string): boolean
 }
 
 /** 크기 비교 — 수는 수끼리, 글자는 글자끼리. 섞이면 비교하지 않는다(빈 칸·오류도 제외). */
-function order(cell: FilterCell, operand: Scalar): number | null {
+export function cellOrder(cell: FilterCell, operand: Scalar): number | null {
   if (isBlank(cell) || operand === null) return null;
   if (typeof cell.v === "number" && typeof operand === "number") return cell.v - operand;
   if (typeof cell.v === "string" && typeof operand === "string") {
@@ -146,9 +152,9 @@ export function predicateOf(filter: ColumnFilter): (cell: FilterCell) => boolean
 
   switch (filter.op) {
     case "eq":
-      return (cell) => equals(cell, a, text);
+      return (cell) => cellEquals(cell, a, text);
     case "ne":
-      return (cell) => !equals(cell, a, text);
+      return (cell) => !cellEquals(cell, a, text);
     case "contains":
       return (cell) => fold(cell.text).includes(needle);
     case "notContains":
@@ -159,22 +165,22 @@ export function predicateOf(filter: ColumnFilter): (cell: FilterCell) => boolean
       return (cell) => fold(cell.text).endsWith(needle);
     case "gt":
       return (cell) => {
-        const d = order(cell, a);
+        const d = cellOrder(cell, a);
         return d !== null && d > 0;
       };
     case "lt":
       return (cell) => {
-        const d = order(cell, a);
+        const d = cellOrder(cell, a);
         return d !== null && d < 0;
       };
     case "between": {
       // 두 값을 거꾸로 넣어도 같은 뜻으로 읽는다.
-      const swap = a !== null && b !== null && (order({ v: a, text: "" }, b) ?? 0) > 0;
+      const swap = a !== null && b !== null && (cellOrder({ v: a, text: "" }, b) ?? 0) > 0;
       const lo = swap ? b : a;
       const hi = swap ? a : b;
       return (cell) => {
-        const low = order(cell, lo);
-        const high = order(cell, hi);
+        const low = cellOrder(cell, lo);
+        const high = cellOrder(cell, hi);
         return low !== null && high !== null && low >= 0 && high <= 0;
       };
     }
@@ -253,7 +259,8 @@ export type FilterOp =
   | "paste"
   | "insertRows"
   | "sort"
-  | "merge";
+  | "merge"
+  | "condFormat";
 
 /** ★ 규약의 정본. "이 조작은 보이는 행만, 저 조작은 전부"가 여기 한 곳에 있다. */
 export const OP_SCOPE: Record<FilterOp, FilterScope> = {
@@ -281,6 +288,14 @@ export const OP_SCOPE: Record<FilterOp, FilterScope> = {
   sort: "all",
   /** 병합 — 이어진 직사각형 하나를 만드는 조작이라 줄을 건너뛸 수 없다. */
   merge: "all",
+  /**
+   * 조건부 서식의 집계(상위/하위 N·중복·색조·막대의 모수) — 걸러진 행도 센다.
+   *
+   * 셀을 바꾸는 조작이 아니라 **무엇을 모수로 보는가**를 묻는 자리다. 전부로 둔 이유는
+   * 필터를 걸고 풀 때마다 같은 칸의 색이 바뀌지 않게 하려는 것이고, 엑셀도 그렇다.
+   * 여기를 "visible"로 바꾸면 집계에서 숨은 줄이 빠진다(state.svelte.ts의 condCells).
+   */
+  condFormat: "all",
 };
 
 export function scopeOf(op: FilterOp): FilterScope {

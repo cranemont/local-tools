@@ -20,6 +20,7 @@
   import { areaContains, cellName } from "../sheet/a1";
   import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, isError } from "../sheet/types";
   import FilterMenu, { MENU_WIDTH } from "./FilterMenu.svelte";
+  import ValidationPicker from "./ValidationPicker.svelte";
   import { editor } from "./state.svelte";
   import { t } from "../i18n";
 
@@ -202,6 +203,30 @@
     return editor.columnFilter(col) !== undefined;
   }
 
+  // ── 목록 드롭다운 ────────────────────────────────────────────
+  // 목록 규칙이 걸린 칸은 커서가 놓였을 때 단추가 하나 뜬다 — 규칙을 거는 가장 큰
+  // 이유가 "고르게 하는 것"이라 손으로 쳐야만 하면 규칙의 값이 절반이 된다.
+
+  let picker = $state<{ row: number; col: number; x: number; y: number; width: number } | null>(null);
+
+  /** 커서 칸에서 고를 수 있는 항목. 목록 규칙이 아니면 null. */
+  const cursorItems = $derived(
+    editor.validationCount > 0 ? editor.listItemsAt(editor.cursor.row, editor.cursor.col) : null,
+  );
+
+  function openPicker(event: MouseEvent, row: number, col: number): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (picker) {
+      picker = null;
+      return;
+    }
+    const cell = (event.currentTarget as HTMLElement).closest(".cell");
+    const rect = cell?.getBoundingClientRect();
+    if (!rect) return;
+    picker = { row, col, x: rect.left, y: rect.bottom, width: rect.width };
+  }
+
   // ── 셀 그리기 ────────────────────────────────────────────────
 
   interface Painted {
@@ -209,18 +234,27 @@
     cls: string;
     style: string;
     hidden: boolean;
+    /** 입력 규칙을 어긴 값이면 그 이유 문구. 값은 그대로 두고 표시만 한다. */
+    bad: string | null;
   }
 
   function paint(row: number, col: number): Painted {
     const merge = editor.mergeCovering(row, col);
     // 병합 영역의 좌상단이 아닌 칸은 그리지 않는다.
     if (merge && (merge.top !== row || merge.left !== col)) {
-      return { text: "", cls: "", style: "", hidden: true };
+      return { text: "", cls: "", style: "", hidden: true, bad: null };
     }
 
     const cell = editor.cellAt(row, col);
     const s = cell?.s;
     const value = cell?.v ?? null;
+    /**
+     * 조건부 서식. **직접 지정한 서식을 이긴다**(엑셀과 같다) — 아래에서 나중에
+     * 적히므로 같은 속성이면 이쪽이 남는다. 켜는 것만 있어서 직접 지정한 굵게가
+     * 조건부 때문에 꺼지지는 않는다.
+     */
+    const cond = editor.condAt(row, col);
+    const c = cond?.style;
 
     const classes: string[] = [];
     const styles: string[] = [];
@@ -231,19 +265,31 @@
       (isError(value) ? "center" : typeof value === "number" || typeof value === "boolean" ? "right" : "left");
     if (align !== "left") classes.push(`al-${align}`);
     if (s?.valign && s.valign !== "bottom") classes.push(`va-${s.valign}`);
-    if (s?.bold) classes.push("b");
-    if (s?.italic) classes.push("i");
-    if (s?.underline && s?.strike) classes.push("us");
+    if (s?.bold || c?.bold) classes.push("b");
+    if (s?.italic || c?.italic) classes.push("i");
+    const strike = s?.strike === true || c?.strike === true;
+    if (s?.underline && strike) classes.push("us");
     else if (s?.underline) classes.push("u");
-    else if (s?.strike) classes.push("st");
+    else if (strike) classes.push("st");
     if (s?.wrap) classes.push("wrap");
     if (isError(value)) classes.push("err");
 
     if (s?.color) styles.push(`color:${s.color}`);
-    if (s?.fill) styles.push(`background:${s.fill}`);
+    // 채우기는 background-color로 적는다 — 데이터 막대가 background-image를 쓰는데
+    // background 한 줄로 적으면 그 줄이 막대를 지운다.
+    if (s?.fill) styles.push(`background-color:${s.fill}`);
     if (s?.fontSize) styles.push(`font-size:${s.fontSize}px`);
     if (s?.borders) {
       for (const side of s.borders) styles.push(`border-${side}:1px solid var(--border-strong)`);
+    }
+
+    if (c?.color) styles.push(`color:${c.color}`);
+    if (c?.fill) styles.push(`background-color:${c.fill}`);
+    if (cond?.bar) {
+      const pct = Math.round(cond.bar.ratio * 100);
+      styles.push(
+        `background-image:linear-gradient(to right, ${cond.bar.color} ${pct}%, transparent ${pct}%)`,
+      );
     }
 
     if (merge) {
@@ -253,11 +299,14 @@
       classes.push("merged");
     }
 
+    const reason = editor.violationAt(row, col);
+
     return {
       text: editor.displayAt(row, col),
       cls: classes.join(" "),
       style: styles.join(";"),
       hidden: false,
+      bad: reason ? t.validation.reason[reason] : null,
     };
   }
 
@@ -278,6 +327,7 @@
     // 메뉴는 fixed라 그리드를 굴려도 열린 자리에 남는다 — 따라다니게 만들기보다 닫는다.
     // (`closed`는 남기지 않는다. 굴린 직후 단추를 눌러도 다시 열려야 한다.)
     if (menu) menu = null;
+    if (picker) picker = null;
   }
 
   function cellMouseDown(event: MouseEvent, row: number, col: number): void {
@@ -492,6 +542,20 @@
   <FilterMenu col={menu.col} x={menu.x} y={menu.y} onClose={closeMenu} />
 {/if}
 
+{#if picker}
+  <ValidationPicker
+    row={picker.row}
+    col={picker.col}
+    x={picker.x}
+    y={picker.y}
+    width={picker.width}
+    onClose={() => {
+      picker = null;
+      scroller?.focus();
+    }}
+  />
+{/if}
+
 {#snippet colHead(c: number, frozen: boolean)}
   <div
     class="colhead"
@@ -541,10 +605,12 @@
       class:sel={isSelected(r, c)}
       class:cur={isCursor(r, c)}
       class:frozen-col={frozen}
+      class:invalid={p.bad !== null}
       style="width:{colW(c)}px;{frozen ? `left:${HEADER_W + colX(c)}px;` : ''}{p.style}"
       role="gridcell"
       tabindex="-1"
       aria-label={cellName(r, c)}
+      title={p.bad ?? undefined}
       onmousedown={(e) => cellMouseDown(e, r, c)}
       onmouseenter={() => cellMouseEnter(r, c)}
       ondblclick={() => cellDoubleClick(r, c)}
@@ -561,6 +627,20 @@
         />
       {:else}
         <span class="text">{p.text}</span>
+        {#if cursorItems && isCursor(r, c)}
+          <button
+            type="button"
+            class="pick-btn"
+            title={t.validation.pick}
+            aria-label={t.validation.pick}
+            aria-haspopup="listbox"
+            aria-expanded={picker !== null}
+            onmousedown={(e) => e.stopPropagation()}
+            onclick={(e) => openPicker(e, r, c)}
+          >
+            <Icon name="chevron-down" size={12} />
+          </button>
+        {/if}
       {/if}
     </div>
   {:else}
@@ -834,6 +914,45 @@
   .cell.err {
     color: var(--danger);
     font-size: var(--text-md);
+  }
+
+  /* 입력 규칙을 어긴 값 — 오른쪽 위 모서리에 삼각형 하나. 값은 손대지 않는다.
+   * 고정 열은 이미 sticky(=배치된 요소)라 자리 기준이 되므로 그대로 둔다. */
+  .cell.invalid:not(.frozen-col) {
+    position: relative;
+  }
+  .cell.invalid::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-top: 6px solid var(--danger);
+    border-left: 6px solid transparent;
+    pointer-events: none;
+  }
+
+  /* 목록 규칙이 걸린 칸의 드롭다운 단추 — 커서가 놓인 칸에만 뜬다. */
+  .pick-btn {
+    all: unset;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: var(--space-3xs);
+    border-radius: var(--radius-sm);
+    color: var(--accent-ink);
+    cursor: pointer;
+  }
+  .pick-btn:hover {
+    background: var(--accent-weak);
+  }
+  .pick-btn:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
   }
 
   .cell.sel {

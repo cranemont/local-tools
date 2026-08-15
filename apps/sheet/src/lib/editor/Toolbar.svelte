@@ -9,11 +9,18 @@
   import { DELIMITERS, ENCODINGS, type Delimiter } from "../sheet/csv";
   import { FORMAT_PRESETS } from "../sheet/numfmt";
   import type { BorderSide } from "../sheet/types";
+  import CondDialog from "./CondDialog.svelte";
   import Dropdown from "./Dropdown.svelte";
   import { editor } from "./state.svelte";
+  import ValidationDialog from "./ValidationDialog.svelte";
   import { t } from "../i18n";
 
   let { onFind }: { onFind: () => void } = $props();
+
+  /** 입력 규칙 편집기 — 고른 범위에 건다. 열려 있는 동안만 DOM에 있다. */
+  let showValidation = $state(false);
+  /** 조건부 서식 규칙 관리 — 목록·추가·수정·삭제·순서. */
+  let showCond = $state(false);
 
   const style = $derived(editor.cursorStyle);
 
@@ -358,6 +365,31 @@
     {t.filter.clearAll}
   </button>
 
+  <Dropdown title={t.validation.hint} label={t.validation.label} icon="check" wide>
+    {#snippet children(close)}
+      <button class="item" onclick={() => { showValidation = true; close(); }}>
+        {t.validation.title}
+      </button>
+      <button
+        class="item"
+        disabled={editor.validationCount === 0}
+        onclick={() => { editor.clearValidations(); close(); }}
+      >
+        {t.validation.clearAll}
+      </button>
+    {/snippet}
+  </Dropdown>
+
+  <button
+    class="btn small ghost labeled"
+    class:active={editor.condCount > 0}
+    title={t.cond.hint}
+    onclick={() => (showCond = true)}
+  >
+    <Icon name="bars" size={16} />
+    {t.cond.label}
+  </button>
+
   <button class="btn small ghost labeled" title={t.edit.mergeHint} onclick={() => editor.toggleMerge()}>
     <Icon name="merge" size={16} />
     {t.edit.merge}
@@ -418,6 +450,14 @@
     </Dropdown>
   {/if}
 </div>
+
+{#if showValidation}
+  <ValidationDialog onClose={() => (showValidation = false)} />
+{/if}
+
+{#if showCond}
+  <CondDialog onClose={() => (showCond = false)} />
+{/if}
 
 <style>
   .toolbar {
