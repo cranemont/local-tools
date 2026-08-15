@@ -16,14 +16,36 @@ export interface Unsupported {
 export type Detected = { kind: DocKind } | Unsupported;
 
 /**
- * `detect`에 건네야 할 앞부분 길이. HWP 5.0 서명이 헤더 스트림 안에 있어 512바이트 밖일 수
- * 있으므로 넉넉히 본다. 부르는 쪽마다 다른 숫자를 적으면 같은 파일이 자리에 따라 다르게
- * 판별될 수 있어 한 곳에 둔다.
+ * `detect`에 건네야 할 앞부분 길이.
+ *
+ * 한글 문서를 가르는 데 필요한 것은 둘이다 — CFB 헤더(앞 512바이트)가 가리키는 **디렉터리
+ * 섹터**, 그리고 그것이 앞부분 밖일 때의 두 번째 단서인 `FileHeader` 스트림 안의 서명.
+ * rhwp가 쓴 12,800바이트 hwp에서 디렉터리는 512바이트째, 서명은 8192바이트째에 있다.
+ * 예전 값(4096)은 서명을 못 봐서 이름이 틀린 진짜 hwp가 `kind: null`로 떨어졌다.
+ * 16KB면 서명이 들어오고, 섹터가 4096바이트인 CFB(디렉터리가 4096바이트째)도 여유가 있다.
+ * 늘린 값이 일괄 변환에 지우는 비용은 파일당 6µs 안팎이다(400KB 파일 200개를 여닫으며
+ * 앞부분만 읽으면 4KB에서 8.5ms, 64KB에서 9.8ms — 대부분 파일을 여닫는 시간이다).
+ *
+ * 부르는 쪽마다 다른 숫자를 적으면 같은 파일이 자리에 따라 다르게 판별될 수 있어 한 곳에 둔다.
  */
-export const HEAD_BYTES = 4096;
+export const HEAD_BYTES = 16384;
 
 const CFB = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 const ZIP = [0x50, 0x4b, 0x03, 0x04];
+
+/** HWP 5.0 서명 — `FileHeader` 스트림 첫 32바이트의 앞부분. */
+const HWP5_SIGNATURE = "HWP Document File";
+/** HWP 5.0의 CFB에 언제나 있는 이름. 둘 이상 보이면 한글 문서로 본다. */
+const HWP5_ENTRIES = ["FileHeader", "DocInfo", "BodyText"];
+
+/** CFB 헤더(MS-CFB 2.2)에서 읽는 자리 — 섹터 크기 지수와 디렉터리 첫 섹터 번호. */
+const CFB_HEADER_BYTES = 512;
+const SECTOR_SHIFT_AT = 30;
+const FIRST_DIR_SECTOR_AT = 48;
+/** 디렉터리 항목 하나의 크기와, 그 안에서 이름·이름 길이·종류가 있는 자리(MS-CFB 2.6.1). */
+const DIR_ENTRY_BYTES = 128;
+const DIR_NAME_LEN_AT = 64;
+const DIR_TYPE_AT = 66;
 
 function startsWith(bytes: Uint8Array, signature: number[]): boolean {
   if (bytes.length < signature.length) return false;
@@ -42,12 +64,67 @@ function firstZipEntryName(bytes: Uint8Array): string {
   return ascii(bytes, 30, nameLength);
 }
 
-/** CFB 안이 한글 문서인지 — HWP 5.0은 FileHeader 스트림에 이 서명을 둔다. */
+/** 앞부분 안에 이 ASCII 글자가 있는가. 훑는 양이 커서 문자열로 만들지 않고 바이트로 찾는다. */
+function includesAscii(bytes: Uint8Array, text: string): boolean {
+  const first = text.charCodeAt(0);
+  for (let at = 0; at + text.length <= bytes.length; at++) {
+    if (bytes[at] !== first) continue;
+    let same = true;
+    for (let i = 1; i < text.length; i++) {
+      if (bytes[at + i] !== text.charCodeAt(i)) {
+        same = false;
+        break;
+      }
+    }
+    if (same) return true;
+  }
+  return false;
+}
+
+/** CFB 디렉터리 항목의 이름(UTF-16LE). 그 자리가 항목이 아니면 null. */
+function dirEntryName(view: DataView, at: number): string | null {
+  const type = view.getUint8(at + DIR_TYPE_AT); // 1=저장소 2=스트림 5=루트, 0=미사용
+  if (type !== 1 && type !== 2 && type !== 5) return null;
+  const nameBytes = view.getUint16(at + DIR_NAME_LEN_AT, true); // 끝의 널 문자까지 센 길이
+  if (nameBytes < 4 || nameBytes > 64) return null;
+  let name = "";
+  for (let i = 0; i < nameBytes - 2; i += 2) {
+    name += String.fromCharCode(view.getUint16(at + i, true));
+  }
+  return name;
+}
+
+/**
+ * CFB 디렉터리에 한글 문서의 이름이 있는가.
+ *
+ * 서명과 달리 이 자리는 계산할 수 있다 — 헤더가 섹터 크기와 디렉터리 첫 섹터 번호를 적어 둔다.
+ * 항목 하나가 128바이트이고 이름은 UTF-16LE이므로, 그 자리부터 앞부분 끝까지 훑어 이름을 읽는다.
+ * 이름 두 개를 요구하는 것은 다른 CFB 문서(.doc·.xls) 안에 우연히 같은 글자가 있어도
+ * 한글로 읽지 않기 위해서다. 디렉터리가 파일 뒤쪽에 있으면 앞부분에 안 들어와 false다.
+ */
+function hasHwp5Directory(bytes: Uint8Array): boolean {
+  if (bytes.length < CFB_HEADER_BYTES) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const shift = view.getUint16(SECTOR_SHIFT_AT, true);
+  if (shift !== 9 && shift !== 12) return false; // 섹터는 512·4096 두 가지뿐이다
+  const start = (view.getUint32(FIRST_DIR_SECTOR_AT, true) + 1) * (1 << shift);
+  const found = new Set<string>();
+  for (let at = start; at + DIR_ENTRY_BYTES <= bytes.length; at += DIR_ENTRY_BYTES) {
+    const name = dirEntryName(view, at);
+    if (name === null || !HWP5_ENTRIES.includes(name)) continue;
+    found.add(name);
+    if (found.size >= 2) return true;
+  }
+  return false;
+}
+
+/**
+ * CFB 안이 한글 문서인지. 이름이 `.docx`로 잘못 붙은 hwp도 여기서 갈린다(CLAUDE.md 30번).
+ * 두 통로가 있다 — 디렉터리 항목 이름(자리를 계산할 수 있다)과 FileHeader 스트림의 서명
+ * (미니 스트림 안이라 자리가 파일마다 다르다. rhwp가 쓴 파일에서는 8192바이트째다).
+ */
 function looksLikeHwp5(bytes: Uint8Array): boolean {
-  // 서명 "HWP Document File"은 헤더 스트림 안에 있어 앞 512바이트 밖일 수 있다.
-  // 넉넉히 훑어서 있으면 hwp로 본다.
-  const text = ascii(bytes, 0, Math.min(bytes.length, HEAD_BYTES));
-  return text.includes("HWP Document File");
+  return hasHwp5Directory(bytes) || includesAscii(bytes, HWP5_SIGNATURE);
 }
 
 const extensionOf = (name: string): string => (name.split(".").pop() ?? "").toLowerCase();

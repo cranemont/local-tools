@@ -224,15 +224,115 @@ describe("표본은 같은 명세면 같은 바이트다", () => {
     expect([...makeDocx().subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
   });
 
-  it("hwpx와 docx는 이름을 안 보고 ZIP 첫 항목으로 갈린다", () => {
-    // 이름이 틀려도 종류가 나와야 한다(CLAUDE.md 30번). ZIP 첫 항목 이름은 30바이트째에
-    // 있어 앞 4096바이트 안에 언제나 들어온다.
-    //
-    // .hwp는 여기 못 넣는다. `looksLikeHwp5`가 찾는 "HWP Document File" 서명이 rhwp가 쓴
-    // 파일에서는 8192바이트째에 있어 `HEAD_BYTES`(4096) 밖이다 — 이름이 틀린 .hwp는
-    // 지금 `kind: null`로 떨어진다(보고서에 적었다).
+  it("세 종류 모두 이름을 안 보고 앞부분 바이트로 갈린다", () => {
+    // 이름이 틀려도 종류가 나와야 한다(CLAUDE.md 30번). ZIP 첫 항목 이름은 30바이트째,
+    // hwp의 CFB 디렉터리는 512바이트째에 있어 `HEAD_BYTES` 안에 들어온다.
     expect(detect("이름.txt", makeHwpx().subarray(0, HEAD_BYTES))).toEqual({ kind: "hwpx" });
     expect(detect("이름.txt", makeDocx().subarray(0, HEAD_BYTES))).toEqual({ kind: "docx" });
+    expect(detect("보고서.docx", makeHwp().subarray(0, HEAD_BYTES))).toEqual({ kind: "hwp" });
+  });
+
+  it("hwp 서명은 8192바이트째에 있다 — 앞부분을 그보다 짧게 읽으면 서명으로는 못 가른다", () => {
+    // `HEAD_BYTES`를 정한 실측치다. 이 값이 바뀌면 detect.ts의 주석도 같이 틀린다.
+    const bytes = makeHwp();
+    expect(Buffer.from(bytes).indexOf("HWP Document File")).toBe(8192);
+    expect(HEAD_BYTES).toBeGreaterThan(8192 + "HWP Document File".length);
+  });
+
+  it("서명이 앞부분 밖이어도 CFB 디렉터리 이름으로 가른다", () => {
+    // 두 통로가 따로 산다 — 디렉터리는 자리를 계산할 수 있고(헤더가 적어 둔다),
+    // 서명은 미니 스트림 안이라 파일마다 자리가 다르다.
+    const head = makeHwp().subarray(0, HEAD_BYTES).slice();
+    head.fill(0, 8192);
+    expect(detect("보고서.docx", head)).toEqual({ kind: "hwp" });
+  });
+
+  it("디렉터리가 앞부분 밖이어도 서명으로 가른다", () => {
+    const head = makeHwp().subarray(0, HEAD_BYTES).slice();
+    head.fill(0, 512, 1024); // FileHeader·DocInfo·BodyText 항목이 있는 자리
+    expect(detect("보고서.docx", head)).toEqual({ kind: "hwp" });
+  });
+
+  it("CFB인데 한글 흔적이 하나도 없으면 hwp로 읽지 않는다 — 이름만 보고 넘기지 않는다", () => {
+    const head = makeHwp().subarray(0, HEAD_BYTES).slice();
+    head.fill(0, 512);
+    expect(detect("보고서.doc", head).kind).toBe(null);
+    expect(detect("이름없음", head).kind).toBe(null);
+  });
+
+  it("잘라 온 앞부분이 배열 앞머리가 아니어도 같게 갈린다", () => {
+    // `hasHwp5Directory`가 `new DataView(bytes.buffer)`로 읽으면 여기가 어긋난다 —
+    // `byteOffset`을 빼먹으면 512바이트째가 아니라 파일 앞 512바이트를 디렉터리로 읽는다.
+    const bytes = makeHwp();
+    const padded = new Uint8Array(bytes.length + 100);
+    padded.set(bytes, 100);
+    const head = padded.subarray(100, 100 + HEAD_BYTES);
+    expect(head.byteOffset).toBe(100);
+    expect(detect("보고서.docx", head)).toEqual({ kind: "hwp" });
+  });
+});
+
+// CFB 헤더를 손으로 지어 디렉터리 판정의 경계를 잰다. rhwp가 쓴 hwp는 512바이트 섹터
+// 하나만 보여 주므로, 4096바이트 섹터·망가진 헤더는 표본으로 만들 수 없다.
+describe("CFB 디렉터리 판정의 경계", () => {
+  const CFB = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+
+  /** 섹터 크기 지수와 디렉터리 첫 섹터 번호를 적은 CFB 헤더. */
+  function cfb(size: number, shift = 9, firstDirSector = 0): Uint8Array {
+    const out = new Uint8Array(size);
+    out.set(CFB, 0);
+    const view = new DataView(out.buffer);
+    view.setUint16(30, shift, true);
+    view.setUint32(48, firstDirSector, true);
+    return out;
+  }
+
+  /** 디렉터리 항목 하나 — 이름은 UTF-16LE, 64바이트째가 길이, 66바이트째가 종류다. */
+  function putEntry(bytes: Uint8Array, at: number, name: string, type = 2): void {
+    const view = new DataView(bytes.buffer);
+    for (let i = 0; i < name.length; i++) view.setUint16(at + i * 2, name.charCodeAt(i), true);
+    view.setUint16(at + 64, (name.length + 1) * 2, true);
+    view.setUint8(at + 66, type);
+  }
+
+  it("한글 이름이 하나만 보이면 hwp로 안 본다 — .doc·.xls를 오판하지 않으려는 것이다", () => {
+    const head = cfb(4096);
+    putEntry(head, 512, "Root Entry", 5);
+    putEntry(head, 640, "FileHeader");
+    putEntry(head, 768, "WordDocument");
+    const found = detect("문서.doc", head);
+    expect(found.kind).toBe(null);
+    expect("reason" in found && found.reason).toContain("워드 97");
+  });
+
+  it("한글 이름이 둘 보이면 hwp다", () => {
+    const head = cfb(4096);
+    putEntry(head, 512, "Root Entry", 5);
+    putEntry(head, 640, "FileHeader");
+    putEntry(head, 768, "DocInfo");
+    expect(detect("문서.doc", head)).toEqual({ kind: "hwp" });
+  });
+
+  it("섹터가 4096바이트면 디렉터리가 4096바이트째다 — HEAD_BYTES가 그보다 커야 닿는다", () => {
+    const head = cfb(HEAD_BYTES, 12);
+    putEntry(head, 4096, "FileHeader");
+    putEntry(head, 4224, "BodyText", 1);
+    expect(detect("무제", head)).toEqual({ kind: "hwp" });
+  });
+
+  it("헤더가 망가져도 던지지 않는다 — 판정 실패는 예외가 아니라 kind: null이다", () => {
+    const cases: [string, Uint8Array][] = [
+      ["빈 바이트", new Uint8Array(0)],
+      ["CFB 서명 여덟 바이트뿐", new Uint8Array(CFB)],
+      ["헤더가 한 바이트 모자람", (() => { const a = new Uint8Array(511); a.set(CFB); return a; })()],
+      ["0xFF로 채운 헤더", (() => { const a = new Uint8Array(1024).fill(0xff); a.set(CFB); return a; })()],
+      ["섹터 지수가 9도 12도 아님", cfb(1024, 7)],
+      ["디렉터리 섹터가 ENDOFCHAIN", cfb(1024, 9, 0xfffffffe)],
+    ];
+    for (const [label, head] of cases) {
+      expect(() => detect("무제", head), label).not.toThrow();
+      expect(detect("무제", head).kind, label).toBe(null);
+    }
   });
 });
 

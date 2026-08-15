@@ -37,7 +37,7 @@ import {
   makeOutputFormat,
 } from "../apps/video/src/lib/video/concat";
 import { getKeyframeTimes, probeVideo } from "../apps/video/src/lib/video/probe";
-import type { Segment } from "../apps/video/src/lib/video/segments";
+import { hasOverlap, type Segment } from "../apps/video/src/lib/video/segments";
 import {
   combineRotation,
   losslessCompatible,
@@ -616,24 +616,121 @@ describe("무손실로 바꾸면 모든 구간 시작이 키프레임으로 내�
     expect(ed.trimEnd).toBeCloseTo(1.3, 6);
   });
 
-  it("구간을 더할 때도 시작이 키프레임으로 내려간다", async () => {
+  it("구간을 더할 때 시작은 빈 자리 그대로다 — 스냅이 앞 구간을 파고들지 않는다", async () => {
     const ed = await opened();
     ed.setCutMode("lossless");
     ed.setTrimEnd(0.6);
     ed.currentTime = 1;
     ed.addSegment();
-    // 빈 자리는 0.6부터지만 복사가 되려면 0.5(직전 키프레임)에서 시작해야 한다.
-    expect(ed.segments[1].start).toBe(0.5);
+    // 예전에는 직전 키프레임 0.5로 내려가 [0, 0.6]과 겹쳤고, 0.5~0.6초가 결과에 두 번
+    // 들어갔다. 사용자는 그 겹침을 고른 적이 없다 — 스냅이 만든 겹침이라 막는다.
+    expect(ed.segments[1].start).toBe(0.6);
+    expect(hasOverlap(ed.segments)).toBe(false);
   });
 
-  it("첫 키프레임보다 앞을 고르면 시작이 오히려 뒤로 밀린다 — 알려진 경계", async () => {
+  it("빈 자리가 키프레임에서 시작하면 그대로 복사가 된다 — 막은 것은 겹침뿐이다", async () => {
+    const ed = await opened();
+    ed.setCutMode("lossless");
+    ed.setTrimEnd(0.5);
+    ed.currentTime = 1;
+    ed.addSegment();
+    expect(ed.segments[1].start).toBe(0.5);
+    expect(hasOverlap(ed.segments)).toBe(false);
+  });
+
+  it("맞닿은 두 구간을 무손실로 바꿔도 겹치지 않는다 — 스냅이 앞 구간 끝에서 멈춘다", async () => {
+    const ed = await opened();
+    ed.segments = [
+      { id: 1, start: 0, end: 0.6 },
+      { id: 2, start: 0.6, end: 2 },
+    ];
+    ed.setCutMode("lossless");
+    expect(starts(ed.segments)).toEqual([0, 0.6]);
+    expect(hasOverlap(ed.segments)).toBe(false);
+  });
+
+  it("사용자가 만든 겹침은 스냅이 넓히지도 고치지도 않는다", async () => {
+    // 겹침을 그대로 두는 규약(CLAUDE.md 33번)은 여기까지다 — 사용자가 앞 구간 안으로 끌면
+    // 그 값이 남고, 스냅이 그것을 더 앞으로 끌고 가지 않는다.
+    const ed = await opened();
+    ed.segments = [
+      { id: 1, start: 0, end: 1 },
+      { id: 2, start: 0.7, end: 2 },
+    ];
+    ed.activeIndex = 1;
+    ed.setCutMode("lossless");
+    expect(ed.segments[1].start).toBe(0.7);
+    ed.setTrimStart(0.3);
+    expect(ed.segments[1].start).toBeCloseTo(0.3, 6);
+    expect(hasOverlap(ed.segments)).toBe(true);
+  });
+
+  it("첫 키프레임보다 앞을 고르면 파일 시작까지 내려간다 — 고른 앞부분을 버리지 않는다", async () => {
     // 우리 표본으로는 못 만드는 상황이다(mediabunny가 첫 패킷을 키프레임으로 강제한다).
     // 남이 만든 파일에서 첫 키프레임이 0이 아니면 여기로 온다.
+    // 예전에는 첫 키프레임(0.5)으로 뒤로 밀어 사용자가 고른 0.2~0.5초가 결과에서 빠졌다.
     const ed = await opened();
     ed.keyframes = [0.5, 1, 1.5];
     ed.setCutMode("lossless");
     ed.setTrimStart(0.2);
-    expect(ed.trimStart).toBe(0.5);
+    expect(ed.trimStart).toBe(0);
+  });
+
+  it("첫 키프레임보다 앞이면 구간을 더할 때도 뒤로 밀리지 않는다", async () => {
+    const ed = await opened();
+    ed.keyframes = [0.5, 1, 1.5];
+    ed.setCutMode("lossless");
+    ed.segments = [{ id: 1, start: 1.5, end: 2 }];
+    ed.activeIndex = 0;
+    ed.currentTime = 0.2;
+    ed.addSegment();
+    // 빈 자리 [0, 1.5]의 시작은 그대로 0이다 — 0.5로 밀면 앞 0.5초가 사라진다.
+    expect(ed.segments[1].start).toBe(0);
+  });
+
+  it("스냅 한계는 목록 순서가 아니라 시간축에서 앞선 구간의 끝이다", async () => {
+    const ed = await opened();
+    ed.segments = [
+      { id: 1, start: 1.3, end: 1.9 },
+      { id: 2, start: 0.3, end: 1.05 },
+    ];
+    ed.setCutMode("lossless");
+    // 1.3의 직전 키프레임은 1이지만 목록 뒤의 구간이 1.05까지 덮고 있어 거기서 멈춘다.
+    expect(ed.segments[0].start).toBeCloseTo(1.05, 6);
+    expect(ed.segments[1].start).toBe(0);
+    expect(hasOverlap(ed.segments)).toBe(false);
+  });
+
+  it("정확 모드에는 스냅이 없다 — 한계 계산이 값을 건드리면 안 된다", async () => {
+    // `#snapStart`가 두 값의 큰 쪽을 고르므로, 한계가 고른 값을 넘기면 정확 모드에서도
+    // 시작이 움직인다. 그 통로가 막혀 있는지 두 자리에서 잰다.
+    const ed = await opened();
+    ed.segments = [
+      { id: 1, start: 0, end: 1 },
+      { id: 2, start: 1, end: 2 },
+    ];
+    ed.activeIndex = 1;
+    ed.setTrimStart(0.25);
+    expect(ed.segments[1].start).toBeCloseTo(0.25, 6);
+
+    ed.segments = [{ id: 1, start: 0, end: 0.6 }];
+    ed.activeIndex = 0;
+    ed.currentTime = 1;
+    ed.addSegment();
+    expect(ed.segments[1].start).toBeCloseTo(0.6, 6);
+  });
+
+  it("빈 칸이 없을 때 재생 위치에 겹쳐 놓는 것은 그대로다 — 스냅이 막을 자리가 아니다", async () => {
+    // `nextSegmentSlot`이 정한 동작이다(빈 칸이 없으면 재생 위치에서 기본 길이만큼).
+    // 겹침을 막는 한계가 여기까지 번지면 "구간 추가"가 아무 일도 안 하게 된다.
+    const ed = await opened();
+    ed.segments = [{ id: 1, start: 0, end: 2 }];
+    ed.setCutMode("lossless");
+    ed.currentTime = 0.7;
+    ed.addSegment();
+    expect(ed.segments).toHaveLength(2);
+    expect(ed.segments[1].start).toBeCloseTo(0.7, 6);
+    expect(hasOverlap(ed.segments)).toBe(true);
   });
 
   it("무손실 전환은 편집 세대를 올린다 — 결과가 달라지므로", async () => {

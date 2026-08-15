@@ -161,6 +161,35 @@ export function nextSegmentSlot(
   return { start, end: Math.min(limit, start + DEFAULT_SEGMENT_S) };
 }
 
+/**
+ * 무손실 스냅이 시작을 앞으로 옮길 때 넘지 말아야 할 자리(초). 아무도 안 덮고 있으면
+ * 0이다 — 파일 시작까지 내려갈 수 있다는 뜻이다.
+ *
+ * 겹침을 고치지 않는다는 첫머리 규약은 **사용자가 만든 겹침** 이야기다. 스냅이 시작을 남의
+ * 구간 안으로 밀어 넣으면 그 대목이 결과에 두 번 들어가는데, 사용자는 그 자리를 고른 적이
+ * 없다. 그래서 한계는 `startS` 앞을 이미 덮고 있는 구간이 끝나는 자리다. 이미 겹쳐 있는
+ * 자리라면(다른 구간이 `startS`를 걸치고 있다) 한계가 `startS` 자신이 되어 스냅이 걸리지
+ * 않는다 — 있는 겹침을 넓히지도 않는다.
+ *
+ * `skipIndex`는 지금 옮기는 구간 자신이다. 자기 자신은 언제나 `startS` 뒤를 덮으므로
+ * 세면 어떤 값도 못 내려가 스냅이 걸리지 않는다.
+ */
+export function snapFloor(
+  list: readonly Interval[],
+  startS: number,
+  skipIndex = -1,
+): number {
+  let floor = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (i === skipIndex) continue;
+    const seg = list[i];
+    if (seg.start >= startS - EPS) continue;
+    const covered = Math.min(seg.end, startS);
+    if (covered > floor) floor = covered;
+  }
+  return floor;
+}
+
 /** 목록에서 from을 to 자리로 옮긴 새 배열. 범위를 벗어나면 그대로 돌려준다. */
 export function moveSegment(
   list: readonly Segment[],

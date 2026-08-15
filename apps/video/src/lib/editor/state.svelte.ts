@@ -11,6 +11,7 @@ import {
   moveSegment,
   nextSegmentSlot,
   normalizeSegments,
+  snapFloor,
   totalLength,
   type Segment,
 } from "../video/segments";
@@ -199,10 +200,17 @@ export class EditorState {
     this.error = "";
   }
 
-  /** 무손실 모드에선 시작점을 직전 키프레임으로 내린다(그 지점부터 온전히 재생되도록). */
+  /**
+   * 무손실 모드에선 시작점을 직전 키프레임으로 내린다(그 지점부터 온전히 재생되도록).
+   *
+   * 앞으로만 옮긴다. 첫 키프레임보다 앞을 고르면 내려갈 키프레임이 없는데, 예전에는 그때
+   * 첫 키프레임으로 **뒤로 밀어** 사용자가 고른 앞부분이 결과에서 빠졌다. 지금은 파일
+   * 시작(0)까지 내린다 — 고른 구간이 그대로 남고, 시작이 키프레임에 안 맞으면 패널이
+   * 배지로 재인코딩 사유를 적는다.
+   */
   #snapToKeyframe(v: number): number {
     if (this.cutMode !== "lossless" || this.keyframes.length === 0) return v;
-    let snapped = this.keyframes[0];
+    let snapped = 0;
     for (const k of this.keyframes) {
       if (k <= v + 1e-6) snapped = k;
       else break;
@@ -210,10 +218,19 @@ export class EditorState {
     return snapped;
   }
 
+  /**
+   * 스냅을 적용한 시작 시각 — 키프레임으로 내리되 다른 구간이 이미 덮은 자리로는 안 간다.
+   * 스냅이 만든 겹침은 사용자가 고른 적이 없다(같은 대목이 결과에 두 번 들어간다).
+   * `skipIndex`는 지금 옮기는 구간 자신이고, 목록에 아직 없는 구간이면 -1이다.
+   */
+  #snapStart(v: number, skipIndex: number): number {
+    return Math.max(this.#snapToKeyframe(v), snapFloor(this.segments, v, skipIndex));
+  }
+
   setTrimStart(v: number): void {
     const seg = this.active;
     if (!seg) return;
-    const snapped = this.#snapToKeyframe(v);
+    const snapped = this.#snapStart(v, this.activeIndex);
     const next = Math.min(Math.max(0, snapped), seg.end - MIN_RANGE_S);
     if (next === seg.start) return;
     seg.start = next;
@@ -243,7 +260,10 @@ export class EditorState {
   addSegment(): void {
     const slot = nextSegmentSlot(this.segments, this.duration, this.currentTime);
     if (!slot) return;
-    const start = this.#snapToKeyframe(slot.start);
+    // 빈 자리는 앞 구간이 끝나는 자리에서 시작한다 — 여기서 키프레임까지 내리면 그만큼이
+    // 앞 구간과 겹쳐 같은 대목이 결과에 두 번 들어간다. `#snapStart`가 그 자리에서 멈춘다.
+    // 새 구간은 아직 목록에 없으므로 건너뛸 자리도 없다.
+    const start = this.#snapStart(slot.start, -1);
     this.segments = [
       ...this.segments,
       {
@@ -299,10 +319,12 @@ export class EditorState {
     this.cutMode = mode;
     if (mode === "lossless") {
       // 모든 구간의 시작을 키프레임으로 내린다 — 하나라도 어긋나면 복사가 아니라 재인코딩이 된다.
-      for (const seg of this.segments) {
-        const snapped = this.#snapToKeyframe(seg.start);
-        if (snapped !== seg.start) seg.start = Math.min(snapped, seg.end - MIN_RANGE_S);
-      }
+      // 여기서도 남의 구간 안으로는 안 내려간다(맞닿은 두 구간을 겹치게 만들지 않는다).
+      // 한계를 먼저 다 재고 나서 옮긴다 — 옮기는 도중의 값을 보면 목록 순서가 결과를 바꾼다.
+      const snapped = this.segments.map((seg, i) => this.#snapStart(seg.start, i));
+      this.segments.forEach((seg, i) => {
+        if (snapped[i] !== seg.start) seg.start = Math.min(snapped[i], seg.end - MIN_RANGE_S);
+      });
       // 반전은 픽셀을 다시 그려야 해서 복사 경로에 없다 — 켜 둔 채 무시하지 않는다.
       this.flipH = false;
       this.flipV = false;
