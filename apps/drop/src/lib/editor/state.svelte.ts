@@ -636,6 +636,9 @@ class DropState {
         this.ackless = this.ackSession.peerAcks === false;
         if (item.status !== "active") continue;
         if (result === "done") item.done = item.size;
+        // "cancelled"로 닫히는 길은 줄에서 기다리다 접힌 파일이다. `onCancel`은 도는
+        // 파일만 그 자리에서 닫고 기다리는 파일은 신호만 끊어 두므로, 순서가 여기까지
+        // 온 뒤에야 닫힌다. "done"으로 굳히면 한 바이트도 안 나간 파일이 완료로 뜬다.
         this.finish(item, result === "done" ? "done" : "cancelled");
       } catch {
         if (item.status === "active") this.finish(item, "error");

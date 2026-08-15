@@ -15,6 +15,7 @@ import {
   overallProgress,
   segmentLength,
   segmentWeights,
+  snapFloor,
   totalLength,
   type Segment,
 } from "../apps/video/src/lib/video/segments";
@@ -320,6 +321,57 @@ describe("목록 순서 바꾸기", () => {
 
   it("구간이 하나면 옮길 곳이 없다", () => {
     expect(moveSegment([seg(1, 0, 10)], 0, 0).map((s) => s.id)).toEqual([1]);
+  });
+});
+
+describe("스냅 한계 — 스냅이 만드는 겹침만 막는다", () => {
+  it("목록이 비면 한계가 없다(0이다)", () => {
+    expect(snapFloor([], 5)).toBe(0);
+  });
+
+  it("앞에서 끝나는 구간이 없으면 0이다 — 파일 시작까지 내려갈 수 있다", () => {
+    expect(snapFloor([seg(1, 10, 20)], 5)).toBe(0);
+  });
+
+  it("맞닿은 구간의 끝이 한계다 — 여기서 더 내려가면 같은 대목이 두 번 들어간다", () => {
+    expect(snapFloor([seg(1, 0, 6)], 6)).toBe(6);
+  });
+
+  it("여러 개가 앞에서 끝나면 가장 늦은 끝이 한계다", () => {
+    expect(snapFloor([seg(1, 0, 3), seg(2, 4, 7), seg(3, 30, 40)], 9)).toBe(7);
+  });
+
+  it("이미 그 자리를 걸치고 있는 구간이 있으면 한계가 시작 자신이다 — 있는 겹침을 넓히지 않는다", () => {
+    expect(snapFloor([seg(1, 0, 9)], 5)).toBe(5);
+  });
+
+  it("시작보다 뒤에서 시작하는 구간은 한계가 아니다", () => {
+    expect(snapFloor([seg(1, 5, 8)], 5)).toBe(0);
+  });
+
+  it("건너뛴 자리는 세지 않는다 — 자기 자신을 세면 스냅이 걸리지 않는다", () => {
+    expect(snapFloor([seg(1, 0, 10)], 4, 0)).toBe(0);
+    expect(snapFloor([seg(1, 0, 3), seg(2, 0, 10)], 4, 1)).toBe(3);
+  });
+
+  it("목록 순서와 무관하다 — 시간축에서 앞선 구간을 본다", () => {
+    const list = [seg(1, 8, 12), seg(2, 0, 6)];
+    expect(snapFloor(list, 8)).toBe(6);
+  });
+
+  it("건너뛸 자리가 목록 밖이면 아무것도 안 건너뛴다 — 지운 구간의 번호가 남아도 한계는 그대로다", () => {
+    expect(snapFloor([seg(1, 0, 3)], 5, 99)).toBe(3);
+    expect(snapFloor([seg(1, 0, 3)], 5, -1)).toBe(3);
+  });
+
+  it("시작이 NaN이면 한계가 없다 — 비교가 전부 거짓이라 0으로 떨어진다", () => {
+    expect(snapFloor([seg(1, 0, 3)], NaN)).toBe(0);
+  });
+
+  it("받은 목록을 고치지 않는다", () => {
+    const list = [seg(1, 0, 6), seg(2, 6, 10)];
+    snapFloor(list, 6);
+    expect(list).toEqual([seg(1, 0, 6), seg(2, 6, 10)]);
   });
 });
 

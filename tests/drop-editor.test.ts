@@ -651,6 +651,37 @@ describe("취소한 파일의 늦은 ack는 다음 파일에 얹히지 않는다
     expect(drop.transfers[1].done).toBe(30);
   });
 
+  it("줄에서 기다리던 파일을 상대가 접으면 완료가 아니라 취소로 닫힌다", async () => {
+    // `onCancel`은 도는 파일만 그 자리에서 닫는다(status가 "active"). 순서를 기다리는 파일은
+    // 신호만 끊어 두고, 줄이 거기까지 온 뒤에 송신 루프가 닫는다 — 그 갈래가
+    // `runBatch`의 `result === "done" ? "done" : "cancelled"`다. "done"으로 굳히면
+    // 한 바이트도 안 나간 파일이 완료로 뜬다.
+    await sendTwo();
+    const [first, second] = drop.transfers.map((item) => item.id);
+
+    // 상대가 아직 시작도 안 한 둘째 파일을 접었다. 화면은 아직 줄에 세워 둔 채다.
+    deliver(make.cancel(second));
+    expect(drop.transfers[1].status).toBe("waiting");
+
+    // 첫 파일이 확인을 받고 끝나면 줄이 둘째로 넘어간다.
+    deliver(make.ack(first, 40, true));
+    await waitFor(
+      () => drop.transfers[1].status === "cancelled" || drop.transfers[1].status === "done",
+      "둘째 파일이 닫히기",
+    );
+
+    expect(drop.transfers[1].status).toBe("cancelled");
+    expect(drop.transfers[1].done).toBe(0);
+    // 첫 파일의 40바이트 하나뿐 — 접은 파일은 한 조각도 안 나갔다.
+    expect(sentChunks()).toEqual([40]);
+    // 취소는 양방향 멱등이다. 상대가 먼저 보냈어도 이쪽 루프가 되돌려 보낸다.
+    expect(
+      sent()
+        .filter((f) => f.t === "cancel")
+        .map((f) => (f.t === "cancel" ? f.id : "")),
+    ).toEqual([second]);
+  });
+
   it("모르는 id의 ack도 조용히 버린다 — 상대가 지어낸 id 포함", async () => {
     await sendOne("사진.jpg", 100);
     deliver(make.ack("있지도 않은 id", 999, true));
