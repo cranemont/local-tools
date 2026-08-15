@@ -59,13 +59,6 @@ function readJson<T>(run: () => string): T | null {
 /** 파일 바이트로 문서를 연다. 비밀번호가 필요하면 PasswordRequiredError를 던진다. */
 export async function openHwp(bytes: Uint8Array, password?: string): Promise<HwpDocument> {
   await ensureEngine();
-  // [임시 검증용] 브라우저에서 패닉 분기를 밟기 위한 계측 — 검증 뒤 되돌린다.
-  const g = globalThis as unknown as { __panicNext?: boolean; __panicDelay?: number };
-  if (g.__panicNext) {
-    g.__panicNext = false;
-    if (g.__panicDelay) await new Promise((r) => setTimeout(r, g.__panicDelay));
-    throw markEngineBroken("unreachable");
-  }
   try {
     return password
       ? HwpDocument.openWithPassword(bytes, password)
