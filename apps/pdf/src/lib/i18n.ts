@@ -10,7 +10,9 @@ export const t = {
     edit: "편집·병합",
     // 이 탭은 "PDF를 다른 것으로 바꾸는" 자리다 — 이미지에 텍스트가 더해졌다.
     toImage: "이미지·텍스트",
-    password: "암호",
+    // PDF 한 개가 들어가 PDF 한 개가 나오는 탭. 압축과 암호가 같은 모양이고
+    // 같은 엔진(qpdf)을 쓴다.
+    password: "압축·암호",
   },
 
   theme: {
@@ -118,7 +120,63 @@ export const t = {
       noPages: "고를 쪽 없음",
     },
     encryptedSource: (name: string) =>
-      `암호가 걸려 있어 내보낼 수 없어요 — 암호 탭에서 먼저 풀어 주세요: ${name}`,
+      `암호가 걸려 있어 내보낼 수 없어요 — 압축·암호 탭에서 먼저 풀어 주세요: ${name}`,
+  },
+
+  // 용량 줄이기 — 압축·암호 탭의 첫 모드.
+  shrink: {
+    mode: "용량 줄이기",
+    dropHint: "PDF를 끌어다 놓거나 클릭해서 선택",
+    dropSub: "한 번에 한 개 · PDF만",
+    change: "다른 파일",
+    checking: "문서 살펴보는 중…",
+
+    way: "방식",
+    wayRepack: "다시 압축",
+    wayRaster: "이미지로",
+    wayRepackHint: "글자·글꼴은 그대로 두고 구조와 그림만 다시 압축해요",
+    wayRasterHint: "쪽을 그림으로 다시 그려요",
+
+    images: "그림",
+    imagesKeep: "그대로",
+    imagesNormal: "보통",
+    imagesStrong: "강하게",
+
+    resolution: "해상도",
+    dpi: (n: number) => `${n}dpi`,
+    quality: "품질",
+
+    target: "목표 용량",
+    targetPlaceholder: "MB",
+
+    fileName: "저장 파일 이름",
+    run: "용량 줄이기",
+    preparing: "압축 엔진 준비 중… (최초 1회)",
+    processing: "다시 압축하는 중…",
+    rendering: (i: number, total: number) => `이미지로 그리는 중… (${i}/${total})`,
+    renderingTry: (i: number, total: number, n: number, max: number) =>
+      `이미지로 그리는 중… (${i}/${total}) · 시도 ${n}/${max}`,
+
+    // 조건부 배지 — 문단으로 늘어놓지 않고 title에 사정을 담는다.
+    netBadge: "인터넷 필요",
+    netDetail: "qpdf 엔진을 최초 1회 내려받아요 — 파일은 네트워크로 나가지 않아요",
+    textBadge: "글자 사라짐",
+    textDetail: "이 PDF에는 글자가 들어 있어요 — 이미지로 다시 만들면 선택·검색·복사가 안 돼요",
+    scanBadge: "글자 없음",
+    scanDetail: "글자가 없는 PDF예요 — 이미지로 다시 만들어도 잃을 것이 없어요",
+    missedBadge: "목표 못 맞춤",
+    missedDetail: "이보다 더 줄이려면 해상도나 품질을 낮춰 주세요",
+
+    result: (from: string, to: string, pct: number) => `${from} → ${to} · ${pct}%`,
+    resultSame: (size: string) => `${size} → 그대로`,
+    noGain: "줄지 않아서 원본을 그대로 내려받았어요.",
+    done: "줄인 파일을 다운로드했어요.",
+    underTarget: "이미 목표 용량보다 작아요.",
+    encrypted: "암호가 걸린 PDF예요 — 암호 해제를 먼저 해 주세요.",
+    failed: "용량 줄이기에 실패했어요.",
+    canceled: "비밀번호 입력을 취소했어요.",
+    onlyPdf: "PDF 파일만 선택할 수 있어요.",
+    openFailed: "PDF를 열 수 없어요 — 파일이 손상됐을 수 있어요.",
   },
 
   pw: {

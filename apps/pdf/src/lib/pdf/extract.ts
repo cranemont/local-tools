@@ -126,6 +126,55 @@ export async function extractPdfText(
   };
 }
 
+/** 문서를 열어 본 결과 — 쪽 수와 글자 레이어 유무. */
+export interface PdfProbe {
+  pageCount: number;
+  /** 글자가 한 자라도 있는가. 거짓이면 스캔한 PDF다. */
+  hasText: boolean;
+}
+
+/** 글자를 찾느라 훑는 쪽 수의 상한 — 표지만 그림인 문서를 놓치지 않을 만큼만 본다. */
+const PROBE_PAGES = 5;
+
+/**
+ * 용량 줄이기 화면이 결정에 쓰는 두 값을 잰다.
+ *
+ * 쪽 수는 시도 횟수를 깎는 데 쓰고(compress.ts의 `attemptBudget`), 글자 레이어
+ * 유무는 "이미지로 다시 만들기"에 경고를 띄울지 정하는 데 쓴다. 글을 재구성하지
+ * 않고 조각이 하나라도 있는지만 보므로 `extractPdfText`보다 값싸다.
+ *
+ * 앞 5쪽만 본다. 200쪽을 다 열면 경고 하나 띄우려고 문서를 두 번 읽는 셈이 된다.
+ */
+export async function probePdf(
+  name: string,
+  bytes: Uint8Array,
+): Promise<PdfProbe> {
+  const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
+  let doc: PDFDocumentProxy;
+  try {
+    doc = await loadingTask.promise;
+  } catch (err) {
+    if (isPasswordException(err)) throw new PdfPasswordError(name, bytes);
+    throw err;
+  }
+
+  try {
+    const limit = Math.min(doc.numPages, PROBE_PAGES);
+    for (let i = 0; i < limit; i++) {
+      const page = await doc.getPage(i + 1);
+      const content = await page.getTextContent();
+      const found = content.items.some(
+        (item) => "str" in item && item.str.trim() !== "",
+      );
+      page.cleanup();
+      if (found) return { pageCount: doc.numPages, hasText: true };
+    }
+    return { pageCount: doc.numPages, hasText: false };
+  } finally {
+    await loadingTask.destroy();
+  }
+}
+
 /**
  * pdf.js의 TextItem 중 우리가 읽는 부분.
  *

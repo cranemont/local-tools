@@ -135,3 +135,35 @@ export const decryptArgs =
   (password: string): QpdfArgs =>
   (inPath, outPath) =>
     [`--password=${password}`, inPath, "--decrypt", outPath];
+
+/**
+ * 구조를 다시 써서 용량을 줄인다. 글자·글꼴·주석·책갈피는 손대지 않는다.
+ *
+ * 인자는 이 빌드(qpdf 12.2.0)에 `--help=transformation`으로 물어 고른 것이고,
+ * 아래 수치는 node에서 이 wasm을 그대로 돌려 잰 값이다.
+ *   - `--object-streams=generate --compression-level=9 --recompress-flate`
+ *     4.19MB 논문 PDF → 3.20MB(76.4%), 2.27MB 그림 PDF → 2.26MB(99.4%).
+ *   - `jpegQuality`를 주면 `--optimize-images --jpeg-quality=N`이 붙는다. 그림이
+ *     Flate로 들어 있으면 여기서 크게 줄어든다 — 같은 2.27MB 문서가 q=75에서
+ *     231kB(10.1%), q=40에서 150kB(6.6%). 글자 레이어는 그대로 남는다(확인함).
+ *     qpdf는 다시 압축해서 작아질 때만 바꾼다.
+ * `--linearize`는 뺐다 — 같은 문서에서 83.5%로 오히려 커진다.
+ *
+ * 품질을 25 아래로 내리면 libjpeg가 "quantization tables are too coarse" 경고를
+ * 콘솔에 찍는다. 화면에서 고를 수 있는 값은 40 위로 잡았다.
+ */
+export const recompressArgs =
+  (jpegQuality: number | null): QpdfArgs =>
+  (inPath, outPath) => {
+    const args = [
+      inPath,
+      "--object-streams=generate",
+      "--compression-level=9",
+      "--recompress-flate",
+    ];
+    if (jpegQuality !== null) {
+      args.push("--optimize-images", `--jpeg-quality=${jpegQuality}`);
+    }
+    args.push(outPath);
+    return args;
+  };

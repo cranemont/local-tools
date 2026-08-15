@@ -14,6 +14,7 @@
     | "plus"
     | "download"
     | "split"
+    | "shrink"
     | "x";
 
   let { name, size = 18 }: { name: IconName; size?: number } = $props();
@@ -71,6 +72,16 @@
     <path d="M12 3v18" stroke-dasharray="3 3" />
     <rect x="3" y="6" width="6" height="12" rx="1.5" />
     <rect x="15" y="6" width="6" height="12" rx="1.5" />
+  {:else if name === "shrink"}
+    <!-- 네 귀에서 가운데로 모이는 화살표 — 용량 줄이기 -->
+    <path d="M9 3v6H3" />
+    <path d="m2 2 7 7" />
+    <path d="M15 3v6h6" />
+    <path d="m22 2-7 7" />
+    <path d="M9 21v-6H3" />
+    <path d="m2 22 7-7" />
+    <path d="M15 21v-6h6" />
+    <path d="m22 22-7-7" />
   {:else if name === "x"}
     <path d="M18 6 6 18M6 6l12 12" />
   {/if}

@@ -9,12 +9,13 @@
   import PasswordPrompt from "./lib/PasswordPrompt.svelte";
 
   type TabId = "edit" | "toImage" | "password";
-  type TabIcon = "merge" | "image" | "lock";
+  type TabIcon = "merge" | "image" | "shrink";
 
   const tabs: { id: TabId; label: string; icon: TabIcon }[] = [
     { id: "edit", label: t.tabs.edit, icon: "merge" },
     { id: "toImage", label: t.tabs.toImage, icon: "image" },
-    { id: "password", label: t.tabs.password, icon: "lock" },
+    // 탭③의 첫 모드가 용량 줄이기라 자물쇠가 아니라 줄이기 표시를 단다.
+    { id: "password", label: t.tabs.password, icon: "shrink" },
   ];
 
   let active = $state<TabId>("edit");

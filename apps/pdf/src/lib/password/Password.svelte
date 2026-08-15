@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Compress from "../compress/Compress.svelte";
   import Icon from "../Icon.svelte";
   import { t } from "../i18n";
   import {
@@ -9,9 +10,21 @@
   } from "../pdf/qpdfLoader";
   import { saveBytes } from "../pdf/save";
 
-  type Mode = "encrypt" | "decrypt";
+  /**
+   * 이 탭은 "PDF 한 개가 들어가 PDF 한 개가 나오는" 자리다. 용량 줄이기가 여기 붙은
+   * 이유가 그것이다 — 편집 탭은 여러 문서를 합치므로 "원본 4.1MB → 결과 1.2MB"를
+   * 적을 원본이 없고, 이미지 탭은 산출물이 PDF가 아니다. 압축의 한쪽 길(qpdf)은
+   * 암호와 같은 엔진을 쓰고 같은 이유로 인터넷이 필요하다.
+   */
+  type Mode = "shrink" | "encrypt" | "decrypt";
 
-  let mode = $state<Mode>("encrypt");
+  let mode = $state<Mode>("shrink");
+  /**
+   * 용량 줄이기가 일하는 중인가. 모드 칩은 아래 패널 밖에 있어서 진행 오버레이가
+   * 덮지 못한다 — 잠그지 않으면 렌더 도중에 칩을 눌러 나갈 수 있고, 그 뒤에도
+   * 남은 작업이 파일을 내려받는다(직접 재현했다).
+   */
+  let childBusy = $state(false);
   let file = $state<{ name: string; bytes: Uint8Array } | null>(null);
   let password = $state("");
   let busy = $state(false);
@@ -19,7 +32,8 @@
   let error = $state("");
   let status = $state("");
   let dragOver = $state(false);
-  let fileInput: HTMLInputElement;
+  // 모드 칩 아래에서만 살아 있는 요소라 $state로 잡는다(칩을 옮기면 새로 붙는다).
+  let fileInput = $state<HTMLInputElement | null>(null);
   let outName = $state("");
 
   const defaultBase = $derived(
@@ -29,11 +43,16 @@
   );
 
   const modes: { id: Mode; label: string }[] = [
+    { id: "shrink", label: t.shrink.mode },
     { id: "encrypt", label: t.pw.encrypt },
     { id: "decrypt", label: t.pw.decrypt },
   ];
 
   async function setFile(f: File) {
+    // 진행 중에는 파일을 바꾸지 않는다 — 오버레이는 드롭을 못 막는다(이벤트가
+    // 위로 올라와 .tool의 ondrop에 닿는다). 바꾸면 앞 파일의 결과가 뒤 파일의
+    // 이름으로 저장된다.
+    if (busy) return;
     if (f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) {
       error = "PDF 파일만 선택할 수 있어요.";
       return;
@@ -45,7 +64,7 @@
   }
 
   function pick() {
-    fileInput.click();
+    fileInput?.click();
   }
   function onInputChange(e: Event) {
     const input = e.target as HTMLInputElement;
@@ -102,24 +121,8 @@
   }
 </script>
 
-<div
-  class="tool"
-  class:dragover={dragOver}
-  ondragover={onDragOver}
-  ondragleave={onDragLeave}
-  ondrop={onDrop}
-  role="region"
-  aria-label={t.tabs.password}
->
-  <input
-    bind:this={fileInput}
-    type="file"
-    accept="application/pdf"
-    hidden
-    onchange={onInputChange}
-  />
-
-  <div class="panel">
+<div class="tab">
+  <div class="modes">
     <div class="seg" role="group" aria-label={t.tabs.password}>
       {#each modes as m (m.id)}
         <button
@@ -127,6 +130,7 @@
           class="segbtn"
           class:active={mode === m.id}
           aria-pressed={mode === m.id}
+          disabled={busy || childBusy}
           onclick={() => {
             mode = m.id;
             file = null;
@@ -140,65 +144,107 @@
         </button>
       {/each}
     </div>
-
-    {#if !file}
-      <button type="button" class="dropzone" onclick={pick}>
-        <span class="dz-icon"><Icon name="lock" size={28} /></span>
-        <p class="dz-title">{t.pw.dropHint}</p>
-        <p class="dz-sub">{t.pw.dropSub}</p>
-      </button>
-    {:else}
-      <div class="filechip">
-        <Icon name="merge" size={16} />
-        <span class="fname" title={file.name}>{file.name}</span>
-        <button type="button" class="link" onclick={pick}>{t.pw.change}</button>
-      </div>
-
-      <label class="field">
-        <span class="flabel">{t.pw.passwordLabel}</span>
-        <input
-          type="password"
-          bind:value={password}
-          placeholder={mode === "encrypt"
-            ? t.pw.passwordPlaceholderSet
-            : t.pw.passwordPlaceholderRemove}
-          onkeydown={(e) => {
-            if (e.key === "Enter") run();
-          }}
-        />
-      </label>
-
-      <label class="field">
-        <span class="flabel">{t.pw.fileName}</span>
-        <input
-          type="text"
-          bind:value={outName}
-          placeholder={defaultBase}
-          spellcheck="false"
-          autocomplete="off"
-        />
-      </label>
-
-      <button type="button" class="btn primary large run" onclick={run} disabled={busy}>
-        <Icon name="lock" size={15} />
-        {mode === "encrypt" ? t.pw.runSet : t.pw.runRemove}
-      </button>
-
-      {#if status}<p class="ok">{status}</p>{/if}
-    {/if}
-
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
   </div>
 
-  {#if busy}
-    <div class="overlay">
-      <div class="spinner" aria-hidden="true"></div>
-      <p>{busyMsg}</p>
+  {#if mode === "shrink"}
+    <Compress onBusy={(b) => (childBusy = b)} />
+  {:else}
+    <div
+      class="tool"
+      class:dragover={dragOver}
+      ondragover={onDragOver}
+      ondragleave={onDragLeave}
+      ondrop={onDrop}
+      role="region"
+      aria-label={t.tabs.password}
+    >
+      <input
+        bind:this={fileInput}
+        type="file"
+        accept="application/pdf"
+        hidden
+        onchange={onInputChange}
+      />
+
+      <div class="panel">
+        {#if !file}
+          <button type="button" class="dropzone" onclick={pick}>
+            <span class="dz-icon"><Icon name="lock" size={28} /></span>
+            <p class="dz-title">{t.pw.dropHint}</p>
+            <p class="dz-sub">{t.pw.dropSub}</p>
+          </button>
+        {:else}
+          <div class="filechip">
+            <Icon name="merge" size={16} />
+            <span class="fname" title={file.name}>{file.name}</span>
+            <button type="button" class="link" onclick={pick}>{t.pw.change}</button>
+          </div>
+
+          <label class="field">
+            <span class="flabel">{t.pw.passwordLabel}</span>
+            <input
+              type="password"
+              bind:value={password}
+              placeholder={mode === "encrypt"
+                ? t.pw.passwordPlaceholderSet
+                : t.pw.passwordPlaceholderRemove}
+              onkeydown={(e) => {
+                if (e.key === "Enter") run();
+              }}
+            />
+          </label>
+
+          <label class="field">
+            <span class="flabel">{t.pw.fileName}</span>
+            <input
+              type="text"
+              bind:value={outName}
+              placeholder={defaultBase}
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </label>
+
+          <button
+            type="button"
+            class="btn primary large run"
+            onclick={run}
+            disabled={busy}
+          >
+            <Icon name="lock" size={15} />
+            {mode === "encrypt" ? t.pw.runSet : t.pw.runRemove}
+          </button>
+
+          {#if status}<p class="ok">{status}</p>{/if}
+        {/if}
+
+        {#if error}<p class="error" role="alert">{error}</p>{/if}
+      </div>
+
+      {#if busy}
+        <div class="overlay">
+          <div class="spinner" aria-hidden="true"></div>
+          <p>{busyMsg}</p>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
 
 <style>
+  /* 탭 셸 — 모드 칩 한 줄과 그 아래 한 패널. */
+  .tab {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+  .modes {
+    display: flex;
+    justify-content: center;
+  }
+
   .tool {
     position: relative;
     flex: 1;
@@ -217,7 +263,6 @@
   .panel {
     width: 100%;
     max-width: 460px;
-    margin-top: 24px;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -245,6 +290,11 @@
     background: var(--surface);
     box-shadow: var(--shadow-1);
     color: var(--text);
+  }
+  /* base.css의 .btn:disabled와 같은 값 — 앱마다 갈리지 않게 맞춘다. */
+  .segbtn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .dropzone {
