@@ -3,6 +3,13 @@ dist/
 dist-pwa/
 coverage/
 .playwright-mcp/
+
+# 4층(Playwright) 실행 부산물 — 실패했을 때만 남는다.
+test-results/
+playwright-report/
+# 브라우저 층이 실패 순간에 남기는 화면 — 저장소에 바이너리를 두지 않는다.
+apps/*/tests-browser/__screenshots__/
+apps/*/.vitest-attachments/
 *.log
 .DS_Store
 .vite/

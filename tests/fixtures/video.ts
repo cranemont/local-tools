@@ -38,7 +38,7 @@ import {
   QTFF,
   WEBM,
   WebMOutputFormat,
-} from "../../apps/video/node_modules/mediabunny";
+} from "mediabunny";
 
 export type VideoContainer = "webm" | "mp4";
 export type VideoRotation = 0 | 90 | 180 | 270;

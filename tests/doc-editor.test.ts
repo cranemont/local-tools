@@ -44,7 +44,7 @@ import { createRequire } from "node:module";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { unzipSync } from "../apps/doc/node_modules/fflate";
+import { unzipSync } from "fflate";
 import {
   docFile,
   makeDocx,
@@ -61,7 +61,7 @@ const globals = globalThis as unknown as Record<string, unknown>;
 
 /** turndown이 node에서 쓰는 파서를 그 자리에서 꺼내 `DOMParser` 자리에 끼운다. */
 const requireFromTurndown = createRequire(
-  new URL("../apps/doc/node_modules/turndown/package.json", import.meta.url),
+  new URL("turndown/package.json", import.meta.url),
 );
 const domino = requireFromTurndown("@mixmark-io/domino") as {
   createDocument(html: string, force?: boolean): Document;

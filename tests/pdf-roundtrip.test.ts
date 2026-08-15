@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { EncryptedPDFError, PDFDocument } from "../apps/pdf/node_modules/pdf-lib";
+import { EncryptedPDFError, PDFDocument } from "pdf-lib";
 import { t } from "../apps/pdf/src/lib/i18n";
 import { buildPdf, buildPdfParts, type LibCache } from "../apps/pdf/src/lib/pdf/exporter";
 import { chunkEvery, resolveRange } from "../apps/pdf/src/lib/pdf/range";

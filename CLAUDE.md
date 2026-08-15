@@ -13,8 +13,12 @@
 pnpm install
 pnpm dev:pdf  # apps/pdf 개발 서버 (vite)
 pnpm build    # 전체 앱 빌드 — 자가해제형 단일 HTML 산출 → apps/*/dist/index.html
-pnpm check    # 전체 svelte-check 타입 체크 (0 errors/warnings 유지할 것)
+pnpm check    # svelte-check + 정적 자산 검사 + 테스트 1~3층 (0 errors/warnings 유지할 것)
+pnpm e2e:offline  # 4층 — 빌드 산출물을 브라우저로 조작(`pnpm build` 다음에 돈다)
 ```
+
+3층(브라우저 모드)과 4층은 헤드리스 크로미엄이 있어야 돈다. 처음 한 번:
+`pnpm exec playwright install --only-shell chromium`(맥 13~18초, 디스크 199MB).
 
 배포: main에 푸시하면 GitHub Actions가 빌드해 **https://tools.cranemont.com/** 로 올린다(`/pdf/`·`/gif/`·`/video/`·`/dev/`·`/image/`·`/sheet/`·`/doc/`·`/drop/`·`/lab/` + `/guide/`). 별도 배포 명령 없음.
 **`apps/stack`(기술 지도)은 배포하지 않는다** — 저장소를 설명하는 개발용 화면이라 `pnpm dev:stack`으로 로컬에서만 띄운다. 빌드·`pnpm check`(정합성 검사)는 그대로 돈다.
@@ -148,13 +152,19 @@ packages/pwa-kit/          # 공용 PWA 자산 도구 — OKLCH→sRGB·PNG 인�
                            #    소스. 시트와 문서 두 앱이 쓴다(글리프·매니페스트만 앱에 남김).
 packages/vite-plugin-self-extracting/  # ★ 자가해제 압축 후처리 플러그인 (모든 앱 공용)
 site/                # Pages 정적 파일 — 랜딩·404·sitemap.xml·og/(OG 이미지)
-.github/workflows/deploy.yml  # main 푸시마다 check+build → GitHub Pages 배포
+tests/               # 1·2층 명세 + fixtures/(표본 생성기 — 3·4층도 여기 것을 쓴다)
+apps/*/tests-browser/  # 3층 명세 — 캔버스·WebCodecs·wasm이 있어야 도는 것 (pdf·gif·image·doc)
+e2e/                 # 4층 명세 — 빌드 산출물을 Playwright로 조작. `@net`은 배포를 안 막는다
+.github/workflows/deploy.yml   # main 푸시마다 check+build+e2e:offline → GitHub Pages 배포
+.github/workflows/nightly.yml  # 하루 한 번 `@net` 갈래(CDN·릴레이)만 따로
 scripts/og-template.html      # OG 이미지(1200×630) 재생성용 템플릿(비배포)
+scripts/serve-dist.mjs        # 산출물을 배포와 같은 주소 모양으로 띄우는 정적 서버(4층 전용)
 scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는지 검사 (apps/stack의 check가 실행)
 ```
 
 새 도구는 `apps/<name>/`로 추가하고 `@local-tools/theme` 재사용. 루트 스크립트 규칙:
 `build`·`check`는 재귀(`pnpm -r`), `dev`·`preview`는 `dev:<app>` 식 앱별 스크립트.
+테스트 러너(vitest·playwright)는 **루트에만** 단다 — 앱에 달면 산출물과 무관한 무게가 앱에 얹힌다.
 
 ## 스택 / 대상
 
@@ -590,25 +600,55 @@ scripts/check-stack-sources.mjs  # ★ 기술 지도가 코드와 어긋났는�
 ## 검증 방법 (변경 후)
 
 1. `pnpm check && pnpm build` → 0 errors, 자가해제 로그 확인.
-   `check`가 `vitest run`을 물고 있어 테스트가 배포를 막는다.
-2. `dist/index.html`를 정적 서버(`python3 -m http.server`)로 띄워 브라우저로 확인:
-   드롭 → 썸네일 렌더 → 병합/회전/삭제/ZIP/암호 왕복. (`file://`는 확장 자동화가 접근 못 하니 정적 서버 사용.)
+   `check`가 `vitest run`을 물고 있어 1~3층이 배포를 막는다.
+2. `pnpm e2e:offline` → 방금 만든 산출물을 열어 앱마다 한 갈래씩 왕복한다. 배포에서도
+   `pnpm build` 다음에 돈다(`pnpm check`가 build보다 먼저라 `check`에는 못 넣는다).
+3. 손으로 볼 것이 남았으면 `node scripts/serve-dist.mjs`로 산출물을 배포와 같은 주소 모양
+   (`/pdf/`·`/doc/` …)으로 띄운다. `file://`로 열면 apps/doc이 wasm을 배포 주소에서 받아
+   방금 만든 것이 아닌 옛 바이트를 재게 된다.
 
 ### 테스트가 명세다
 
 산문 설명 대신 테스트로 동작을 못 박는다. `describe`/`it`은 동작을 서술하는 한국어로 쓴다.
-테스트는 앱 밖 `tests/`에 둔다 — 앱 소스에 섞으면 `svelte-check`가 같이 훑고 앱마다 vitest를
-devDependency로 달아야 한다. 새 의존성은 **루트 devDependencies**에만 넣는다
+새 의존성은 **루트 devDependencies**에만 넣는다
 (`scripts/check-stack-sources.mjs`는 앱 `dependencies`만 보므로 지도와 얽히지 않는다).
 
-지금 재는 것은 두 층이다.
+네 층이 있고, 앞 셋은 `pnpm check`가 4층은 `pnpm e2e:offline`이 돌린다.
+층을 가르는 기준은 하나다 — **그 층이 아니면 못 잡는 것이 있는가.**
 
-- **1층 — node 순수 함수.** 브라우저 없이 도는 계산.
-- **2층 — 룬 상태 기계와 실물 파일 왕복.** `vitest.config.ts`의 `svelte()` 플러그인 한 줄로 열린다.
+- **1층 — node 순수 함수**(`tests/`). 브라우저 없이 도는 계산.
+- **2층 — 룬 상태 기계와 실물 파일 왕복**(`tests/`, 1층과 같은 러너).
   `.svelte.ts` 싱글턴은 `import { editor } from "../apps/<앱>/src/lib/editor/state.svelte"`로
   부른다(확장자 없이). 테스트 파일에서는 룬을 못 쓰지만 메서드를 부르고 `$derived` 게터를
   그냥 읽으면 값이 나온다.
+- **3층 — 브라우저 모드**(`apps/<앱>/tests-browser/`, 헤드리스 크로미엄). 캔버스·WebCodecs·
+  `ImageDecoder`·wasm·DOM. 지금 pdf·gif·image·doc 넷이 있다.
+- **4층 — 빌드 산출물**(`e2e/`, Playwright). `dist/index.html` 한 장을 열어 파일을 넣고
+  결과 파일을 받아 낸다.
 
-캔버스·WebCodecs·wasm·DOM이 필요한 코드는 아직 사각지대이고 손으로 브라우저를 연다.
-설계와 다음 층 계획은 `docs/local/test-harness-plan.md`에 있다(gitignore — 저장소에 안 올린다).
+**앱 소스는 여전히 `tests-browser/`를 안 본다.** 앱 tsconfig의 `include`가 `src/**`뿐이라
+`svelte-check`에 안 걸리고, vitest도 앱이 아니라 루트에 달려 있다.
+
+3층이 필요한 판단 기준: 2층에서 죽는가(`document`·`OffscreenCanvas`·`ImageDecoder`·wasm).
+4층이 필요한 판단 기준: **빌드 산출물에서만 깨지는가.** 3층은 앱 소스를 개발 서버로 띄우므로
+자가해제 후처리가 조용히 건너뛰거나(위 3번) 워커·wasm이 인라인에서 빠져도 초록이다.
+화면 조작 자체는 3층이 훨씬 싸다 — 4층은 앱마다 한 갈래씩만 둔다.
+
+**표본은 두 층이 함께 쓴다**(`tests/fixtures/`). 그래서 생성기가 앱 패키지를 **이름으로**
+부르고, 그 이름을 앱의 것으로 잇는 표가 두 곳에 있다 — `vitest.config.ts`의 `APP_DEPS`
+(1·3층)와 루트 `tsconfig.json`의 `paths`(4층·편집기). 갈라지면 한쪽 층에서만 안 풀린다.
+node 전용 코드가 든 생성기는 브라우저 층이 못 쓰므로 갈라 뒀다 —
+`image.ts`(napi 캔버스)에서 `rgba.ts`를, `doc.ts`(node fs로 wasm 적재)에서 `hwp-build.ts`와
+`docx.ts`를 뺀 것이 그것이다.
+
+**네트워크에 기대는 것은 배포를 막지 않는다.** 4층에서 `@net` 태그를 달면
+`pnpm e2e:offline`이 건너뛰고 나이틀리(`.github/workflows/nightly.yml`)가 돌린다 —
+jsdelivr나 공개 릴레이가 죽었다고 배포가 멈추면 안 되고, 그 갈래가 잡는 것(CDN 판 교체로
+SRI가 어긋남)은 하루 늦게 알아도 된다. 오프라인 명세는 반대로 **밖으로 나가면 실패한다**
+(`page.route`로 자기 자신 말고 다 막는다).
+
+아직 사각지대인 것: `.svelte` 컴포넌트 마운트, 골든 이미지(같은 캔버스 연산이 Chrome과
+node Skia에서 최대 8/255 어긋나 안 쓴다), 실기기 두 대 drop 검증, 엑셀 상호운용,
+`tests/` 자체의 타입 검사(루트 tsconfig는 관문이 아니다 — 그 파일 머리말 참고).
+설계와 남은 계획은 `docs/local/test-harness-plan.md`에 있다(gitignore — 저장소에 안 올린다).
 

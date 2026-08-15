@@ -5,14 +5,14 @@
  * **바이너리를 커밋하지 않는다**(`packages/pwa-kit`이 PNG를 코드로 인코딩하는 관행과 같다).
  * 표본은 테스트가 돌 때 코드로 짓는다.
  *
- * **import 경로가 두 갈래다.** pnpm이 앱마다 `node_modules`를 갈라 놓아서 루트에 걸린
- * `tests/`에서는 앱 의존성이 이름으로 안 풀린다.
- *   - 앱 의존성(`pdf-lib`·`gifenc`)은 앱의 `node_modules`를 경로로 지목한다 —
- *     `import { PDFDocument } from "../../apps/pdf/node_modules/pdf-lib"`.
- *     앱이 쓰는 판과 표본이 쓰는 판을 갈라 놓지 않으려는 것이다.
- *   - 표본 전용 의존성(`@napi-rs/canvas`·`@neslinesli93/qpdf-wasm`)은 루트
- *     devDependency라 이름으로 부른다. 앱 `dependencies`에 넣으면
- *     `scripts/check-stack-sources.mjs`가 기술 지도와 안 맞는다고 잡는다.
+ * **의존성은 전부 이름으로 부른다.** pnpm이 앱마다 `node_modules`를 갈라 놓아 루트에
+ * 걸린 `tests/`에서는 `pdf-lib`이 이름으로 안 풀리는데, `vitest.config.ts`의 `APP_DEPS`가
+ * node 층에 별칭을 걸어 앱의 것으로 잇는다. 어느 앱의 판을 쓰는지는 그 표 한 곳에 적혀 있다.
+ * 여기서 경로로 지목하지 말 것 — 브라우저 층(root가 앱)이 같은 생성기를 쓰는데, 경로 import는
+ * Vite에게 소스 파일이라 사전 번들에서 빠지고 그 안의 CJS 의존이 깨진 채 나간다.
+ * 표본 전용 의존성(`@napi-rs/canvas`·`@neslinesli93/qpdf-wasm`)은 루트 devDependency라
+ * 별칭 없이 풀린다. 앱 `dependencies`에 넣으면 `scripts/check-stack-sources.mjs`가
+ * 기술 지도와 안 맞는다고 잡는다.
  *
  * **같은 입력이면 같은 바이트**여야 한다. 표본이 실행마다 흔들리면 그 표본을 쓰는 모든
  * 테스트가 흔들려, 빨간 불이 코드 때문인지 표본 때문인지 못 가른다. 이 성질은
@@ -28,7 +28,7 @@
  * 글꼴은 Helvetica(표준 14종)다. 한글은 안 그려진다 — 표본 문자열은 ASCII로 쓸 것.
  */
 
-import { degrees, PDFDocument, StandardFonts } from "../../apps/pdf/node_modules/pdf-lib";
+import { degrees, PDFDocument, StandardFonts } from "pdf-lib";
 
 /** 쪽 하나의 명세. */
 export interface PdfPageSpec {

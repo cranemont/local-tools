@@ -8,9 +8,9 @@
  * (CLAUDE.md 24번).
  */
 
-import * as gifenc from "../../apps/gif/node_modules/gifenc";
+import * as gifenc from "gifenc";
 
-import { makeRgba, type ImageSpec, type Rgba } from "./image";
+import { makeRgba, type ImageSpec, type Rgba } from "./rgba";
 
 /**
  * gifenc 1.0.3에는 타입 선언이 없다. 앱은 `apps/gif/src/lib/gif/gifenc.d.ts`의

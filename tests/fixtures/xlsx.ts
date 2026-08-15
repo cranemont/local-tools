@@ -16,12 +16,11 @@
  * 사실을 재려면 못 읽는 것을 지을 수 있어야 한다.
  */
 
-// ExcelJS는 apps/sheet의 의존성이라 앱의 node_modules를 지목한다(앱이 쓰는 판과
-// 표본이 쓰는 판을 갈라 놓지 않는다). fflate는 사정이 다르다 — 시트 앱은 fflate를
-// 안 쓰고, 여기서는 xlsx가 zip이라는 사실을 확인하는 판독기로만 쓴다. 그래서
-// 저장소에 이미 있는 판(apps/pdf) 하나를 빌려 온다.
-import ExcelJS from "../../apps/sheet/node_modules/exceljs";
-import { strFromU8, unzipSync } from "../../apps/pdf/node_modules/fflate";
+// 둘 다 이름으로 부르고 `vitest.config.ts`의 `APP_DEPS`가 어느 앱의 판인지 정한다.
+// ExcelJS는 시트가 쓰는 그 판이어야 하고, fflate는 사정이 다르다 — 시트 앱은 fflate를
+// 안 쓰고 여기서는 xlsx가 zip이라는 사실을 확인하는 판독기로만 쓴다.
+import ExcelJS from "exceljs";
+import { strFromU8, unzipSync } from "fflate";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type AnyCell = any;

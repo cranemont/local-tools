@@ -848,7 +848,7 @@ describe("출력 설정 한 덩어리", () => {
   it("되돌리기는 치수 칸을 안 되돌린다 — 스냅샷에 없다", async () => {
     const ed = await withOneItem();
     ed.setResizeWidth(WIDTH_DEFAULT);
-    ed.rotate();
+    ed.rotate(1);
     ed.undo();
     ed.setResizeMode("width", { w: 800, h: 600 });
     expect(ed.resizeWidth).toBe(WIDTH_DEFAULT);

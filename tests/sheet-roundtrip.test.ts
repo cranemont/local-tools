@@ -612,7 +612,17 @@ describe("xlsx 파일 속 — zip을 풀어 XML을 직접 본다", () => {
 // ────────────────────────────────────────────────────────────────
 // 조건부 서식. 시트의 규칙 일곱 갈래가 엑셀 규칙으로 나갔다가 되읽힌다.
 
-function rule(part: Omit<CondRule, "id">): CondRule {
+/**
+ * 갈래마다 다른 칸을 그대로 받는다. 그냥 `Omit<CondRule, "id">`로 적으면 합집합이 무너져
+ * 모든 갈래에 공통인 칸만 남고, `op`·`stops` 같은 갈래 전용 칸이 "없는 속성"이 된다.
+ */
+type CondRuleSpec = CondRule extends infer R
+  ? R extends CondRule
+    ? Omit<R, "id">
+    : never
+  : never;
+
+function rule(part: CondRuleSpec): CondRule {
   return { id: newRuleId(), ...part } as CondRule;
 }
 

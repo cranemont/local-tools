@@ -157,7 +157,9 @@ export function isBlankInput(input: ValidationInput): boolean {
  * 사용자 입력을 되돌리면 그 칸에는 아무것도 넣을 수 없게 된다.
  */
 export function checkValue(
-  rule: ValidationRule | undefined,
+  // null도 받는다 — 규칙이 없다는 뜻은 하나인데 만드는 자리마다 표현이 달랐다.
+  // 칸에 규칙이 안 붙어 있으면 undefined고, `fromXlsxValidation`이 못 읽으면 null이다.
+  rule: ValidationRule | null | undefined,
   input: ValidationInput,
   ctx: ValidationContext = {},
 ): Verdict {

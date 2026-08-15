@@ -1,0 +1,36 @@
+# 남의 인프라에 달린 갈래(`@net`)를 하루 한 번 돌린다.
+#
+# 배포(deploy.yml)에서 뺀 이유: jsdelivr가 느리거나 공개 릴레이 하나가 죽었다고 배포가
+# 멈추면 안 된다. 여기가 잡는 것(CDN 판 교체로 SRI가 어긋남, P2P 회귀)은 하루 늦게 알아도
+# 되는 종류다. 빨간 불이 뜨면 사람이 보고, 남의 서버 사정이면 그 명세를 잠시 끈다.
+name: nightly
+
+on:
+  schedule:
+    # 15:00 UTC = 한국 자정.
+    - cron: "0 15 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  net:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps --only-shell chromium
+      - run: pnpm build
+      - run: pnpm e2e --grep @net
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-trace
+          path: test-results/
+          retention-days: 7

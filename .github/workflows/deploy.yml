@@ -36,8 +36,15 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `pnpm check`의 브라우저 층(캔버스·WebCodecs·wasm)이 이 셸에서 돈다.
+      # 헤드리스 셸만 받는다(전체 크로미엄의 1/3). actions/cache는 안 건다 —
+      # playwright 문서가 복원 시간이 다운로드 시간과 비슷하다며 말린다.
+      - run: pnpm exec playwright install --with-deps --only-shell chromium
       - run: pnpm check
       - run: pnpm build
+      # 4층 — 빌드 산출물을 브라우저로 조작한다. `pnpm check`가 build보다 먼저 돌아서
+      # 여기 따로 있다. 네트워크에 기대는 것(@net)은 배포를 막지 않는다.
+      - run: pnpm e2e:offline
       - name: Assemble site
         run: |
           mkdir -p _site/pdf _site/gif _site/video _site/dev _site/image _site/drop _site/sheet _site/doc _site/lab

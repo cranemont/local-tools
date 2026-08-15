@@ -20,7 +20,7 @@ import {
   PDFName,
   PDFRawStream,
   type PDFPage,
-} from "../../apps/pdf/node_modules/pdf-lib";
+} from "pdf-lib";
 import { inflateSync } from "node:zlib";
 
 /** 쪽마다 그려진 글자 한 줄. 쪽 순서 그대로다. */
