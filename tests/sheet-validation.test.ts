@@ -209,6 +209,26 @@ describe("목록 규칙", () => {
     expect(checkValue(nums, input("2")).ok).toBe(true);
     expect(reasonOf(nums, "4")).toBe("list");
   });
+
+  /**
+   * 글자가 안 맞으면 값으로 한 번 더 본다. 안 그러면 넣은 직후에 위반 표시가 붙는
+   * 칸이 생긴다 — 목록에 `1.50`을 적어 두고 `1.50`을 치면 입력은 통과하는데
+   * (친 글자가 항목과 같다) 칸에 남는 값은 1.5이고 화면 글자는 "1.5"다.
+   */
+  it("친 글자가 안 맞아도 값이 같으면 통과한다 — 목록의 1.50과 셀의 1.5", () => {
+    const nums = rule({ kind: "list", source: "1.50, 2.50" });
+    expect(checkValue(nums, input("1.50")).ok).toBe(true);
+    // 이미 들어 있는 칸을 다시 볼 때는 화면 글자가 "1.5"로 온다.
+    expect(checkValue(nums, { text: "1.5", value: 1.5 }).ok).toBe(true);
+    expect(reasonOf(nums, "3.5")).toBe("list");
+  });
+
+  it("값 대조는 수일 때만 한다 — 앞자리 0이 다른 번호를 같다고 하지 않는다", () => {
+    const codes = rule({ kind: "list", source: "010, 011" });
+    expect(checkValue(codes, input("010")).ok).toBe(true);
+    // "10"은 수 10이고 항목 "010"은 글자다(parseInput이 앞자리 0을 지킨다).
+    expect(reasonOf(codes, "10")).toBe("list");
+  });
 });
 
 describe("정수 규칙", () => {
@@ -534,6 +554,67 @@ describe("목록 원본 범위도 함께 밀린다", () => {
     const list = byRange("A1:A9");
     shiftValidationRows(list, 0, 1);
     expect(list[0].rule.source).toBe("A1:A9");
+  });
+});
+
+/**
+ * 사용자 지정 수식도 셀 수식과 같은 보정을 탄다(`formula/adjust.ts`).
+ * 안 태우면 `A5>0`으로 걸어 둔 규칙이 1행을 끼운 뒤에도 A5를 본다 —
+ * 한 줄 내려간 데이터가 아니라 새로 생긴 빈 줄을 검사한다.
+ */
+describe("사용자 지정 수식도 함께 밀린다", () => {
+  // 규칙 범위는 C5:C9 — 열 검사에서 0열을 지워도 규칙 자체는 남아야 수식을 볼 수 있다.
+  const byFormula = (formula: string): ValidationRange[] => [
+    { area: area(4, 2, 8, 2), rule: rule({ kind: "custom", formula }) },
+  ];
+  const shiftedRow = (formula: string, at: number, count: number): string | undefined =>
+    shiftValidationRows(byFormula(formula), at, count)[0]?.rule.formula;
+  const shiftedCol = (formula: string, at: number, count: number): string | undefined =>
+    shiftValidationCols(byFormula(formula), at, count)[0]?.rule.formula;
+
+  it("위에 행을 끼우면 수식 참조도 내려간다", () => {
+    expect(shiftedRow("A5>0", 0, 1)).toBe("A6>0");
+    expect(shiftedRow("COUNTIF(B1:B9,A5)=0", 0, 2)).toBe("COUNTIF(B3:B11,A7)=0");
+  });
+
+  it("보정 범위 밖 참조는 그대로다", () => {
+    expect(shiftedRow("A5>0", 9, 3)).toBe("A5>0");
+    expect(shiftedCol("C5>0", 5, 1)).toBe("C5>0");
+  });
+
+  it("절대 참조도 함께 밀린다 — $는 복사할 때만 버틴다", () => {
+    expect(shiftedRow("$A$5>0", 0, 1)).toBe("$A$6>0");
+    expect(shiftedCol("$C$5>0", 0, 1)).toBe("$D$5>0");
+  });
+
+  it("행을 지우면 당겨지고, 가리키던 줄을 지우면 #REF!가 된다", () => {
+    expect(shiftedRow("A5>0", 0, -2)).toBe("A3>0");
+    expect(shiftedRow("A5>0", 4, -1)).toBe("#REF!>0");
+  });
+
+  it("열도 같다", () => {
+    expect(shiftedCol("C5>0", 0, 1)).toBe("D5>0");
+    expect(shiftedCol("C5>0", 0, -1)).toBe("B5>0");
+  });
+
+  it("다른 시트를 가리키는 참조는 밀지 않는다", () => {
+    expect(shiftedRow("Sheet2!A5>0", 0, 1)).toBe("Sheet2!A5>0");
+    expect(shiftedCol("Sheet2!C5>0", 0, 1)).toBe("Sheet2!C5>0");
+  });
+
+  it("수식이 비어 있거나 읽을 수 없으면 그대로 둔다", () => {
+    expect(shiftedRow("", 0, 1)).toBe("");
+    expect(shiftedRow("A5>", 0, 1)).toBe("A5>");
+  });
+
+  it("규칙 객체를 제자리에서 고치지 않는다", () => {
+    const list = byFormula("A5>0");
+    shiftValidationRows(list, 0, 1);
+    expect(list[0].rule.formula).toBe("A5>0");
+  });
+
+  it("범위가 통째로 지워지면 규칙도 사라진다", () => {
+    expect(shiftValidationRows(byFormula("A5>0"), 4, -5)).toEqual([]);
   });
 });
 

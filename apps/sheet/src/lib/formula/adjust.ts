@@ -116,14 +116,15 @@ export function stringify(node: Node): string {
   }
 }
 
-type RefMapper = (ref: RefAddr) => RefAddr;
+/** 두 번째 인자는 참조 앞에 붙은 시트 이름이다 — 없으면 수식이 든 시트를 가리킨다. */
+type RefMapper = (ref: RefAddr, sheet: string | undefined) => RefAddr;
 
 function mapRefs(node: Node, fn: RefMapper): Node {
   switch (node.k) {
     case "ref":
-      return { ...node, at: fn(node.at) };
+      return { ...node, at: fn(node.at, node.sheet) };
     case "range":
-      return { ...node, from: fn(node.from), to: fn(node.to) };
+      return { ...node, from: fn(node.from, node.sheet), to: fn(node.to, node.sheet) };
     case "unary":
       return { ...node, x: mapRefs(node.x, fn) };
     case "percent":
@@ -159,10 +160,22 @@ export function translateFormula(formula: string, dRow: number, dCol: number): s
   });
 }
 
+/**
+ * 다른 시트를 가리키는 참조인가 — 그런 참조는 행·열 삽입/삭제에서 움직이지 않는다.
+ *
+ * Sheet1에서 행을 끼워도 `Sheet2!A5`가 가리키는 칸은 그대로다. 예전엔 시트 이름을
+ * 안 보고 밀어서, 1행을 끼우면 `=Sheet2!A5`가 `=Sheet2!A6`이 됐다.
+ * (`Sheet1`에서 `=Sheet1!A5`처럼 자기 시트를 이름으로 적은 참조는 여기서 못 가른다 —
+ * 이 함수는 수식이 어느 시트에 있는지 모른다. 그 참조는 밀지 않는다.)
+ */
+function otherSheet(sheet: string | undefined): boolean {
+  return sheet !== undefined;
+}
+
 /** 행 삽입/삭제에 맞춰 참조를 민다. count가 음수면 삭제. */
 export function adjustRows(formula: string, at: number, count: number): string {
-  return rewrite(formula, (ref) => {
-    if (ref.row < 0) return ref;
+  return rewrite(formula, (ref, sheet) => {
+    if (otherSheet(sheet) || ref.row < 0) return ref;
     if (count > 0) return ref.row >= at ? { ...ref, row: ref.row + count } : ref;
     const removed = -count;
     if (ref.row >= at && ref.row < at + removed) return { ...ref, row: -1 }; // 지워진 행을 가리킴
@@ -172,8 +185,8 @@ export function adjustRows(formula: string, at: number, count: number): string {
 
 /** 열 삽입/삭제에 맞춰 참조를 민다. count가 음수면 삭제. */
 export function adjustCols(formula: string, at: number, count: number): string {
-  return rewrite(formula, (ref) => {
-    if (ref.col < 0) return ref;
+  return rewrite(formula, (ref, sheet) => {
+    if (otherSheet(sheet) || ref.col < 0) return ref;
     if (count > 0) return ref.col >= at ? { ...ref, col: ref.col + count } : ref;
     const removed = -count;
     if (ref.col >= at && ref.col < at + removed) return { ...ref, col: -1 };

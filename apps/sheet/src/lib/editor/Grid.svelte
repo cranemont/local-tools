@@ -417,7 +417,12 @@
 
   // ── 편집 상자 ────────────────────────────────────────────────
 
-  function commitFromInput(move: { row: number; col: number }): void {
+  /**
+   * `keepOnReject`는 키보드로 확정할 때만 켠다 — 규칙에 걸려 되돌아가면 편집 상자가
+   * 그 자리에 남아 곧바로 고쳐 칠 수 있다. 다른 칸을 눌러 확정한 경우에는 끈다
+   * (상자만 남고 커서는 누른 칸으로 가 버린다).
+   */
+  function commitFromInput(move: { row: number; col: number }, keepOnReject = false): void {
     // 편집 상자가 DOM에 없으면 확정하지 않는다. 예전엔 빈 글자로 떨어져서
     // (그 줄이 필터에 걸려 사라진 뒤 다른 칸을 누르면) 보이지도 않는 칸이 지워졌다.
     if (!editInput) {
@@ -425,17 +430,18 @@
       scroller?.focus();
       return;
     }
-    editor.commitEdit(editInput.value, move);
-    scroller?.focus();
+    editor.commitEdit(editInput.value, move, keepOnReject);
+    if (editor.editing) editInput?.focus();
+    else scroller?.focus();
   }
 
   function editKeyDown(event: KeyboardEvent): void {
     if (event.key === "Enter") {
       event.preventDefault();
-      commitFromInput({ row: event.shiftKey ? -1 : 1, col: 0 });
+      commitFromInput({ row: event.shiftKey ? -1 : 1, col: 0 }, true);
     } else if (event.key === "Tab") {
       event.preventDefault();
-      commitFromInput({ row: 0, col: event.shiftKey ? -1 : 1 });
+      commitFromInput({ row: 0, col: event.shiftKey ? -1 : 1 }, true);
     } else if (event.key === "Escape") {
       event.preventDefault();
       editor.cancelEdit();

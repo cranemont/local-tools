@@ -291,7 +291,8 @@ function readValidations(ws: AnySheet): ValidationRange[] {
 //     못 읽는다. 그 수를 세어 화면에 알린다(`XlsxRead.condSkipped`) — 조용히 잃으면
 //     저장할 때 파일에서 사라진다.
 //   · **"참이면 중지"는 왕복하지 않는다.** ExcelJS가 stopIfTrue 속성을 쓰지도 읽지도
-//     않는다(cf-rule-xform). 알려진 한계다.
+//     않는다(cf-rule-xform.js 어디에도 그 이름이 없다). 어댑터 안에서는 못 고치므로
+//     저장할 때 몇 개를 잃는지 세어 화면에 알린다(`xlsxLosses`).
 
 const CELL_IS_OPS: Record<string, CompareOp> = {
   equal: "eq",
@@ -354,23 +355,50 @@ function condPointTo(point: CondPoint): AnyCell {
   return { type: point.type, value: point.value ?? 0 };
 }
 
+/**
+ * dxf(조건부 서식이 칠하는 서식) → 우리 서식. **셀 서식을 읽는 `readStyle`을 쓰지 않는다.**
+ *
+ * 두 가지가 다르다.
+ *   ① 색을 버리지 않는다. `readStyle`은 흰 채우기(#ffffff)와 검은 글자색(#000000)을
+ *      "지정 안 함"으로 보고 버리는데(셀 기본값이라서), 규칙이 정한 색은 사용자가
+ *      고른 값이다 — 흰 글자에 검은 배경을 걸어 둔 규칙이 열 때마다 사라졌다.
+ *   ② 채우기색을 `bgColor`에서 먼저 찾는다. 엑셀은 dxf 채우기를 patternType 없이
+ *      `<patternFill><bgColor rgb=…/></patternFill>`로 쓴다(ExcelJS README의 조건부
+ *      서식 예제도 bgColor를 쓴다). fgColor는 우리가 예전에 쓴 파일을 위해 남긴다.
+ */
 function condStyleFrom(raw: unknown): CondStyle {
   // 색조·막대 규칙에는 dxf 서식이 없다 — 색이 값에서 나오기 때문이다.
   if (!raw || typeof raw !== "object") return {};
-  const style = readStyle(raw as AnyCell);
-  if (!style) return {};
-  return {
-    ...(style.bold ? { bold: true } : {}),
-    ...(style.italic ? { italic: true } : {}),
-    ...(style.strike ? { strike: true } : {}),
-    ...(style.color ? { color: style.color } : {}),
-    ...(style.fill ? { fill: style.fill } : {}),
-  };
+  const dxf = raw as AnyCell;
+  const style: CondStyle = {};
+
+  const font = dxf.font;
+  if (font) {
+    if (font.bold) style.bold = true;
+    if (font.italic) style.italic = true;
+    if (font.strike) style.strike = true;
+    const color = argbToHex(font.color);
+    if (color) style.color = color;
+  }
+
+  const fill = dxf.fill;
+  if (fill?.type === "pattern" && fill.pattern !== "none") {
+    const bg = argbToHex(fill.bgColor) ?? argbToHex(fill.fgColor);
+    if (bg) style.fill = bg;
+  }
+
+  return style;
 }
 
 function condStyleTo(style: CondStyle): AnyCell {
   const dxf: AnyCell = {};
   writeStyle(dxf, style);
+  if (style.fill) {
+    // 같은 색을 두 자리에 다 적는다. 관례는 bgColor이지만(위 condStyleFrom 참고)
+    // 실물 엑셀로 열어 확인한 적이 없어, 어느 쪽을 읽어도 같은 색이 나오게 둔다.
+    const argb = hexToArgb(style.fill);
+    dxf.fill = { type: "pattern", pattern: "solid", fgColor: { argb }, bgColor: { argb } };
+  }
   return dxf;
 }
 
@@ -501,12 +529,13 @@ function absoluteRange(area: Area): string {
 }
 
 /**
- * 우리 규칙 → ExcelJS 규칙 하나.
+ * 우리 규칙 → ExcelJS 규칙 하나. `condRulesFromXlsx`의 반대쪽이고, 여기도
+ * 엑셀 파일 없이 시험할 수 있어 내보낸다(tests/sheet-condformat.test.ts).
  *
  * 수식 규칙(`expression`)의 기준 칸은 **범위의 왼쪽 위**다 — 엑셀이 나머지 칸에는
  * 그만큼 밀어서 적용한다.
  */
-function toXlsxCondRule(rule: CondRule): AnyCell {
+export function toXlsxCondRule(rule: CondRule): AnyCell {
   const style = isStyled(rule) ? condStyleTo(rule.style) : undefined;
   const head = cellName(rule.range.top, rule.range.left);
 
@@ -580,6 +609,33 @@ function parseMergeRange(text: string): MergeArea | null {
   const left = col(m[1]);
   const right = col(m[3]);
   return { top: Math.min(top, bottom), left: Math.min(left, right), bottom: Math.max(top, bottom), right: Math.max(left, right) };
+}
+
+/**
+ * 저장해도 파일에 담기지 않는 것의 수. 고칠 수 없는 한계라 세어서 알린다.
+ *
+ * 읽을 때의 `XlsxRead.condSkipped`와 짝이다 — 그쪽은 파일에서 못 읽은 것, 이쪽은
+ * 파일에 못 쓰는 것이다. 둘 다 조용히 넘기면 왕복 한 번에 규칙이 사라진다.
+ */
+export interface XlsxLoss {
+  /** "참이면 중지"가 걸린 조건부 서식 규칙 수. ExcelJS가 그 속성을 다루지 않는다. */
+  stopIfTrue: number;
+  /** 엑셀 모양으로 옮기지 못하는 입력 규칙 수(비교값이 수로 안 읽히는 규칙 등). */
+  validation: number;
+}
+
+export function xlsxLosses(book: WorkbookDoc): XlsxLoss {
+  let stopIfTrue = 0;
+  let validation = 0;
+  for (const sheet of book.sheets) {
+    for (const rule of sheet.condFormats ?? []) {
+      if (rule.stopIfTrue) stopIfTrue++;
+    }
+    for (const entry of sheet.validations ?? []) {
+      if (!toXlsxValidation(entry.rule)) validation++;
+    }
+  }
+  return { stopIfTrue, validation };
 }
 
 /** 통합문서 → xlsx 바이트. */

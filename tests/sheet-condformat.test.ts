@@ -46,7 +46,13 @@ import { parseInput } from "../apps/sheet/src/lib/sheet/model";
 import { formatValue } from "../apps/sheet/src/lib/sheet/numfmt";
 import { emptySheet, ERR, type Scalar, type WorkbookDoc } from "../apps/sheet/src/lib/sheet/types";
 import { cellKey } from "../apps/sheet/src/lib/sheet/a1";
-import { condRulesFromXlsx, readXlsx, writeXlsx } from "../apps/sheet/src/lib/sheet/xlsx";
+import {
+  condRulesFromXlsx,
+  readXlsx,
+  toXlsxCondRule,
+  writeXlsx,
+  xlsxLosses,
+} from "../apps/sheet/src/lib/sheet/xlsx";
 
 /** 값 하나를 조건부 서식이 보는 모습으로. 표시 형식을 주면 화면 글자도 그 형식을 따른다. */
 function cell(v: Scalar, fmt?: string): CondCell {
@@ -655,5 +661,148 @@ describe("xlsx 왕복", () => {
       parseArea("A1:A3"),
       parseArea("C1:C3"),
     ]);
+  });
+
+  /**
+   * dxf(규칙이 칠하는 서식)는 셀 채우기와 읽고 쓰는 자리가 다르다.
+   * 엑셀은 `<patternFill><bgColor …/></patternFill>`로 쓰고 ExcelJS README의
+   * 조건부 서식 예제도 bgColor를 쓴다. 우리가 예전에 쓴 파일은 fgColor에 있다.
+   */
+  it("채우기색이 bgColor로도 나간다 — 엑셀이 읽는 자리다", () => {
+    const out = toXlsxCondRule(compare("gt", "1")) as {
+      style: { fill: Record<string, unknown>; font: Record<string, unknown> };
+    };
+    expect(out.style.fill).toEqual({
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFEE2E2" },
+      bgColor: { argb: "FFFEE2E2" },
+    });
+    expect(out.style.font).toEqual({ color: { argb: "FF991B1B" } });
+  });
+
+  it("엑셀이 bgColor로만 쓴 dxf도 읽는다", () => {
+    const read = condRulesFromXlsx([
+      {
+        ref: "A1:A9",
+        rules: [
+          {
+            type: "cellIs",
+            priority: 1,
+            operator: "greaterThan",
+            formulae: ["10"],
+            // 엑셀이 쓰는 모양 — patternType이 없고 색은 bgColor 하나뿐이다.
+            style: { fill: { type: "pattern", bgColor: { argb: "FFFFC7CE" } } },
+          },
+        ],
+      },
+    ]);
+    expect(read.rules[0].kind === "compare" && read.rules[0].style.fill).toBe("#ffc7ce");
+  });
+
+  it("우리가 예전에 쓴 fgColor 파일도 그대로 읽는다", () => {
+    const read = condRulesFromXlsx([
+      {
+        ref: "A1:A9",
+        rules: [
+          {
+            type: "cellIs",
+            priority: 1,
+            operator: "greaterThan",
+            formulae: ["10"],
+            style: { fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } } },
+          },
+        ],
+      },
+    ]);
+    expect(read.rules[0].kind === "compare" && read.rules[0].style.fill).toBe("#fee2e2");
+  });
+
+  /**
+   * 셀 서식을 읽을 때는 흰 채우기·검은 글자색을 "지정 안 함"으로 보고 버린다(기본값이라서).
+   * 규칙이 정한 색은 사용자가 고른 값이라 버리면 규칙이 열 때마다 색을 잃는다.
+   */
+  it("흰 채우기·검은 글자색도 규칙에서는 살아 온다", () => {
+    const read = condRulesFromXlsx([
+      {
+        ref: "A1:A9",
+        rules: [
+          {
+            type: "cellIs",
+            priority: 1,
+            operator: "equal",
+            formulae: ["0"],
+            style: {
+              font: { color: { argb: "FF000000" } },
+              fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFFFFF" } },
+            },
+          },
+        ],
+      },
+    ]);
+    const rule = read.rules[0];
+    expect(rule.kind === "compare" && rule.style).toEqual({ color: "#000000", fill: "#ffffff" });
+  });
+
+  it("흰 채우기·검은 글자색이 저장을 건너도 남는다", async () => {
+    const white: CondStyle = { fill: "#ffffff", color: "#000000" };
+    const back = await roundTrip([
+      { id: "a", range: parseArea("A1:A9") as Area, kind: "blank", op: "blank", style: white },
+    ]);
+    expect(back[0].kind === "blank" && back[0].style).toEqual(white);
+  });
+});
+
+/**
+ * 저장해도 파일에 안 담기는 것 — 고칠 수 없는 한계라 세어서 화면에 알린다.
+ * 조용히 넘기면 왕복 한 번에 규칙이 사라진다(읽을 때의 `condSkipped`와 짝이다).
+ */
+describe("xlsx로 못 내보내는 것 세기", () => {
+  function bookOf(patch: (sheet: ReturnType<typeof emptySheet>) => void): WorkbookDoc {
+    const sheet = emptySheet("Sheet1");
+    patch(sheet);
+    return { sheets: [sheet], active: 0, filename: "x.xlsx", origin: "xlsx" };
+  }
+
+  const plain = (stopIfTrue?: boolean): CondRule => ({
+    id: id(),
+    range: parseArea("A1:A9") as Area,
+    kind: "blank",
+    op: "blank",
+    style: RED,
+    ...(stopIfTrue ? { stopIfTrue: true } : {}),
+  });
+
+  it("담기는 것만 있으면 0이다", () => {
+    expect(xlsxLosses(bookOf((s) => (s.condFormats = [plain()])))).toEqual({
+      stopIfTrue: 0,
+      validation: 0,
+    });
+  });
+
+  it('"참이면 중지"가 걸린 규칙을 센다 — ExcelJS가 그 속성을 다루지 않는다', () => {
+    const book = bookOf((s) => (s.condFormats = [plain(true), plain(), plain(true)]));
+    expect(xlsxLosses(book).stopIfTrue).toBe(2);
+  });
+
+  it("엑셀 모양으로 못 옮기는 입력 규칙도 센다", () => {
+    const book = bookOf((s) => {
+      s.validations = [
+        // 비교값이 수로 안 읽히는 규칙 — 엑셀에서 온 `=$A$1` 같은 경계가 이 꼴이다.
+        { area: parseArea("B1:B9") as Area, rule: { kind: "whole", op: "gt", value: "$A$1", allowBlank: true, action: "reject" } },
+        { area: parseArea("C1:C9") as Area, rule: { kind: "whole", op: "gt", value: "10", allowBlank: true, action: "reject" } },
+      ];
+    });
+    expect(xlsxLosses(book)).toEqual({ stopIfTrue: 0, validation: 1 });
+  });
+
+  it("여러 장이면 다 더한다", () => {
+    const one = emptySheet("Sheet1");
+    one.condFormats = [plain(true)];
+    const two = emptySheet("Sheet2");
+    two.condFormats = [plain(true), plain(true)];
+    expect(
+      xlsxLosses({ sheets: [one, two], active: 0, filename: "x.xlsx", origin: "xlsx" }).stopIfTrue,
+    ).toBe(3);
   });
 });

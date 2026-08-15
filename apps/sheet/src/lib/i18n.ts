@@ -62,6 +62,9 @@ export const t = {
     saved: (name: string) => `${name} 저장됨`,
     failed: "저장하지 못했어요",
     encrypted: "암호 걸기는 아직 없어요",
+    // 저장은 됐지만 파일에 안 담긴 것 — 고칠 수 없는 한계라 저장 뒤 한 줄로 알린다.
+    lostStop: (n: number) => `참이면 중지 ${n}개는 파일에 안 담겨요`,
+    lostRule: (n: number) => `입력 규칙 ${n}개는 파일에 안 담겨요`,
   },
 
   edit: {
@@ -176,6 +179,8 @@ export const t = {
     clearAll: "규칙 모두 지우기",
     cancel: "취소",
     pick: "목록에서 고르기",
+    xlsxOnly: "규칙은 엑셀(.xlsx)로 저장할 때만 남아요",
+    xlsxOnlyShort: "xlsx만",
     // 붙여넣기·채우기는 검사를 건너뛴다(엑셀과 같다) — 몇 칸이 어긋났는지만 알린다.
     pasted: (n: number) => `${n}칸이 규칙에 어긋나요`,
     rejected: (reason: string) => `입력을 되돌렸어요 — ${reason}`,

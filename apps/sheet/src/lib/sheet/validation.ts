@@ -15,6 +15,7 @@
  * 텍스트(@)인 열도 같다 — 값이 글자면 수 규칙은 통과하지 못한다.
  */
 
+import { adjustCols, adjustRows } from "../formula/adjust";
 import { areaContains, cellKey, colName, keyCol, keyRow, MAX_COLS, parseArea, type Area } from "./a1";
 import { parseInput } from "./model";
 import { fromSerial } from "./serial";
@@ -167,7 +168,7 @@ export function checkValue(
     case "list": {
       const items = ruleItems(rule, ctx);
       if (!items) return OK;
-      return matchesList(items, input.text) ? OK : fail("notInList");
+      return matchesItem(items, input) ? OK : fail("notInList");
     }
     case "whole": {
       const n = numberOf(input);
@@ -374,6 +375,24 @@ export function matchesList(items: string[], text: string): boolean {
   return items.some((item) => item.trim().toLowerCase() === needle);
 }
 
+/**
+ * 목록 대조 — 글자로 맞춰 보고, 안 맞으면 **값으로** 한 번 더 본다.
+ *
+ * 글자만 보면 넣은 직후에 위반 표시가 붙는 칸이 생긴다. 목록에 `1.50`을 적어 두고
+ * `1.50`을 치면 입력은 통과하지만(친 글자가 항목과 같다) 칸에 남는 값은 1.5이고
+ * 화면 글자는 "1.5"라, 이미 든 값을 다시 볼 때는 목록에 없는 값이 된다.
+ * 항목도 셀과 같은 해석(`parseInput`)을 거치므로 둘 다 1.5가 되어 맞는다.
+ *
+ * 값 대조는 수일 때만 한다. "010"·19자리 번호는 parseInput이 글자로 남기므로
+ * (CLAUDE.md 23번) 여기서도 글자 대조만 걸린다 — 앞자리 0이 다른 값을 같다고
+ * 하지 않는다.
+ */
+function matchesItem(items: string[], input: ValidationInput): boolean {
+  if (matchesList(items, input.text)) return true;
+  if (typeof input.value !== "number") return false;
+  return items.some((item) => boundNumber(item) === input.value);
+}
+
 // ── 범위 목록 ───────────────────────────────────────────────────
 
 /** 이 칸에 걸린 규칙 — 겹치면 **나중에 건 것**이 이긴다. */
@@ -442,18 +461,29 @@ function shiftEnd(v: number, at: number, count: number): number {
 }
 
 /**
- * 목록 원본이 가리키는 범위도 같이 민다.
+ * 규칙이 들고 있는 참조도 같이 민다 — 목록 원본의 범위와 사용자 지정 수식.
  *
  * 규칙 범위만 밀면 원본이 제자리에 남아 다른 칸을 가리킨다 — A1:A9를 원본으로 쓰는
  * 목록에서 1행 위에 행을 끼우면 항목이 한 줄씩 밀려 마지막 항목이 빠지고 새로 생긴
  * 빈 줄이 들어온다. 밀린 뒤 범위가 없어지면 원본을 비운다(항목이 없으면 막지 않는다).
+ *
+ * 사용자 지정 수식은 셀 수식과 같은 보정을 탄다(`formula/adjust.ts`). 안 태우면
+ * `A5>0`으로 걸어 둔 규칙이 1행을 끼운 뒤에도 A5를 본다 — 한 줄 내려간 데이터가
+ * 아니라 새로 생긴 빈 줄을 검사하게 된다. 가리키던 줄을 지우면 `#REF!`가 되고,
+ * 그때는 규칙이 통과를 안 준다(엑셀도 그렇다).
  */
-function shiftRuleSource(
+function shiftRuleRefs(
   rule: ValidationRule,
   axis: "row" | "col",
   at: number,
   count: number,
 ): ValidationRule {
+  if (rule.kind === "custom") {
+    const formula = rule.formula?.trim();
+    if (!formula) return rule;
+    const next = axis === "row" ? adjustRows(formula, at, count) : adjustCols(formula, at, count);
+    return next === rule.formula ? rule : { ...rule, formula: next };
+  }
   if (rule.kind !== "list") return rule;
   const range = listRange(rule.source);
   if (!range) return rule;
@@ -478,7 +508,7 @@ export function shiftValidationRows(
 ): ValidationRange[] {
   return (list ?? [])
     .map((entry) => ({
-      rule: shiftRuleSource(entry.rule, "row", at, count),
+      rule: shiftRuleRefs(entry.rule, "row", at, count),
       area: {
         ...entry.area,
         top: shiftStart(entry.area.top, at, count),
@@ -496,7 +526,7 @@ export function shiftValidationCols(
 ): ValidationRange[] {
   return (list ?? [])
     .map((entry) => ({
-      rule: shiftRuleSource(entry.rule, "col", at, count),
+      rule: shiftRuleRefs(entry.rule, "col", at, count),
       area: {
         ...entry.area,
         left: shiftStart(entry.area.left, at, count),

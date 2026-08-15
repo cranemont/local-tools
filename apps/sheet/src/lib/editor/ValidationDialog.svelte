@@ -110,6 +110,9 @@
   >
     <div class="head">
       <span class="title">{t.validation.title}</span>
+      <!-- 규칙은 xlsx에만 담긴다 — CSV로 저장하면 사라진다는 것을 걸 때 알려 준다
+           (조건부 서식 대화상자에도 같은 배지가 있다). -->
+      <span class="badge" title={t.validation.xlsxOnly}>{t.validation.xlsxOnlyShort}</span>
       <span class="target" aria-label={t.validation.range}>{target}</span>
     </div>
 
@@ -229,6 +232,13 @@
   .title {
     font-size: var(--text-xl);
     color: var(--text);
+  }
+  .badge {
+    padding: 1px var(--space-2xs);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-2xs);
+    color: var(--text-muted);
   }
   .target {
     margin-left: auto;

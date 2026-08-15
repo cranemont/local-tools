@@ -36,8 +36,10 @@
   function onKeyDown(event: KeyboardEvent): void {
     if (event.key === "Enter") {
       event.preventDefault();
-      editor.commitEdit(input?.value ?? "", { row: 1, col: 0 });
-      onDone();
+      // 규칙에 걸려 되돌아가면 편집 상태를 그대로 둔다 — 친 글자가 남아 있어야
+      // 고쳐 칠 수 있다. 그때는 그리드로 초점을 넘기지 않는다.
+      editor.commitEdit(input?.value ?? "", { row: 1, col: 0 }, true);
+      if (!editor.editing) onDone();
     } else if (event.key === "Escape") {
       event.preventDefault();
       editor.cancelEdit();

@@ -729,6 +729,18 @@ export class EditorState {
     return n;
   }
 
+  /** 흩어진 칸 중 규칙에 어긋나는 것 수 — 모두 바꾸기가 고친 칸들에 쓴다. */
+  private countViolationsAt(cells: Pos[]): number {
+    const sheet = this.doc.sheets[this.doc.active];
+    if (!sheet.validations || sheet.validations.length === 0) return 0;
+    let n = 0;
+    for (const { row, col } of cells) {
+      if (this.violationAt(row, col)) n++;
+      if (n >= 999) return n;
+    }
+    return n;
+  }
+
   /** 고른 범위에 규칙을 걸거나(null이면) 지운다. */
   setValidation(rule: ValidationRule | null): void {
     const area = this.selection;
@@ -1021,12 +1033,13 @@ export class EditorState {
     this.revision++;
   }
 
-  private flash(message: string): void {
+  /** 상태줄 한 줄. 잃은 것을 알리는 말은 읽을 틈이 필요해 더 오래 둔다. */
+  private flash(message: string, ms = 2400): void {
     this.notice = message;
     if (this.noticeTimer) clearTimeout(this.noticeTimer);
     this.noticeTimer = setTimeout(() => {
       this.notice = "";
-    }, 2400);
+    }, ms);
   }
 
   private snapshot(): Snapshot {
@@ -1188,20 +1201,36 @@ export class EditorState {
     this.editing = null;
   }
 
-  /** 편집 확정. 이동 방향을 주면 확정 후 커서를 옮긴다. */
-  commitEdit(text: string, move: { row: number; col: number } = { row: 1, col: 0 }): void {
+  /**
+   * 편집 확정. 이동 방향을 주면 확정 후 커서를 옮긴다.
+   *
+   * `keepOnReject`면 규칙에 걸린 입력을 되돌릴 때 **편집 상태를 그대로 둔다**(엑셀과
+   * 같다) — 예전엔 상자를 닫고 커서까지 다음 칸으로 갔다. 되돌아간 자리에서 다시
+   * 치려면 그 칸을 찾아 들어가야 했다. 키보드로 확정한 경우(Enter·Tab)에만 켠다.
+   * 다른 칸을 눌러 확정한 경우까지 열어 두면 상자와 커서가 다른 칸에 남는다.
+   */
+  commitEdit(
+    text: string,
+    move: { row: number; col: number } = { row: 1, col: 0 },
+    keepOnReject = false,
+  ): void {
     const buffer = this.editing;
-    this.editing = null;
     if (!buffer) return;
 
     const { row, col } = buffer;
     const before = this.editTextAt(row, col);
     if (text === before) {
+      this.editing = null;
       this.move(move.row, move.col);
       return;
     }
 
-    this.setCellText(row, col, text);
+    if (!this.setCellText(row, col, text) && keepOnReject) {
+      // 친 글자를 버퍼에 남긴다 — 상자를 다시 그려도 사라지지 않게.
+      this.editing = { ...buffer, text };
+      return;
+    }
+    this.editing = null;
     this.move(move.row, move.col);
   }
 
@@ -1218,12 +1247,15 @@ export class EditorState {
     return asText ? { value: text === "" ? null : text } : parseInput(text);
   }
 
-  /** 셀 하나에 사람이 친 문자열을 넣는다. 규칙이 걸린 칸이면 먼저 검사한다. */
-  setCellText(row: number, col: number, text: string): void {
+  /**
+   * 셀 하나에 사람이 친 문자열을 넣는다. 규칙이 걸린 칸이면 먼저 검사한다.
+   * 되돌렸으면 false — 부르는 쪽이 편집 상태를 이어 갈지 정한다.
+   */
+  setCellText(row: number, col: number, text: string): boolean {
     const bad = this.judgeInput(row, col, text);
     if (bad?.action === "reject") {
       this.flash(t.validation.rejected(t.validation.reason[bad.reason]));
-      return;
+      return false;
     }
 
     this.mutate(() => {
@@ -1246,6 +1278,7 @@ export class EditorState {
     });
     // 경고 규칙은 넣되 그 자리에서 한 번 말해 준다(칸의 표시는 계속 남는다).
     if (bad) this.flash(t.validation.warned(t.validation.reason[bad.reason]));
+    return true;
   }
 
   /** Delete — 필터가 걸려 있으면 보이는 칸만 지운다(엑셀과 같다). */
@@ -1909,7 +1942,7 @@ export class EditorState {
     this.busy = true;
     this.busyMsg = t.save.saving;
     try {
-      const { writeXlsx } = await import("../sheet/xlsx");
+      const { writeXlsx, xlsxLosses } = await import("../sheet/xlsx");
       const bytes = await writeXlsx(this.doc);
       const name = withExtension(this.filename || "시트", "xlsx");
       downloadBlob(
@@ -1919,7 +1952,14 @@ export class EditorState {
         name,
       );
       this.dirty = false;
-      this.flash(t.save.saved(name));
+      // 파일에 못 담은 것이 있으면 저장 알림에 붙여 말한다 — 조용히 넘기면
+      // 다음에 그 파일을 열었을 때 규칙이 사라져 있다.
+      const lost = xlsxLosses(this.doc);
+      const notes: string[] = [];
+      if (lost.stopIfTrue > 0) notes.push(t.save.lostStop(lost.stopIfTrue));
+      if (lost.validation > 0) notes.push(t.save.lostRule(lost.validation));
+      if (notes.length === 0) this.flash(t.save.saved(name));
+      else this.flash(`${t.save.saved(name)} — ${notes.join(" · ")}`, 6000);
     } catch (e) {
       this.error = `${t.save.failed} — ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -1993,6 +2033,7 @@ export class EditorState {
     }
 
     let changed = 0;
+    const touched: Pos[] = [];
     this.mutate(() => {
       const sheet = this.doc.sheets[this.doc.active];
       for (const { row, col } of matches) {
@@ -2005,12 +2046,19 @@ export class EditorState {
         if (next === text) continue;
         const parsed = parseInput(next);
         putCell(sheet, row, col, { v: parsed.value, f: parsed.formula });
+        touched.push({ row, col });
         changed++;
       }
       if (changed === 0) return false;
     });
 
-    if (changed > 0) this.flash(t.find.replaced(changed));
+    if (changed === 0) return 0;
+    // 붙여넣기·채우기와 같은 갈래다 — 한 칸씩 막지 않고 몇 칸이 어긋났는지 알린다.
+    // 여기까지 조용하면 규칙을 걸어 둔 열이 바꾸기 한 번에 통째로 어긋난다.
+    const bad = this.countViolationsAt(touched);
+    this.flash(
+      bad > 0 ? `${t.find.replaced(changed)} · ${t.validation.pasted(bad)}` : t.find.replaced(changed),
+    );
     return changed;
   }
 
